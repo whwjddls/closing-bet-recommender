@@ -77,3 +77,66 @@ def incremental_ic(panel: pd.DataFrame, signal_col: str, basis_cols: list,
     work = panel.copy()
     work["_resid"] = orthogonalize(panel, signal_col, basis_cols, date_col)
     return walk_forward_rank_ic(work, "_resid", fwd_ret_col, date_col)
+
+
+class DartPointInTimeError(Exception):
+    """DART 접수시각(≤15:20) 시점복원 불가 → veto 는 incremental-IC 회계에서 제외."""
+
+
+@dataclass
+class AcceptanceVerdict:
+    verdict: str   # "GO" / "NO_GO" / "DOWNSCOPE"
+    reason: str
+    ic: float
+    t_stat: float
+    baseline_ic: float
+
+
+def baseline_ic(panel: pd.DataFrame, fwd_ret_col: str, kind: str = "random",
+                seed: int = 0, date_col: str = "date") -> ICResult:
+    """베이스라인 IC. random=무작위 신호(종목선택 스킬 0 기준),
+    overnight_etf=횡단면 무정보(상수) 신호."""
+    work = panel.copy()
+    if kind == "random":
+        rng = np.random.default_rng(seed)
+        work["_base"] = rng.standard_normal(len(work))
+    elif kind == "overnight_etf":
+        # 오버나잇-ETF: 종목 무차별 매수 → 횡단면 정보 없음(IC≈0 기준선)
+        work["_base"] = 0.0
+    else:
+        raise ValueError(f"unknown baseline kind: {kind}")
+    return walk_forward_rank_ic(work, "_base", fwd_ret_col, date_col)
+
+
+def acceptance(ic: ICResult, baseline: ICResult, *,
+               survivorship_source: bool) -> AcceptanceVerdict:
+    """수용기준(§2.4): rank-IC>0, t>2, 베이스라인 상회 → GO.
+    생존편향 소스 미확보 시 어떤 go/no-go 주장도 보류(DOWNSCOPE, §10.3)."""
+    if not survivorship_source:
+        return AcceptanceVerdict(
+            "DOWNSCOPE",
+            "생존편향 소스(상폐/정리매매 스냅샷) 미확보 — go/no-go 주장 보류(§10.3)",
+            ic.mean_ic, ic.t_stat, baseline.mean_ic,
+        )
+    cond_t = (ic.t_stat is not None) and (not np.isnan(ic.t_stat)) and (ic.t_stat > 2.0)
+    cond_pos = (not np.isnan(ic.mean_ic)) and (ic.mean_ic > 0)
+    cond_base = np.isnan(baseline.mean_ic) or (ic.mean_ic > baseline.mean_ic)
+    if cond_t and cond_pos and cond_base:
+        return AcceptanceVerdict(
+            "GO", "rank-IC>0 · t>2 · 베이스라인 상회(§2.4)",
+            ic.mean_ic, ic.t_stat, baseline.mean_ic,
+        )
+    return AcceptanceVerdict(
+        "NO_GO", "수용기준(t>2 & IC>0 & 베이스라인 상회) 미충족",
+        ic.mean_ic, ic.t_stat, baseline.mean_ic,
+    )
+
+
+def assert_veto_backtestable(point_in_time_dart: bool) -> None:
+    """DART 접수시각을 ≤15:20 으로 복원 가능할 때만 veto 를 incremental-IC 회계에 포함.
+    불가하면 point-in-time-backtestable 아님 → 제외(DartPointInTimeError)."""
+    if not point_in_time_dart:
+        raise DartPointInTimeError(
+            "DART list.json 일자粒度 — 접수시각 ≤15:20 복원 불가: "
+            "veto 는 incremental-IC 회계에서 제외(룩어헤드 caveat, §7)"
+        )

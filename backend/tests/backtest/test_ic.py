@@ -61,3 +61,52 @@ def test_incremental_ic_removes_shared_variance_with_shin():
     # 신에 직교화한 잔차의 incremental-IC 는 정보가 남지 않아 정의 불가(NaN)
     inc = incremental_ic(panel, "s_geo", ["s_shin"], "fwd_ret")
     assert np.isnan(inc.mean_ic)
+
+
+from app.backtest.ic import (
+    baseline_ic,
+    acceptance,
+    AcceptanceVerdict,
+    assert_veto_backtestable,
+    DartPointInTimeError,
+)
+
+
+def _ic(mean, t, n=10):
+    return ICResult(mean_ic=mean, t_stat=t, n_periods=n,
+                    per_date=pd.Series([mean] * n))
+
+
+def test_baseline_random_is_near_zero():
+    panel = _two_date_panel()
+    base = baseline_ic(panel, "fwd_ret", kind="random", seed=0)
+    assert abs(base.mean_ic) < 1.0  # 무작위 신호 → 약한 IC
+
+
+def test_acceptance_go_when_t_gt2_positive_and_beats_baseline():
+    v = acceptance(_ic(0.05, 3.0), _ic(0.0, 0.1), survivorship_source=True)
+    assert isinstance(v, AcceptanceVerdict)
+    assert v.verdict == "GO"
+
+
+def test_acceptance_no_go_when_t_not_above_2():
+    v = acceptance(_ic(0.05, 1.5), _ic(0.0, 0.1), survivorship_source=True)
+    assert v.verdict == "NO_GO"
+
+
+def test_acceptance_no_go_when_not_beating_baseline():
+    v = acceptance(_ic(0.05, 3.0), _ic(0.06, 3.0), survivorship_source=True)
+    assert v.verdict == "NO_GO"
+
+
+def test_acceptance_downscope_when_survivorship_source_missing():
+    # 상폐/정리매매 스냅샷 미확보 → go/no-go 주장 보류(DOWNSCOPE)
+    v = acceptance(_ic(0.05, 3.0), _ic(0.0, 0.1), survivorship_source=False)
+    assert v.verdict == "DOWNSCOPE"
+
+
+def test_veto_excluded_from_ic_when_dart_timestamp_unavailable():
+    # DART list.json 은 일자粒度 → 접수시각 복원 불가 시 veto 를 incremental-IC 회계에서 제외
+    assert_veto_backtestable(point_in_time_dart=True)  # 통과(예외 없음)
+    with pytest.raises(DartPointInTimeError):
+        assert_veto_backtestable(point_in_time_dart=False)
