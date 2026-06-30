@@ -79,3 +79,67 @@ def test_score_and_summarize_excludes_na_from_denominator():
     assert s["n_na"] == 1
     assert s["hit_rate"] == pytest.approx(1.0)   # A 성공 1/1
     assert s["avg_morning_return"] == pytest.approx(0.01)
+
+
+from datetime import date
+
+from app.backtest.engine import run_backtest, BacktestResult
+
+
+def test_run_backtest_composes_reconstruct_score_summarize_ic_end_to_end():
+    # 외부 API(KIS/pykrx) 직접 호출 없이 주입 콜러블로 전체 합성을 검증.
+    # 신호 A>B>C, 익일 오전 VWAP(09:00–10:00)으로 t→t+1 채점.
+    def load_price_panel(start, end):
+        return pd.DataFrame(
+            {
+                "date": pd.to_datetime(
+                    ["2026-06-29", "2026-06-29", "2026-06-29",
+                     "2026-06-30", "2026-06-30", "2026-06-30"]
+                ),
+                "ticker": ["A", "B", "C", "A", "B", "C"],
+                "close": [100.0, 100.0, 100.0, 100.0, 100.0, 100.0],
+                "signal": [3.0, 2.0, 1.0, 3.0, 2.0, 1.0],
+            }
+        )
+
+    def load_vwap_panel(start, end):
+        # eval_date = run_date(t)의 다음 거래일(t+1). 오전 09:00–10:00 VWAP.
+        return pd.DataFrame(
+            {
+                "eval_date": pd.to_datetime(
+                    ["2026-06-30", "2026-06-30", "2026-06-30",
+                     "2026-07-01", "2026-07-01", "2026-07-01"]
+                ),
+                "ticker": ["A", "B", "C", "A", "B", "C"],
+                # date1: 수익률 순위 = 신호 순위 → rank-IC 1.0
+                # date2: B/C 뒤집힘 → rank-IC 0.5  (평균 0.75, t=3.0)
+                "vwap_0900_1000": [103.0, 102.0, 101.0, 103.0, 101.0, 102.0],
+            }
+        )
+
+    trading_days = ["2026-06-29", "2026-06-30", "2026-07-01"]
+
+    res = run_backtest(
+        date(2026, 6, 29),
+        date(2026, 6, 30),
+        load_price_panel=load_price_panel,
+        load_vwap_panel=load_vwap_panel,
+        trading_days=trading_days,
+        survivorship_source=True,
+    )
+
+    assert isinstance(res, BacktestResult)
+    assert res.start == date(2026, 6, 29)
+    assert res.end == date(2026, 6, 30)
+    assert res.n_picks == 6                     # 6 픽 전부 t+1 VWAP 존재 → 채점(N·A 0)
+    assert res.rank_ic == pytest.approx(0.75)   # per-date rank-IC [1.0, 0.5] 평균
+    assert res.t_stat == pytest.approx(3.0)     # 0.75 / (0.35355/sqrt(2))
+    assert res.hit_rate == pytest.approx(1.0)   # 전부 VWAP>close → 성공
+    assert res.avg_return == pytest.approx(0.02)
+    assert isinstance(res.note, str) and res.note  # 수용판정 사유 채워짐
+
+
+def test_run_backtest_requires_injected_data_loaders():
+    # (start,end)만으로는 외부 데이터 의존 — 주입 콜러블 없으면 fail-fast
+    with pytest.raises(ValueError):
+        run_backtest(date(2026, 6, 29), date(2026, 6, 30))

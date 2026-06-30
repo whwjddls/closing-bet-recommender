@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -97,6 +99,76 @@ def run_cli(panel_path: str, *, signal_col: str, fwd_ret_col: str,
             "baseline_ic": verdict.baseline_ic,
         },
     }
+
+
+@dataclass
+class BacktestResult:
+    """공개 백테스트 결과(계약 §4). 04 `/backtest` 가 이 형으로 소비한다."""
+    start: date
+    end: date
+    n_picks: int
+    rank_ic: float
+    t_stat: float
+    hit_rate: float
+    avg_return: float
+    note: str
+
+
+def run_backtest(
+    start: date,
+    end: date,
+    *,
+    load_price_panel=None,
+    load_vwap_panel=None,
+    trading_days=None,
+    survivorship_source: bool = True,
+    signal_col: str = "signal",
+) -> BacktestResult:
+    """공개 백테스트 래퍼(계약 §4). 내부 합성:
+    reconstruct(시점복원 풀·15:20-등가 → 확정 close[t])
+    → score(확정 close[t] 진입 · 익일 오전 VWAP[09:00–10:00, t+1] 채점)
+    → summarize(N·A 분모 제외 집계)
+    → ic.walk_forward_rank_ic + acceptance(go/no-go) 묶음.
+    공개 시그니처는 (start, end) 2-인자(계약 §4); 외부 데이터(pykrx/KIS)는
+    load_* 콜러블로 keyword-only 주입(DI) — 네트워크 없이 결정론적 테스트."""
+    if load_price_panel is None or load_vwap_panel is None:
+        raise ValueError(
+            "run_backtest: load_price_panel·load_vwap_panel 주입 필요 "
+            "(서브시스템 1 데이터레이어 바인딩 또는 테스트 스텁)."
+        )
+    panel = load_price_panel(start, end)
+    vwap_panel = load_vwap_panel(start, end)
+
+    days = trading_days
+    if days is None:
+        all_dates = pd.concat(
+            [pd.to_datetime(panel["date"]), pd.to_datetime(vwap_panel["eval_date"])]
+        )
+        days = sorted(all_dates.dt.strftime("%Y-%m-%d").unique().tolist())
+
+    # reconstruct/score: 진입가 = 확정 close[t], 채점 = 익일 오전 VWAP[t+1]
+    picks = panel[["date", "ticker", signal_col]].rename(columns={"date": "run_date"})
+    picks = attach_eval_dates(picks, days)
+    picks = attach_entry_close(picks, panel)
+    scored = score(picks, vwap_panel)
+    summary = summarize(scored)
+
+    # ic: 신호 vs 실현 t→t+1 오전수익률의 walk-forward rank-IC + 수용판정
+    ic_panel = scored.rename(columns={"run_date": "date", "morning_return": "fwd_ret"})
+    ic = walk_forward_rank_ic(ic_panel, signal_col, "fwd_ret", date_col="date")
+    base = baseline_ic(ic_panel, "fwd_ret", kind="random", seed=0, date_col="date")
+    verdict = acceptance(ic, base, survivorship_source=survivorship_source)
+
+    return BacktestResult(
+        start=start,
+        end=end,
+        n_picks=summary["n"],
+        rank_ic=ic.mean_ic,
+        t_stat=ic.t_stat,
+        hit_rate=summary["hit_rate"],
+        avg_return=summary["avg_morning_return"],
+        note=f"{verdict.verdict}: {verdict.reason}",
+    )
 
 
 def main(argv=None) -> int:
