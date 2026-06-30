@@ -91,3 +91,13 @@ def build_pnow_proxy(close_t: float, haircut: float = 0.0,
         "low": central * (1.0 - band),
         "high": central * (1.0 + band),
     }
+
+
+def reported_trading_value(df: pd.DataFrame) -> pd.Series:
+    """RVOL/거래량 신호는 pykrx 보고 거래대금(value=원가×원량) 컬럼을 쓴다.
+    adjusted price × volume 재계산은 분할 시 깨지므로 금지(§7 분할 보정)."""
+    if "value" not in df.columns:
+        raise KeyError(
+            "거래대금 'value' 컬럼 필요 — adjusted price×volume 재계산 금지(분할편향)"
+        )
+    return df["value"].astype(float)

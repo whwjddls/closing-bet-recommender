@@ -149,3 +149,31 @@ def test_pnow_proxy_applies_haircut_and_band():
     assert p["high"] == pytest.approx(9900.0 * 1.005)
     # 밴드는 중심을 brackets
     assert p["low"] < p["central"] < p["high"]
+
+
+from app.backtest.reconstruct import reported_trading_value
+
+
+def test_reported_value_is_split_invariant():
+    # 2:1 액면분할 전/후: 보고 거래대금(value=원가×원량)은 불변.
+    # adjusted price × (미보정) volume 으로 재계산하면 절반으로 깨진다 → 이를 쓰면 안 됨.
+    df = pd.DataFrame(
+        {
+            "ticker": ["X", "X"],
+            "date": ["2026-06-26", "2026-06-29"],
+            "adj_close": [5000.0, 5000.0],   # 분할 보정가
+            "volume": [100.0, 100.0],        # 보정 안 된 원량
+            "value": [1_000_000.0, 1_000_000.0],  # pykrx 보고 거래대금(분할불변)
+        }
+    )
+    val = reported_trading_value(df)
+    assert list(val) == [1_000_000.0, 1_000_000.0]
+    # naive 재계산은 분할편향으로 value 와 불일치(왜 reported 를 써야 하는지 증명)
+    naive = df["adj_close"] * df["volume"]
+    assert not (naive == df["value"]).all()
+
+
+def test_reported_value_requires_value_column():
+    df = pd.DataFrame({"adj_close": [100.0], "volume": [10.0]})
+    with pytest.raises(KeyError):
+        reported_trading_value(df)
