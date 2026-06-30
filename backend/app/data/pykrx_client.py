@@ -1,0 +1,215 @@
+from __future__ import annotations
+
+import datetime as dt
+from dataclasses import dataclass
+from typing import Any
+
+from app.data.broker_adapter import HealthCheckResult
+from app.data.mapping import Market, pykrx_index_code, pykrx_market_name
+
+COL_HIGH = "고가"
+COL_LOW = "저가"
+COL_CLOSE = "종가"
+COL_VALUE = "거래대금"
+NET_VALUE_COL = "순매수거래대금"
+# 아키텍처 §1/§3.2-D: 시장별 1회로 외인+기관 결합 value 조회.
+# 정확한 investor 인자 문자열은 KIS/pykrx 스파이크 항목(설계 §10.3) — 여기선 상수화.
+NET_INVESTOR = "순매수"
+LOOKBACK_DAYS = 400  # ≥252 거래일 확보용 달력 룩백
+
+
+@dataclass
+class HealthResult:
+    """00 §2 정본 — 무인자 health_check() 반환형."""
+    ok: bool
+    latest_trading_day: dt.date | None
+    rows: int
+    detail: str
+
+
+def compute_h_ref(df: Any, window: int) -> float:
+    """H_ref = 제공된 (전일까지 확정) 프레임의 마지막 window 고가 최대. 룩어헤드 금지."""
+    highs = df[COL_HIGH].tail(window)
+    if len(highs) == 0:
+        raise ValueError("empty high series")
+    return float(highs.max())
+
+
+def compute_atr20(df: Any, window: int = 20) -> float:
+    sub = df.tail(window + 1)  # 직전 종가 필요
+    high = sub[COL_HIGH].to_numpy(dtype=float)
+    low = sub[COL_LOW].to_numpy(dtype=float)
+    close = sub[COL_CLOSE].to_numpy(dtype=float)
+    trs = []
+    for i in range(1, len(sub)):
+        tr = max(high[i] - low[i],
+                 abs(high[i] - close[i - 1]),
+                 abs(low[i] - close[i - 1]))
+        trs.append(tr)
+    if not trs:
+        raise ValueError("insufficient rows for ATR")
+    return sum(trs) / len(trs)
+
+
+def compute_avg_value_20d(df: Any, window: int = 20) -> float:
+    vals = df[COL_VALUE].tail(window)
+    if len(vals) == 0:
+        raise ValueError("empty value series")
+    return float(vals.mean())
+
+
+class PykrxClient:
+    """FINAL 소스. pykrx 모듈은 주입 → 네트워크 없는 단위테스트."""
+
+    def __init__(self, pykrx_module: Any, min_rows: int = 120):
+        self._px = pykrx_module
+        self._min_rows = min_rows
+
+    def get_universe(self, date: str, market: str = "ALL") -> list[str]:
+        # 생존편향 방지: as-of date 그대로 전달(point-in-time)
+        return list(self._px.get_market_ticker_list(date, market))
+
+    def get_ohlcv(self, ticker: str, fromdate: str, todate: str) -> Any:
+        # 룩어헤드 방지: todate(=D-1)를 그대로 전달, 당일(t) 바 미요청
+        return self._px.get_market_ohlcv(fromdate, todate, ticker)
+
+    def get_index_ohlcv(self, index_code: str, fromdate: str, todate: str) -> Any:
+        return self._px.get_index_ohlcv(fromdate, todate, index_code)
+
+    def get_net_purchases(self, fromdate: str, todate: str) -> dict[str, float]:
+        # 시장별 1회 = 총 2회, 순매수거래대금(value) 컬럼 (per-ticker 금지)
+        return _net_by_market(self._px, fromdate, todate)
+
+    def health_check(self, df: Any, expected_last_date: str | None) -> HealthCheckResult:
+        if df is None or len(df) == 0:
+            return HealthCheckResult(False, None, 0, "no rows")
+        last = str(df.index[-1])
+        rows = len(df)
+        if rows < self._min_rows:
+            return HealthCheckResult(
+                False, last, rows, f"insufficient rows {rows}<{self._min_rows}")
+        if expected_last_date and last != expected_last_date:
+            return HealthCheckResult(
+                False, last, rows, f"stale last={last} expected={expected_last_date}")
+        return HealthCheckResult(True, last, rows)
+
+
+# ── 모듈 정본 인터페이스(00 §2) — 04 스케줄러/어댑터가 호출 ──────────────
+def _load_pykrx() -> Any:
+    from pykrx import stock
+    return stock
+
+
+def _yyyymmdd(d: dt.date) -> str:
+    return d.strftime("%Y%m%d")
+
+
+def _parse_day(value: Any) -> dt.date | None:
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    try:
+        return dt.datetime.strptime(str(value), "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _net_by_market(px: Any, fromdate: str, todate: str) -> dict[str, float]:
+    """외인+기관 순매수거래대금 — 시장별 1회(총 2회), value 컬럼. per-ticker 금지."""
+    result: dict[str, float] = {}
+    for market in (Market.KOSPI, Market.KOSDAQ):
+        df = px.get_market_net_purchases_of_equities(
+            fromdate, todate, pykrx_market_name(market), NET_INVESTOR)
+        if df is None:
+            continue
+        for ticker, row in df.iterrows():
+            result[str(ticker)] = float(row[NET_VALUE_COL])
+    return result
+
+
+@dataclass
+class PrefetchBundle:
+    """장전 FINAL 번들(00 §2)."""
+    run_date: dt.date
+    universe: list[str]
+    h_ref_252: dict[str, float]
+    h_ref_60: dict[str, float]
+    atr20: dict[str, float]
+    avg_value_20d: dict[str, float]
+    net_purchases: dict[str, float]
+    index_ma5: dict[str, float]
+
+
+def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None) -> PrefetchBundle:
+    """H_ref(252/60)·ATR20·20일평균거래대금·D-1수급·지수5MA·정적위생 후보 번들.
+       룩어헤드 금지 — 모든 조회 todate=D-1. pykrx 모듈 주입(미주입 시 실모듈)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    d1 = run_date - dt.timedelta(days=1)
+    frm = run_date - dt.timedelta(days=LOOKBACK_DAYS)
+    d1_s, frm_s = _yyyymmdd(d1), _yyyymmdd(frm)
+    universe = [str(t) for t in px.get_market_ticker_list(d1_s, "ALL")]
+    h252: dict[str, float] = {}
+    h60: dict[str, float] = {}
+    atr: dict[str, float] = {}
+    avgv: dict[str, float] = {}
+    for ticker in universe:
+        df = px.get_market_ohlcv(frm_s, d1_s, ticker)   # todate=D-1 (룩어헤드 금지)
+        if df is None or len(df) == 0:
+            continue
+        try:
+            _h252 = compute_h_ref(df, 252)
+            _h60 = compute_h_ref(df, 60)
+            _atr = compute_atr20(df)
+            _avgv = compute_avg_value_20d(df)
+        except ValueError:
+            continue                                    # 이력 부족 종목 스킵(방어적)
+        h252[ticker], h60[ticker] = _h252, _h60
+        atr[ticker], avgv[ticker] = _atr, _avgv
+    net = _net_by_market(px, d1_s, d1_s)                # D-1 수급
+    index_ma5: dict[str, float] = {}
+    for market in (Market.KOSPI, Market.KOSDAQ):
+        idx = px.get_index_ohlcv(frm_s, d1_s, pykrx_index_code(market))
+        if idx is not None and len(idx) > 0:
+            index_ma5[market.value] = float(idx[COL_CLOSE].tail(5).mean())
+    return PrefetchBundle(run_date, universe, h252, h60, atr, avgv, net, index_ma5)
+
+
+def fetch_confirmed_close(ticker: str, d: dt.date,
+                          pykrx_module: Any | None = None) -> float:
+    """익일 채점용 15:30 확정 종가(00 §2). 채점일 d는 과거 확정일 — 룩어헤드 아님."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    d_s = _yyyymmdd(d)
+    df = px.get_market_ohlcv(d_s, d_s, ticker)
+    if df is None or len(df) == 0:
+        raise ValueError(f"no confirmed close for {ticker} on {d_s}")
+    return float(df[COL_CLOSE].iloc[-1])
+
+
+def health_check(pykrx_module: Any | None = None, *,
+                 today: dt.date | None = None, min_rows: int = 120) -> HealthResult:
+    """무인자 장전 헬스체크(00 §2). 지수 OHLCV(todate=D-1) + D-1 외인/기관 수급·거래대금
+       조회 성공을 함께 검증. 수급 결손 시 ok=False(런 차단). pykrx 모듈 주입."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    today = today or dt.date.today()
+    d1 = today - dt.timedelta(days=1)
+    frm = today - dt.timedelta(days=LOOKBACK_DAYS)
+    d1_s, frm_s = _yyyymmdd(d1), _yyyymmdd(frm)
+    try:
+        idx = px.get_index_ohlcv(frm_s, d1_s, pykrx_index_code(Market.KOSPI))
+    except Exception as exc:                            # noqa: BLE001  (외부 IO)
+        return HealthResult(False, None, 0, f"지수 조회 실패: {exc}")
+    if idx is None or len(idx) == 0:
+        return HealthResult(False, None, 0, "지수 행 없음")
+    latest = _parse_day(idx.index[-1])
+    rows = len(idx)
+    if rows < min_rows:
+        return HealthResult(False, latest, rows,
+                            f"insufficient rows {rows}<{min_rows}")
+    try:
+        supply = _net_by_market(px, d1_s, d1_s)         # D-1 외인/기관 수급·거래대금
+    except Exception as exc:                            # noqa: BLE001  (외부 IO)
+        return HealthResult(False, latest, rows, f"D-1 수급 조회 실패: {exc}")
+    if not supply:
+        return HealthResult(False, latest, rows, "D-1 외인/기관 수급 결손")
+    return HealthResult(True, latest, rows, "ok")
