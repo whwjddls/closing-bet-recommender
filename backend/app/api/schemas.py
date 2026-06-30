@@ -153,3 +153,14 @@ class UniverseResponse(BaseModel):
     total: int = 0
     eligible_count: int = 0
     rows: list[UniverseRow] = []
+
+
+class BacktestResponse(BaseModel):
+    start: date
+    end: date
+    n_picks: int
+    rank_ic: float | None = None
+    t_stat: float | None = None
+    hit_rate: float | None = None
+    avg_return: float | None = None
+    note: str = ""

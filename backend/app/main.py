@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, performance, recommendations, stock, universe
+from app.api import backtest, health, performance, recommendations, stock, universe
 
 
 def create_app() -> FastAPI:
@@ -17,6 +17,7 @@ def create_app() -> FastAPI:
     app.include_router(stock.router)
     app.include_router(performance.router)
     app.include_router(universe.router)
+    app.include_router(backtest.router)
     return app
 
 
