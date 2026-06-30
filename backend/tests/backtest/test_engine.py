@@ -32,3 +32,50 @@ def test_compute_outcomes_exact_break_even_is_fail():
         {"ticker": ["E"], "entry_price": [100.0], "vwap_0900_1000": [100.0]}
     )
     assert compute_outcomes(picks)["outcome"].iloc[0] == FAIL
+
+
+from app.backtest.engine import (
+    next_trading_day,
+    attach_eval_dates,
+    attach_entry_close,
+    score,
+    summarize,
+)
+
+
+def test_next_trading_day_skips_to_following_session():
+    days = ["2026-06-29", "2026-06-30", "2026-07-01"]
+    assert next_trading_day(days, "2026-06-30") == pd.Timestamp("2026-07-01")
+    assert pd.isna(next_trading_day(days, "2026-07-01"))  # 다음 거래일 없음
+
+
+def test_score_and_summarize_excludes_na_from_denominator():
+    panel = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-06-30", "2026-06-30"]),
+            "ticker": ["A", "B"],
+            "close": [100.0, 200.0],
+        }
+    )
+    picks = pd.DataFrame(
+        {"run_date": pd.to_datetime(["2026-06-30", "2026-06-30"]),
+         "ticker": ["A", "B"]}
+    )
+    vwap_panel = pd.DataFrame(
+        {
+            "eval_date": pd.to_datetime(["2026-07-01", "2026-07-01"]),
+            "ticker": ["A", "B"],
+            "vwap_0900_1000": [101.0, np.nan],  # B 는 오전 잠김 → N/A
+        }
+    )
+    trading_days = ["2026-06-30", "2026-07-01"]
+
+    picks2 = attach_eval_dates(picks, trading_days)
+    picks2 = attach_entry_close(picks2, panel)
+    scored = score(picks2, vwap_panel)
+    s = summarize(scored)
+
+    assert s["n"] == 1          # A 만 분모(B 는 N/A 제외)
+    assert s["n_na"] == 1
+    assert s["hit_rate"] == pytest.approx(1.0)   # A 성공 1/1
+    assert s["avg_morning_return"] == pytest.approx(0.01)
