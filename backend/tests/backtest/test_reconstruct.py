@@ -129,3 +129,23 @@ def test_live_top30_only_rate_quantifies_fresh_breakouts():
     d1_pool = ["C", "A", "B"]
     assert live_top30_only_rate(live_picks, d1_pool) == 0.5
     assert live_top30_only_rate([], d1_pool) == 0.0
+
+
+from app.backtest.reconstruct import build_pnow_proxy
+
+
+def test_pnow_proxy_equals_close_with_zero_haircut():
+    # 인트라데이 이력 가능 구간 가정: haircut=0 → P_now ≈ close[t]
+    p = build_pnow_proxy(10000.0, haircut=0.0, band=0.0)
+    assert p["central"] == 10000.0
+    assert p["low"] == 10000.0 and p["high"] == 10000.0
+
+
+def test_pnow_proxy_applies_haircut_and_band():
+    # close→15:20 드리프트를 haircut(중심) + band(민감도 밴드)로 정량화
+    p = build_pnow_proxy(10000.0, haircut=0.01, band=0.005)
+    assert p["central"] == pytest.approx(9900.0)
+    assert p["low"] == pytest.approx(9900.0 * 0.995)
+    assert p["high"] == pytest.approx(9900.0 * 1.005)
+    # 밴드는 중심을 brackets
+    assert p["low"] < p["central"] < p["high"]

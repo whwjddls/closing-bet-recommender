@@ -77,3 +77,17 @@ def live_top30_only_rate(live_picks, d1_pool) -> float:
     d1 = set(d1_pool)
     only = sum(1 for t in live_picks if t not in d1)
     return only / len(live_picks)
+
+
+def build_pnow_proxy(close_t: float, haircut: float = 0.0,
+                     band: float = 0.0) -> dict:
+    """인트라데이 15:20 이력이 없는 구간의 P_now 프록시.
+    central = close[t]·(1−haircut)  (측정된 EOD→15:20 드리프트 평균),
+    low/high = central·(1∓band)     (민감도 밴드 — 각주 아닌 정량 밴드).
+    haircut=band=0 이면 프록시 = close[t]."""
+    central = close_t * (1.0 - haircut)
+    return {
+        "central": central,
+        "low": central * (1.0 - band),
+        "high": central * (1.0 + band),
+    }
