@@ -5,7 +5,7 @@ requires-python = ">=3.14"
 dependencies = ["fastapi", "uvicorn", "pykrx", "pandas", "requests", "sqlalchemy>=2.0", "pydantic>=2", "numpy", "plyer"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "httpx"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
