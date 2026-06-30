@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel, ConfigDict  # ConfigDict는 Task 6 UniverseRow(from_attributes)가 사용
 
 EXIT_LABEL = "익일 오전 VWAP(09:00–10:00)"
@@ -129,3 +131,25 @@ class RecommendationsResponse(BaseModel):
     kis_coverage_pct: float
     regimes: dict[str, RegimeInfo] = {}
     recommendations: list[RecommendationRow] = []
+
+
+class UniverseRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    ticker: str
+    name: str
+    market: str
+    sec_type: str
+    avg_value_20d: float
+    is_managed: bool
+    is_warning: bool
+    is_caution: bool
+    listing_days: int
+    eligible: bool
+    as_of: date
+
+
+class UniverseResponse(BaseModel):
+    as_of: date | None = None
+    total: int = 0
+    eligible_count: int = 0
+    rows: list[UniverseRow] = []
