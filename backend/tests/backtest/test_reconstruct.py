@@ -87,3 +87,45 @@ def test_point_in_time_missing_source_fails_closed():
         point_in_time_universe(None, "2026-06-30")
     with pytest.raises(SurvivorshipSourceMissing):
         point_in_time_universe(pd.DataFrame(columns=["ticker"]), "2026-06-30")
+
+
+from app.backtest.reconstruct import reconstruct_pool, live_top30_only_rate
+
+
+def _value_panel():
+    rows = [
+        ("2026-06-29", "A", 500.0),
+        ("2026-06-29", "B", 500.0),  # A와 동점 → tie-break 티커 오름차순
+        ("2026-06-29", "C", 900.0),
+        ("2026-06-29", "D", 100.0),
+        ("2026-06-26", "C", 10.0),   # 과거일은 무시(D-1=직전 거래일만)
+        ("2026-06-30", "C", 9999.0), # 당일은 룩어헤드 → 무시
+    ]
+    return pd.DataFrame(rows, columns=["date", "ticker", "value"])
+
+
+def test_reconstruct_pool_is_deterministic_and_tie_broken():
+    universe = {"A", "B", "C", "D"}
+    pool = reconstruct_pool(_value_panel(), "2026-06-30", universe, top_n=3)
+    # value desc: C(900), A(500), B(500) → 동점은 ticker asc → A 먼저
+    assert pool == ["C", "A", "B"]
+
+
+def test_reconstruct_pool_is_invariant_to_row_order():
+    universe = {"A", "B", "C", "D"}
+    shuffled = _value_panel().sample(frac=1.0, random_state=7).reset_index(drop=True)
+    assert reconstruct_pool(shuffled, "2026-06-30", universe, top_n=4) == \
+           reconstruct_pool(_value_panel(), "2026-06-30", universe, top_n=4)
+
+
+def test_reconstruct_pool_respects_universe_filter():
+    pool = reconstruct_pool(_value_panel(), "2026-06-30", {"C", "D"}, top_n=10)
+    assert pool == ["C", "D"]  # A,B 는 유니버스 밖
+
+
+def test_live_top30_only_rate_quantifies_fresh_breakouts():
+    # 라이브 top-30 단독발생(=D-1 풀 부재) 픽 비율 → 별도 paper-forward 검증 대상
+    live_picks = ["C", "A", "X", "Y"]   # X,Y 는 D-1 풀에 없음
+    d1_pool = ["C", "A", "B"]
+    assert live_top30_only_rate(live_picks, d1_pool) == 0.5
+    assert live_top30_only_rate([], d1_pool) == 0.0

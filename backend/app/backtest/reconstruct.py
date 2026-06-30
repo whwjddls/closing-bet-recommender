@@ -47,3 +47,33 @@ def point_in_time_universe(membership, as_of_date) -> set:
     is_listed = listing <= d
     not_delisted = delisting.isna() | (delisting > d)
     return set(membership.loc[is_listed & not_delisted, "ticker"])
+
+
+def reconstruct_pool(value_panel: pd.DataFrame, as_of_date, universe: set,
+                     top_n: int = 200) -> list:
+    """D-1(직전 거래일) 거래대금 상위 top_n 후보 풀을 시점기준으로 재현.
+    결정성: value 내림차순, 동점은 ticker 오름차순(mergesort 안정정렬).
+    당일/미래 행은 guard_final_dates 로 차단."""
+    d = pd.Timestamp(as_of_date)
+    dates = pd.to_datetime(value_panel["date"])
+    hist = value_panel[dates < d]
+    if hist.empty:
+        return []
+    d1 = pd.to_datetime(hist["date"]).max()  # 직전 거래일
+    guard_final_dates(as_of_date, [d1], label="pool D-1")
+    snap = hist[pd.to_datetime(hist["date"]) == d1]
+    snap = snap[snap["ticker"].isin(universe)]
+    snap = snap.sort_values(
+        ["value", "ticker"], ascending=[False, True], kind="mergesort"
+    )
+    return snap["ticker"].head(top_n).tolist()
+
+
+def live_top30_only_rate(live_picks, d1_pool) -> float:
+    """라이브 top-30 단독발생 비율 = D-1 재현 풀에 없는 픽 / 전체 픽.
+    이 성분은 백테스트에 부재하므로 §7 수용기준에서 분리, paper-forward 검증 대상."""
+    if not live_picks:
+        return 0.0
+    d1 = set(d1_pool)
+    only = sum(1 for t in live_picks if t not in d1)
+    return only / len(live_picks)
