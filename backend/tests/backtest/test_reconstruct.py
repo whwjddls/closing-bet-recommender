@@ -177,3 +177,31 @@ def test_reported_value_requires_value_column():
     df = pd.DataFrame({"adj_close": [100.0], "volume": [10.0]})
     with pytest.raises(KeyError):
         reported_trading_value(df)
+
+
+from app.backtest.reconstruct import compute_signal_panel
+
+
+def test_compute_signal_panel_injects_subsystem2_callables():
+    # 서브시스템 2 공식 함수를 콜러블로 주입(네트워크/미완성 모듈 의존 없음)
+    panel = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-06-30", "2026-06-30"]),
+            "ticker": ["A", "B"],
+            "p_now": [100.0, 50.0],
+            "high_252": [90.0, 60.0],
+            "high_60": [88.0, 55.0],
+            "listing_days": [300, 300],
+            "rvol": [3.0, 1.0],
+            "net_purchase": [80.0, -20.0],
+            "avg_value_20d": [500.0, 500.0],
+        }
+    )
+    signal_fns = {
+        "s_shin": lambda r: r["p_now"] / r["high_252"],          # 스텁
+        "rvol_confirm": lambda r: min(1.0, 0.6 + 0.1 * r["rvol"]),
+        "supply_tilt": lambda r: 1.0 + 0.2 * (r["net_purchase"] / r["avg_value_20d"]),
+    }
+    out = compute_signal_panel(panel, signal_fns)
+    assert {"s_shin", "rvol_confirm", "supply_tilt"} <= set(out.columns)
+    assert out.loc[out.ticker == "A", "s_shin"].iloc[0] == pytest.approx(100.0 / 90.0)

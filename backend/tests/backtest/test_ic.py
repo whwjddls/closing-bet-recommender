@@ -110,3 +110,28 @@ def test_veto_excluded_from_ic_when_dart_timestamp_unavailable():
     assert_veto_backtestable(point_in_time_dart=True)  # 통과(예외 없음)
     with pytest.raises(DartPointInTimeError):
         assert_veto_backtestable(point_in_time_dart=False)
+
+
+from app.backtest.engine import run_cli
+
+
+def test_run_cli_emits_summary_and_verdict(tmp_path):
+    # 시그널·close·vwap 가 미리 결합된 작은 패널 CSV → CLI 가 집계+수용판정 dict 반환
+    csv = tmp_path / "panel.csv"
+    pd.DataFrame(
+        {
+            "date": ["2026-06-30", "2026-06-30"],
+            "ticker": ["A", "B"],
+            "signal": [3.0, 1.0],
+            "fwd_ret": [0.02, -0.01],
+        }
+    ).to_csv(csv, index=False)
+
+    result = run_cli(str(csv), signal_col="signal", fwd_ret_col="fwd_ret",
+                     survivorship_source=True)
+    assert "ic" in result and "verdict" in result
+    assert result["verdict"]["verdict"] in {"GO", "NO_GO", "DOWNSCOPE"}
+    # 소스 미확보 시 DOWNSCOPE 게이팅
+    gated = run_cli(str(csv), signal_col="signal", fwd_ret_col="fwd_ret",
+                    survivorship_source=False)
+    assert gated["verdict"]["verdict"] == "DOWNSCOPE"

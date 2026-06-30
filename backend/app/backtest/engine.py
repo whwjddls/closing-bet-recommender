@@ -2,8 +2,13 @@
 성공 = vwap_0900_1000[t+1] / close[t] − 1 > 0. VWAP 결측 → N/A(분모 제외)."""
 from __future__ import annotations
 
+import argparse
+import json
+
 import numpy as np
 import pandas as pd
+
+from app.backtest.ic import walk_forward_rank_ic, baseline_ic, acceptance
 
 SUCCESS = "SUCCESS"
 FAIL = "FAIL"
@@ -73,3 +78,43 @@ def summarize(scored: pd.DataFrame) -> dict:
         "hit_rate": (hits / n) if n else float("nan"),
         "avg_morning_return": float(graded["morning_return"].mean()) if n else float("nan"),
     }
+
+
+def run_cli(panel_path: str, *, signal_col: str, fwd_ret_col: str,
+            survivorship_source: bool, date_col: str = "date") -> dict:
+    """백테스트 CLI 코어: 시그널·선행수익률 패널 CSV → rank-IC·베이스라인·수용판정.
+    생존편향 소스 미확보 시 acceptance 가 DOWNSCOPE 로 게이팅."""
+    panel = pd.read_csv(panel_path, parse_dates=[date_col])
+    ic = walk_forward_rank_ic(panel, signal_col, fwd_ret_col, date_col)
+    base = baseline_ic(panel, fwd_ret_col, kind="random", seed=0, date_col=date_col)
+    verdict = acceptance(ic, base, survivorship_source=survivorship_source)
+    return {
+        "ic": {"mean_ic": ic.mean_ic, "t_stat": ic.t_stat, "n_periods": ic.n_periods},
+        "baseline_ic": base.mean_ic,
+        "verdict": {
+            "verdict": verdict.verdict, "reason": verdict.reason,
+            "ic": verdict.ic, "t_stat": verdict.t_stat,
+            "baseline_ic": verdict.baseline_ic,
+        },
+    }
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="종가베팅 백테스트 검증 CLI")
+    parser.add_argument("panel_path", help="signal·fwd_ret 결합 패널 CSV 경로")
+    parser.add_argument("--signal-col", default="signal")
+    parser.add_argument("--fwd-ret-col", default="fwd_ret")
+    parser.add_argument("--date-col", default="date")
+    parser.add_argument("--survivorship-source", action="store_true",
+                        help="상폐/정리매매 스냅샷 확보 여부(미지정 시 DOWNSCOPE 게이팅)")
+    args = parser.parse_args(argv)
+    result = run_cli(
+        args.panel_path, signal_col=args.signal_col, fwd_ret_col=args.fwd_ret_col,
+        survivorship_source=args.survivorship_source, date_col=args.date_col,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

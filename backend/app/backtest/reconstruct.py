@@ -101,3 +101,12 @@ def reported_trading_value(df: pd.DataFrame) -> pd.Series:
             "거래대금 'value' 컬럼 필요 — adjusted price×volume 재계산 금지(분할편향)"
         )
     return df["value"].astype(float)
+
+
+def compute_signal_panel(panel: pd.DataFrame, signal_fns: dict) -> pd.DataFrame:
+    """시점복원 시그널 패널 생성 seam. 서브시스템 2의 고정 시그널 함수를
+    {컬럼명: 콜러블(row)} 로 주입받아 행별 적용(DI → 네트워크/미완성 모듈 비의존, 테스트 가능)."""
+    out = panel.copy()
+    for col, fn in signal_fns.items():
+        out[col] = out.apply(fn, axis=1)
+    return out
