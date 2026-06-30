@@ -111,3 +111,21 @@ class HealthResponse(BaseModel):
     kis_coverage_pct: float
     board_published: bool
     last_run_date: str | None = None
+
+
+class RegimeInfo(BaseModel):            # 00 §3 RegimeInfo — 시장별 레짐(게이지)
+    market: str
+    index_level: float
+    ma5: float
+    regime_mult: float
+    cond_a: bool
+    cond_b: bool
+
+
+class RecommendationsResponse(BaseModel):
+    run_date: str
+    session_type: str | None = None
+    data_available: bool
+    kis_coverage_pct: float
+    regimes: dict[str, RegimeInfo] = {}
+    recommendations: list[RecommendationRow] = []
