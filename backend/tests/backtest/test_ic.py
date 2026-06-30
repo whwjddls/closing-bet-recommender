@@ -32,3 +32,32 @@ def test_walk_forward_skips_degenerate_dates():
     res = walk_forward_rank_ic(df, "signal", "fwd_ret")
     assert res.n_periods == 0
     assert np.isnan(res.mean_ic)
+
+
+from app.backtest.ic import orthogonalize, incremental_ic
+
+
+def _collinear_panel():
+    # s_geo = 3 * s_shin (완전 선형종속). fwd_ret 은 s_shin 과 단조.
+    rows = []
+    for date in ["A", "B"]:
+        for i, shin in enumerate([1.0, 2.0, 3.0, 4.0, 5.0], start=1):
+            rows.append((date, f"t{i}", shin, 3.0 * shin, float(i)))
+    return pd.DataFrame(rows, columns=["date", "ticker", "s_shin", "s_geo", "fwd_ret"])
+
+
+def test_orthogonalize_residual_of_collinear_signal_is_zero():
+    panel = _collinear_panel()
+    resid = orthogonalize(panel, "s_geo", ["s_shin"])
+    # s_geo 가 s_shin 의 정확한 선형함수 → 잔차 ≈ 0
+    assert np.allclose(resid.values, 0.0, atol=1e-8)
+
+
+def test_incremental_ic_removes_shared_variance_with_shin():
+    panel = _collinear_panel()
+    # 직교화 전 거(s_geo)의 naive IC 는 신과 같은 정보로 높게 나오지만,
+    raw = walk_forward_rank_ic(panel, "s_geo", "fwd_ret")
+    assert raw.mean_ic == pytest.approx(1.0)
+    # 신에 직교화한 잔차의 incremental-IC 는 정보가 남지 않아 정의 불가(NaN)
+    inc = incremental_ic(panel, "s_geo", ["s_shin"], "fwd_ret")
+    assert np.isnan(inc.mean_ic)
