@@ -47,3 +47,43 @@ def test_rolling_high_uses_only_prior_window():
     # t=2: max(high[0..1]) = 20 ;  t=4: max(high[2..3]) = 7
     assert href.iloc[2] == 20.0
     assert href.iloc[4] == 7.0
+
+
+from app.backtest.reconstruct import point_in_time_universe
+
+
+def _membership():
+    # listing_date <= t < delisting_date 인 종목이 t 시점 유니버스
+    return pd.DataFrame(
+        {
+            "ticker": ["000660", "005930", "900110", "111111"],
+            "listing_date": ["2010-01-01", "2000-01-01", "2015-01-01", "2030-01-01"],
+            "delisting_date": [pd.NaT, pd.NaT, "2026-09-01", pd.NaT],
+        }
+    )
+
+
+def test_point_in_time_includes_later_delisted_ticker():
+    # 900110 은 2026-09-01 상폐 → 2026-06-30 시점엔 '상장 중'이므로 포함되어야 한다
+    # (오늘의 상장목록만 쓰면 누락 → 생존편향. 그 함정을 막는 테스트)
+    uni = point_in_time_universe(_membership(), "2026-06-30")
+    assert "900110" in uni
+    assert {"000660", "005930"} <= uni
+
+
+def test_point_in_time_excludes_not_yet_listed():
+    uni = point_in_time_universe(_membership(), "2026-06-30")
+    assert "111111" not in uni  # 2030 상장 → 아직 미상장
+
+
+def test_point_in_time_excludes_already_delisted():
+    uni = point_in_time_universe(_membership(), "2026-10-01")
+    assert "900110" not in uni  # 2026-09-01 상폐 후
+
+
+def test_point_in_time_missing_source_fails_closed():
+    # 생존편향 소스 미확보 시 '오늘 목록' 폴백 금지 → fail-closed
+    with pytest.raises(SurvivorshipSourceMissing):
+        point_in_time_universe(None, "2026-06-30")
+    with pytest.raises(SurvivorshipSourceMissing):
+        point_in_time_universe(pd.DataFrame(columns=["ticker"]), "2026-06-30")

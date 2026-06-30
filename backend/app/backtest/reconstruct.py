@@ -29,3 +29,21 @@ def rolling_high_excluding_current(high: pd.Series, window: int) -> pd.Series:
     """H_ref = max(High[t-window .. t-1]). 당일 high[t]를 shift(1)로 제외해
     52주 신고가 근접도 계산의 룩어헤드를 원천 차단한다."""
     return high.shift(1).rolling(window=window, min_periods=1).max()
+
+
+def point_in_time_universe(membership, as_of_date) -> set:
+    """as_of(t) 시점의 상장 종목 집합. listing_date <= t < delisting_date.
+    이후 상폐된 종목도 t 시점엔 포함 → 생존편향 제거.
+    membership: DataFrame[ticker, listing_date, delisting_date(NaT 가능)].
+    소스가 없으면 '오늘 목록'으로 조용히 폴백하지 않고 fail-closed(SurvivorshipSourceMissing)."""
+    if membership is None or len(membership) == 0:
+        raise SurvivorshipSourceMissing(
+            "point-in-time 유니버스 소스(상폐/정리매매 versioned 스냅샷) 미확보 "
+            "— 생존편향 게이팅: go/no-go 주장 보류(§10.3)"
+        )
+    d = pd.Timestamp(as_of_date)
+    listing = pd.to_datetime(membership["listing_date"])
+    delisting = pd.to_datetime(membership["delisting_date"])
+    is_listed = listing <= d
+    not_delisted = delisting.isna() | (delisting > d)
+    return set(membership.loc[is_listed & not_delisted, "ticker"])
