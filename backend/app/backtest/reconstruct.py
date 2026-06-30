@@ -23,3 +23,9 @@ def guard_final_dates(as_of_date, dates, label: str = "FINAL") -> None:
         raise LookaheadError(
             f"{label} 입력에 당일/미래 데이터 유입(룩어헤드): as_of={as_of.date()}, 위반={sample}"
         )
+
+
+def rolling_high_excluding_current(high: pd.Series, window: int) -> pd.Series:
+    """H_ref = max(High[t-window .. t-1]). 당일 high[t]를 shift(1)로 제외해
+    52주 신고가 근접도 계산의 룩어헤드를 원천 차단한다."""
+    return high.shift(1).rolling(window=window, min_periods=1).max()
