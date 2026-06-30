@@ -1,5 +1,7 @@
 # 서브시스템 4 — API & 스케줄러 Implementation Plan
 
+> ⚠️ **계약 우선:** [`00-interface-contracts.md`](2026-06-30-00-interface-contracts.md) §1·§3·§5. store는 01 ORM 소비. 엔진 소비는 **신규 `app/engine/orchestrator.py`의 `orchestrate_run`(§3, 본 플랜 소유)** 경유. MODELED RVOL 생산자(volume_snapshots upsert+trailing≥20 평균) 소유. API 응답 스키마는 §5 정본. premarket 헬스체크에 D-1 수급 포함.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
 **Goal:** 추천 엔진(서브시스템 2)·데이터/스토어(서브시스템 1)·백테스트(서브시스템 3) 위에 FastAPI 6개 엔드포인트와 4개 Windows 작업스케줄러 잡(장전 prefetch·15:20 런·익일 채점·거래 캘린더)을 얹어, fail-closed/커버리지 게이트/룩어헤드 가드를 테스트로 박은 발행·채점 파이프라인을 완성한다.
