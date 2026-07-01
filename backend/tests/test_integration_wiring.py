@@ -3,14 +3,27 @@
 1) orchestrate_run 이 run_pipeline_fn 주입 없이 **실제** run_pipeline 을 구동하는지
    (실 StaticCandidate/LiveQuote 형상 어댑터로), spark/base_flag 포함 RecRow 를 채우는지.
 2) daily_run 영속화 → FastAPI /recommendations 왕복이 500 없이 spark/base_flag 를 노출하는지.
+3) **실제** LiveBrokerDataAdapter(가짜 pykrx/KIS/DART 클라이언트 합성)가 orchestrate_run 의
+   엔진-대면 표면(build_candidates/fetch_live/regime_inputs/dilution_veto)을 통해
+   엔드투엔드로 RecRow 를 방출하는지 — 프로덕션 seam(daily_run→live_binding)이 소비하는
+   실 어댑터 형상을 회귀로 고정한다.
 """
 from datetime import date, datetime
 
+import pandas as pd
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.data.broker_adapter import (
+    IndexLevel,
+    LiveBrokerDataAdapter,
+    Quote,
+    ValueRankEntry,
+)
+from app.data.mapping import Market
+from app.data.pykrx_client import COL_CLOSE, COL_HIGH, COL_LOW, COL_VALUE
 from app.engine.orchestrator import RecRow, RegimeInfo, RunResult, orchestrate_run
 from app.engine.pipeline import LiveQuote, StaticCandidate
 from app.main import create_app
@@ -138,3 +151,74 @@ def test_daily_run_to_recommendations_roundtrip():
     row = body["recommendations"][0]
     assert row["spark"] == [1.0, 2.0, 3.0]                      # spark 엔드투엔드
     assert row["base_flag"] is True                            # base_flag 엔드투엔드 (required bool)
+
+
+# ── (3) 실제 LiveBrokerDataAdapter ↔ orchestrate_run 엔진-대면 표면 ─────────
+def _ohlcv_df(n: int = 260) -> pd.DataFrame:
+    """정적위생 통과용 OHLCV(≥252행, 유동성 충분). 상수 박스 → 라이브 돌파 유도."""
+    return pd.DataFrame({
+        COL_HIGH: [24000.0] * n,
+        COL_LOW: [23000.0] * n,
+        COL_CLOSE: [23500.0] * n,
+        COL_VALUE: [5e10] * n,
+    })
+
+
+def _index_df() -> pd.DataFrame:
+    return pd.DataFrame({COL_CLOSE: [2600.0, 2610.0, 2620.0, 2630.0, 2640.0, 2650.0]})
+
+
+class _FakePykrx:
+    def get_net_purchases(self, fromdate, todate):
+        return {"000660": 8_000_000_000.0}
+
+    def get_ohlcv(self, ticker, fromdate, todate):
+        return _ohlcv_df()
+
+    def get_index_ohlcv(self, index_code, fromdate, todate):
+        return _index_df()
+
+
+class _FakeKis:
+    def get_value_ranking(self, market):
+        return [ValueRankEntry("000660", 5e10, 1)] if market == Market.KOSPI else []
+
+    def get_index_level(self, market):
+        return IndexLevel(market, 2660.0)          # ma5(2640) 위 → 레짐 UP
+
+    def get_quote(self, ticker):
+        return Quote(ticker, 24500.0, 2500, 3.0)   # high_60(24000) 돌파
+
+
+class _FakeDart:
+    def dilution_veto(self, ticker, snapshot_at):
+        return 1                                   # veto 통과
+
+
+def _live_adapter() -> LiveBrokerDataAdapter:
+    return LiveBrokerDataAdapter(
+        _FakePykrx(), _FakeKis(), _FakeDart(),
+        healthcheck_index_market=Market.KOSPI,
+        healthcheck_fromdate="20250101", healthcheck_todate="20260101",
+        healthcheck_expected_last=None)
+
+
+def test_orchestrate_run_consumes_real_live_broker_adapter():
+    """프로덕션 seam(daily_run→live_binding→build_live_adapter)이 바인딩하는 **실**
+    LiveBrokerDataAdapter 를 가짜 pykrx/KIS/DART 로 합성해 orchestrate_run 에 직접 주입,
+    엔진-대면 표면(build_candidates/fetch_live/regime_inputs/dilution_veto)이 실제로
+    소비되어 RecRow 를 방출하는지 회귀로 고정한다(형상 fake 아닌 실 어댑터)."""
+    store = _DictStore()
+    res = orchestrate_run(
+        date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+        adapter=_live_adapter(), store=store)               # ← run_pipeline_fn 주입 없음
+
+    assert isinstance(res, RunResult) and res.data_available is True  # fetch_live 소비
+    assert set(res.regimes) == {"KOSPI", "KOSDAQ"}                    # regime_inputs 소비
+    assert res.kis_coverage_pct == 100.0                             # 1/1 라이브 커버리지
+    # build_candidates(실 pykrx OHLCV 파생) + fetch_live → 15:20 스냅샷 upsert
+    assert store.vol and store.vol[0][0] == "000660" and store.vol[0][2] == 2500.0
+    # 실 어댑터 후보가 순수 파이프라인까지 흘러 RecRow 로 방출됨
+    assert res.recommendations, "실 어댑터 후보가 엔드투엔드로 방출돼야 한다"
+    rec = res.recommendations[0]
+    assert isinstance(rec, RecRow) and rec.ticker == "000660" and rec.market == "KOSPI"
