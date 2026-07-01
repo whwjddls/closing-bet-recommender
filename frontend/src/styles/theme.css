@@ -1,0 +1,905 @@
+/* ============================================================================
+   종가베팅 추천 대시보드 — 다크 트레이딩 테마 (P0)
+   설계 근거: docs/superpowers/2026-07-01-UI-DESIGN-PROPOSAL.md §2
+   색으로 갈린 위계(등급/방향/리스크) + 잠정 vs 확정 정직성.
+   ========================================================================== */
+
+:root {
+  /* ── 베이스(다크) ─────────────────────────────────────────── */
+  --bg-0: #0b0e14; /* 앱 배경(최하층) */
+  --bg-1: #141922; /* 카드/테이블 배경 */
+  --bg-2: #1c2430; /* 행 hover·헤더·입력 */
+  --border: #2a3441; /* 구분선 */
+  --text-hi: #e6edf3; /* 주요 숫자·종목명 */
+  --text-mid: #9da7b3; /* 라벨·보조 */
+  --text-lo: #5b6673; /* 비활성·주석 */
+
+  /* ── 방향색(한국 관례: 상승=빨강, 하락=파랑) ──────────────── */
+  --up: #ff4d4f; /* 상승·매수·양(+) */
+  --up-bg: #2a1416; /* 상승 셀 배경 틴트 */
+  --down: #3b82f6; /* 하락·음(-) */
+  --down-bg: #111c2e; /* 하락 셀 배경 틴트 */
+  --flat: #9da7b3; /* 보합 */
+
+  /* ── 등급 색코드(S/A/B/C) ─────────────────────────────────── */
+  --grade-s: #ffd54a; /* 금 */
+  --grade-s-bg: #2a2410;
+  --grade-a: #4ade80; /* 초록 */
+  --grade-a-bg: #122016;
+  --grade-b: #60a5fa; /* 하늘 */
+  --grade-b-bg: #0f1b2e;
+  --grade-c: #6b7684; /* 회색 dim */
+
+  /* ── 시황 레짐 신호등 ─────────────────────────────────────── */
+  --regime-go: #22c55e; /* 1.0 공격 GO */
+  --regime-hold: #f59e0b; /* 0.5 보수 */
+  --regime-off: #ef4444; /* 0.0 RISK-OFF */
+
+  /* ── 신선도/리스크 ───────────────────────────────────────── */
+  --provisional: #f59e0b; /* 15:20 잠정 앰버 */
+  --confirmed: #22c55e; /* D-1 확정 */
+  --risk: #ef4444; /* 희석 veto·관리 적색 */
+
+  /* ── 타이포 ──────────────────────────────────────────────── */
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-mono: ui-monospace, 'Roboto Mono', 'SFMono-Regular', 'Menlo',
+    'Consolas', monospace;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+}
+
+/* ── 전역 리셋/베이스 ───────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--text-hi);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100vh;
+  background: var(--bg-0);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 숫자(가격·수익률·score)는 탭 정렬 + monospace로 자릿수 흔들림 방지 */
+.num,
+td[data-testid='buy-price'],
+td[data-testid='perf-vwap'],
+td[data-testid='perf-return'],
+.exp-return,
+.regime-mult,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ============================================================================
+   앱 셸 + 네비게이션
+   ========================================================================== */
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-nav {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-nav a {
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-mid);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.app-nav a:hover {
+  color: var(--text-hi);
+}
+
+.app-nav a.active {
+  color: var(--text-hi);
+  border-bottom-color: var(--grade-s);
+}
+
+main {
+  padding: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+main > header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 4px 0 12px;
+}
+
+/* ============================================================================
+   전역 정직성 헤더(퀵 요약 바) §3-1
+   ========================================================================== */
+
+.global-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #10151d, var(--bg-1));
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.gh-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gh-logo {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-hi);
+}
+
+.gh-logo::before {
+  content: '▌';
+  color: var(--grade-s);
+  margin-right: 5px;
+}
+
+.gh-countdown {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-hi);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+
+.gh-countdown.gh-warn {
+  color: #0b0e14;
+  background: var(--provisional);
+  border-color: var(--provisional);
+}
+
+.gh-countdown.gh-danger {
+  color: #fff;
+  background: var(--risk);
+  border-color: var(--risk);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+.gh-countdown.gh-closed {
+  color: var(--text-lo);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.gh-mid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gh-verdict {
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.gh-verdict.verdict-GO {
+  color: var(--regime-go);
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.gh-verdict.verdict-CAUTION {
+  color: var(--regime-hold);
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.gh-verdict.verdict-RISK_OFF {
+  color: var(--regime-off);
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.gh-right {
+  color: var(--provisional);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================================
+   방향색(수익률 부호별)
+   ========================================================================== */
+
+.dir-up {
+  color: var(--up);
+  font-weight: 700;
+}
+
+.dir-down {
+  color: var(--down);
+  font-weight: 700;
+}
+
+.dir-flat {
+  color: var(--flat);
+}
+
+/* ============================================================================
+   추천 테이블 — 결정 콕핏 §3-2
+   ========================================================================== */
+
+.rec-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.rec-controls select,
+.rec-controls input {
+  accent-color: var(--grade-s);
+}
+
+.rec-controls select {
+  background: var(--bg-2);
+  color: var(--text-hi);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+
+.rec-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-mid);
+  font-size: 12.5px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-2);
+  color: var(--text-mid);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 6px 10px;
+  height: 36px; /* Compact 36px §2-3 */
+  border-bottom: 1px solid rgba(42, 52, 65, 0.5);
+  color: var(--text-hi);
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover td {
+  background: var(--bg-2);
+}
+
+/* 종목명 링크 */
+[data-testid='rec-name'] {
+  font-weight: 600;
+  color: var(--text-hi);
+}
+
+[data-testid='rec-name']:hover {
+  color: var(--grade-b);
+  text-decoration: underline;
+}
+
+td small {
+  color: var(--text-lo);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ── 리스크 좌측 고정 컬럼 ⚑ §P5 ─────────────────────────── */
+.col-risk {
+  width: 26px;
+  text-align: center;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+td.col-risk {
+  color: var(--text-lo);
+  font-size: 12px;
+}
+
+td.col-risk.has-risk {
+  color: var(--risk);
+  font-weight: 700;
+}
+
+.col-star {
+  width: 20px;
+  text-align: center;
+  color: var(--grade-s);
+}
+
+/* ── 등급 배지 + 좌측 색바 ───────────────────────────────── */
+.grade {
+  text-align: center;
+  width: 40px;
+}
+
+.grade > span,
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 800;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.grade-S {
+  color: var(--grade-s);
+}
+.grade-A {
+  color: var(--grade-a);
+}
+.grade-B {
+  color: var(--grade-b);
+}
+.grade-C {
+  color: var(--grade-c);
+}
+
+.grade.grade-S {
+  background: var(--grade-s-bg);
+}
+.grade.grade-A {
+  background: var(--grade-a-bg);
+}
+.grade.grade-B {
+  background: var(--grade-b-bg);
+}
+
+/* 행 좌측 3px 등급 색바(첫 셀 inset box-shadow) */
+.grade-row-S td:first-child {
+  box-shadow: inset 3px 0 0 var(--grade-s);
+}
+.grade-row-A td:first-child {
+  box-shadow: inset 3px 0 0 var(--grade-a);
+}
+.grade-row-B td:first-child {
+  box-shadow: inset 3px 0 0 var(--grade-b);
+}
+.grade-row-C td:first-child {
+  box-shadow: inset 3px 0 0 var(--grade-c);
+}
+
+/* C등급은 흐리게(참고용) */
+.grade-row-C td {
+  color: var(--text-mid);
+}
+
+/* ── 청산 CTA ─────────────────────────────────────────────── */
+.exit-cta .exit-primary {
+  color: var(--text-hi);
+  font-weight: 700;
+}
+
+.exit-cta .ref-stop {
+  color: var(--text-lo);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+/* ── 기대수익 컬럼(굵고 큰 결정 핵심) ─────────────────────── */
+.exp-return {
+  font-size: 15px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── 잠정 마커(앰버 점선) §2-1 신선도 ─────────────────────── */
+.prov-mark {
+  color: var(--provisional);
+  font-weight: 700;
+  border-bottom: 1px dashed var(--provisional);
+  cursor: help;
+}
+
+/* ── 신호 배지 ───────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 1px 3px 1px 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+
+.badge-shin {
+  color: var(--up);
+  border-color: rgba(255, 77, 79, 0.4);
+}
+
+.badge-rvol {
+  color: var(--grade-s);
+  border-color: rgba(255, 213, 74, 0.4);
+}
+
+.badge-supply_up {
+  color: var(--up);
+  border-color: rgba(255, 77, 79, 0.4);
+}
+
+.badge-supply_down {
+  color: var(--down);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.badge-regime_on {
+  color: var(--regime-go);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.badge-regime_half {
+  color: var(--regime-hold);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.badge-base {
+  color: var(--text-mid);
+}
+
+/* 잠정 배지: 앰버 점선 외곽선(정직성) */
+.badge-provisional {
+  color: var(--provisional);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px dashed var(--provisional);
+}
+
+/* 리스크 배지: 희석 veto 적색 채움 §C3 */
+.badge-veto,
+.badge-dilution {
+  color: #fff;
+  background: var(--risk);
+  border-color: var(--risk);
+  font-weight: 700;
+}
+
+.badge-managed {
+  color: var(--risk);
+  background: transparent;
+  border: 1px solid var(--risk);
+  font-weight: 700;
+}
+
+/* ── 미니 스파크 차트 ─────────────────────────────────────── */
+.mini polyline {
+  stroke: var(--text-mid);
+}
+
+.mini-up polyline {
+  stroke: var(--up);
+}
+
+.mini-down polyline {
+  stroke: var(--down);
+}
+
+/* ============================================================================
+   TOP3 카드 §3-2
+   ========================================================================== */
+
+.rec-top3-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.top3-card {
+  position: relative;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px 12px 16px;
+  overflow: hidden;
+}
+
+.top3-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.top3-card.grade-row-S::before {
+  background: var(--grade-s);
+}
+.top3-card.grade-row-A::before {
+  background: var(--grade-a);
+}
+.top3-card.grade-row-B::before {
+  background: var(--grade-b);
+}
+.top3-card.grade-row-C::before {
+  background: var(--grade-c);
+}
+
+.top3-card .t3-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.top3-card .t3-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-hi);
+}
+
+.top3-card .t3-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.top3-card .t3-rank {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.top3-card .t3-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-mid);
+  margin: 3px 0;
+}
+
+.top3-card .t3-row .t3-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-hi);
+}
+
+.top3-card .t3-exp {
+  font-size: 17px;
+}
+
+.top3-card .t3-risk {
+  color: var(--risk);
+  font-weight: 700;
+}
+
+/* ============================================================================
+   레짐 게이지 신호등
+   ========================================================================== */
+
+.regime-gauge {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.regime-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.regime-pill::before {
+  content: '●';
+  font-size: 9px;
+}
+
+.regime-on {
+  color: var(--regime-go);
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.regime-half {
+  color: var(--regime-hold);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.regime-off {
+  color: var(--regime-off);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.regime-market {
+  color: inherit;
+}
+
+.regime-mult {
+  color: var(--text-hi);
+  opacity: 0.85;
+}
+
+/* ============================================================================
+   헬스 배지 / 캡션 / 배너
+   ========================================================================== */
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-mid);
+  margin-left: 6px;
+}
+
+.health-ok strong {
+  color: var(--regime-go);
+}
+.health-degraded strong {
+  color: var(--regime-hold);
+}
+.health-down strong {
+  color: var(--risk);
+}
+
+.caption-reduced-risk {
+  color: var(--regime-hold);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12.5px;
+  margin: 8px 0;
+}
+
+.banner-risk-off {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.banner-risk-off strong {
+  color: var(--risk);
+  font-size: 15px;
+}
+
+.banner-risk-off p {
+  color: var(--text-mid);
+  font-size: 12.5px;
+  margin: 6px 0 0;
+}
+
+[data-testid='board-empty'],
+[data-testid='rec-empty'],
+[data-testid='perf-empty'] {
+  color: var(--text-mid);
+  padding: 24px 0;
+  text-align: center;
+}
+
+[data-testid='board-error'],
+[data-testid='perf-error'],
+[data-testid='detail-error'] {
+  color: var(--risk);
+  padding: 16px;
+}
+
+/* ============================================================================
+   성과추적
+   ========================================================================== */
+
+.perf-table td[data-testid='perf-return'] {
+  font-weight: 700;
+  text-align: right;
+}
+
+.perf-success {
+  border-left: 3px solid transparent;
+}
+
+.tag-dart {
+  color: var(--risk);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.agg {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.agg-grid {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.agg-grid [data-testid='agg-hit-rate'] {
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+.by-grade,
+.by-regime {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+.cold-start-caption {
+  color: var(--regime-hold);
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.cum-curve,
+[data-testid='cum-curve'] {
+  color: var(--text-mid);
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+/* ============================================================================
+   종목상세 / 신호 기여도
+   ========================================================================== */
+
+.signal-contribution {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.contrib-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+}
+
+.contrib-row dt {
+  color: var(--text-mid);
+  font-size: 12px;
+}
+
+.contrib-row dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-hi);
+  font-weight: 600;
+}
+
+[data-testid='provisional-watermark'] {
+  color: var(--provisional);
+  font-size: 11px;
+}
+
+[data-testid='base-box'] {
+  color: var(--text-mid);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   스캐너
+   ========================================================================== */
+
+.scan-row td {
+  color: var(--text-mid);
+}
+
+/* ── 반응형: 좁은 화면에서 컨트롤 래핑 ───────────────────── */
+@media (max-width: 640px) {
+  .global-header {
+    font-size: 11.5px;
+  }
+  main {
+    padding: 12px;
+  }
+}

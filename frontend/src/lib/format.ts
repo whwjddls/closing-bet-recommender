@@ -12,3 +12,13 @@ export function formatPercent(
   const sign = pct > 0 ? '+' : '';
   return `${sign}${pct.toFixed(digits)}%`;
 }
+
+// 한국 관례 방향색: 양(+)=상승(up/빨강), 음(−)=하락(down/파랑), 0/미확정=flat.
+export type Direction = 'up' | 'down' | 'flat';
+
+export function directionClass(
+  value: number | null | undefined,
+): Direction {
+  if (value === null || value === undefined || value === 0) return 'flat';
+  return value > 0 ? 'up' : 'down';
+}
