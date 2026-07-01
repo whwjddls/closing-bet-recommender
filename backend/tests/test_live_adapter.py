@@ -41,7 +41,7 @@ class FakeKisClient:
 
 class FakeDartClient:
     def __init__(self, veto=1): self.veto = veto
-    def dilution_veto(self, ticker, bgn_de, end_de): return self.veto
+    def dilution_veto(self, ticker, snapshot_at): return self.veto   # 실 DartClient 계약(2-arity)
 
 
 def _adapter(**kw):
