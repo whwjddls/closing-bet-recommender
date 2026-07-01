@@ -29,6 +29,35 @@ class Disclosure:
     rcept_dt: str  # YYYYMMDD
 
 
+# /disclosures 위젯: 최근 희석/배당 관련 공시 분류표(카테고리 → report_nm substring)
+DISCLOSURE_KINDS: dict[str, tuple[str, ...]] = {
+    "희석": (
+        "유상증자결정",
+        "전환사채권발행결정",
+        "신주인수권부사채권발행결정",
+        "교환사채권발행결정",
+    ),
+    "배당": (
+        "현금ㆍ현물배당결정",
+        "현금배당결정",
+        "주식배당",
+        "배당",
+        "권리락",
+    ),
+}
+DART_LIST_PAGE_COUNT = 100          # DART list.json 페이지당 최대 건수
+
+
+def _classify_disclosure(report_nm: str,
+                         kinds: dict[str, tuple[str, ...]]) -> str | None:
+    """report_nm 을 kinds 카테고리로 분류. 첫 매칭 카테고리 반환, 무관 시 None.
+       substring 매칭 → '유상증자결정(정정)' 등 정정 변형도 포착."""
+    for category, keywords in kinds.items():
+        if any(key in report_nm for key in keywords):
+            return category
+    return None
+
+
 def parse_corp_code_xml(xml_text: str) -> list[tuple[str, str, str]]:
     """DART corpCode.xml → [(corp_code, ticker, name)] (상장 종목코드 보유분만)."""
     root = ET.fromstring(xml_text)
@@ -121,6 +150,37 @@ class DartClient:
         return any(self._is_dilutive(d.report_nm)
                    for d in disclosures if bgn_de <= d.rcept_dt <= end_de)
 
+    def recent_disclosures(self, since: str,
+                           kinds: dict[str, tuple[str, ...]]) -> list[dict]:
+        """[since, 오늘] DART list.json 최근 공시 중 희석/배당 관련만 분류 반환.
+           kinds = {카테고리: (report_nm substring, ...)}. 상장(stock_code 보유)만.
+           조회 실패/비정상 status → [](graceful, 200 유지). 네트워크는 transport 몫."""
+        try:
+            payload = self._transport({
+                "crtfc_key": self._api_key, "bgn_de": since,
+                "page_count": DART_LIST_PAGE_COUNT})
+        except Exception:
+            return []
+        if not payload or payload.get("status") != "000":
+            return []
+        out: list[dict] = []
+        for it in payload.get("list", []):
+            ticker = (it.get("stock_code") or "").strip()
+            if not ticker:                              # 비상장(종목코드 공란) 제외
+                continue
+            report_nm = it.get("report_nm", "")
+            kind = _classify_disclosure(report_nm, kinds)
+            if kind is None:                            # 희석/배당 무관 → 제외
+                continue
+            out.append({
+                "date": it.get("rcept_dt", ""),
+                "ticker": ticker,
+                "name": it.get("corp_name", ""),
+                "kind": kind,
+                "title": report_nm,
+            })
+        return out
+
     def refresh_corp_codes(self, *, doc_fetcher: CorpDocFetcher | None = None) -> int:
         """corpCode.xml 다운로드·파싱 → corp_code_map upsert(ticker→corp_code). 건수 반환."""
         fetch = doc_fetcher or self._corp_doc_fetcher
@@ -182,3 +242,15 @@ def overnight_scan(ticker: str, since: dt.datetime, until: dt.datetime,
     ``scoring_job`` 이 ``from app.data.dart_client import overnight_scan`` 으로 지연
     바인딩한다. 미주입 시 env/DB 기본 클라이언트로 위임."""
     return (client or build_default_client()).overnight_scan(ticker, since, until)
+
+
+def recent_disclosures(since: str, kinds: dict[str, tuple[str, ...]] | None = None,
+                       client: DartClient | None = None) -> list[dict]:
+    """모듈 정본 래퍼(/disclosures 위젯). ``since`` 이후 희석/배당 관련 공시 파싱 리스트.
+       기본 클라이언트 조립 실패(크리덴셜 미설정 등) 시 [](graceful, 200 유지)."""
+    kinds = kinds if kinds is not None else DISCLOSURE_KINDS
+    try:
+        active = client or build_default_client()
+    except Exception:
+        return []
+    return active.recent_disclosures(since, kinds)

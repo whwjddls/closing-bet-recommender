@@ -184,6 +184,18 @@ class CalendarResponse(BaseModel):
     upcoming: list[CalEvent] = []
 
 
+class Disclosure(BaseModel):            # 희석/배당 관련 DART 공시 1건 — /disclosures 위젯
+    date: str                           # YYYYMMDD (rcept_dt)
+    ticker: str
+    name: str
+    kind: str                           # 희석 | 배당
+    title: str                          # 공시명(report_nm)
+
+
+class DisclosuresResponse(BaseModel):
+    items: list[Disclosure] = []
+
+
 class UniverseRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     ticker: str

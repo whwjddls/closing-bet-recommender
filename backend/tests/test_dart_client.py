@@ -2,7 +2,13 @@ import datetime as dt
 
 import pytest
 
-from app.data.dart_client import DartClient, VETO_BLOCK, VETO_CLEAR
+from app.data.dart_client import (
+    DISCLOSURE_KINDS,
+    DartClient,
+    VETO_BLOCK,
+    VETO_CLEAR,
+    recent_disclosures,
+)
 
 
 class FakeDart:
@@ -124,3 +130,59 @@ def test_refresh_corp_codes_parses_and_upserts():
     assert n == 2                               # 상장 2건(비상장 종목코드 공란 제외)
     assert mapping["005930"] == "00126380"
     assert mapping["000660"] == "00164779"
+
+
+# ── recent_disclosures: 희석/배당 분류·상장 필터·graceful ──
+def _item(report_nm, stock_code="005930", corp_name="삼성전자",
+          rcept_dt="20260629", corp="00126380"):
+    return {"corp_code": corp, "corp_name": corp_name, "stock_code": stock_code,
+            "report_nm": report_nm, "rcept_dt": rcept_dt}
+
+
+def test_recent_disclosures_classifies_dilution_and_dividend():
+    payload = _ok([
+        _item("유상증자결정"),
+        _item("현금배당결정", stock_code="000660", corp_name="SK하이닉스"),
+        _item("전환사채권발행결정(정정)", stock_code="035720", corp_name="카카오"),
+        _item("분기보고서"),                    # 무관 → 제외
+    ])
+    dart = DartClient(FakeDart(payload), CMAP, api_key="K")
+    rows = dart.recent_disclosures("20260620", DISCLOSURE_KINDS)
+    assert len(rows) == 3
+    assert rows[0] == {"date": "20260629", "ticker": "005930", "name": "삼성전자",
+                       "kind": "희석", "title": "유상증자결정"}
+    assert rows[1]["kind"] == "배당"
+    assert rows[2]["kind"] == "희석"            # 정정 변형도 substring 포착
+
+
+def test_recent_disclosures_skips_non_listed():
+    payload = _ok([_item("유상증자결정", stock_code="")])  # 비상장(종목코드 공란)
+    dart = DartClient(FakeDart(payload), CMAP, api_key="K")
+    assert dart.recent_disclosures("20260620", DISCLOSURE_KINDS) == []
+
+
+def test_recent_disclosures_empty_on_transport_error():
+    dart = DartClient(FakeDart(raises=True), CMAP, api_key="K")
+    assert dart.recent_disclosures("20260620", DISCLOSURE_KINDS) == []
+
+
+def test_recent_disclosures_empty_on_error_status():
+    dart = DartClient(FakeDart({"status": "010", "message": "미등록 키"}), CMAP,
+                      api_key="K")
+    assert dart.recent_disclosures("20260620", DISCLOSURE_KINDS) == []
+
+
+def test_recent_disclosures_passes_since_and_page_count():
+    fake = FakeDart(_ok([]))
+    dart = DartClient(fake, CMAP, api_key="K")
+    dart.recent_disclosures("20260620", DISCLOSURE_KINDS)
+    assert fake.calls[-1]["bgn_de"] == "20260620"
+    assert fake.calls[-1]["page_count"] == 100
+    assert fake.calls[-1]["crtfc_key"] == "K"
+
+
+def test_module_recent_disclosures_delegates_to_injected_client():
+    dart = DartClient(FakeDart(_ok([_item("주식배당")])), CMAP, api_key="K")
+    rows = recent_disclosures("20260620", client=dart)      # 기본 kinds 사용
+    assert rows[0]["kind"] == "배당"
+    assert rows[0]["title"] == "주식배당"
