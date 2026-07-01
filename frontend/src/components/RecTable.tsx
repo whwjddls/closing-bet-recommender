@@ -4,6 +4,7 @@ import type { Market, Recommendation } from '../api/client';
 import { deriveBadges } from '../lib/badges';
 import { formatPrice, formatPercent, directionClass } from '../lib/format';
 import MiniChart from './MiniChart';
+import InfoDot from './InfoDot';
 
 type SortKey = 'score' | 'grade' | 'supply';
 const GRADE_ORDER = { S: 0, A: 1, B: 2, C: 3 } as const;
@@ -140,12 +141,37 @@ export default function RecTable({
               <th className="col-risk">⚑</th>
               <th className="col-star">★</th>
               <th>종목/코드</th>
-              <th>현재가(잠정)</th>
+              <th>
+                현재가(잠정)
+                <InfoDot
+                  label="잠정"
+                  text="15:20 값, 마감15:30에 바뀔 수 있음. 확정 아님"
+                />
+              </th>
               <th>매수가</th>
-              <th>청산</th>
+              <th>
+                청산
+                <InfoDot
+                  label="오전VWAP"
+                  text="익일 09:00~10:00 거래량가중평균가 — 청산 기준"
+                />
+              </th>
               <th>기대</th>
-              <th>등급</th>
-              <th>신호</th>
+              <th>
+                등급
+                <InfoDot
+                  label="등급"
+                  text="S=신·거·시황·수급 모두 강함. 확신 최상"
+                />
+              </th>
+              <th>
+                신호
+                <InfoDot
+                  align="right"
+                  label="RVOL"
+                  text="평소 대비 오늘 거래량 배수. 3배↑ 관심몰림"
+                />
+              </th>
               <th>차트</th>
               {showPick && <th className="col-pick">담기</th>}
             </tr>

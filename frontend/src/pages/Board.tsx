@@ -15,6 +15,7 @@ import HealthBadge from '../components/HealthBadge';
 import IndexStrip from '../components/IndexStrip';
 import SectorHeatmap from '../components/SectorHeatmap';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
+import Onboarding from '../components/Onboarding';
 
 function todayKst(): string {
   return new Date().toISOString().slice(0, 10);
@@ -87,6 +88,7 @@ export default function Board() {
     <>
       <IndexStrip regimes={regimes} />
       <main>
+      <Onboarding />
       <header>
         <h1>종가베팅 추천 {board.run_date}</h1>
         <RegimeGauge regimes={regimes} />
