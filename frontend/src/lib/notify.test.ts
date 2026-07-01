@@ -44,4 +44,16 @@ describe('notifyTop3', () => {
     notifyTop3([r(1, 'A')]);
     expect(ctor).not.toHaveBeenCalled();
   });
+
+  it('제목에 추천 건수(N건)를 담는다', () => {
+    const ctor = vi.fn();
+    vi.stubGlobal('Notification', Object.assign(ctor, { permission: 'granted' }));
+    notifyTop3([r(1, 'A'), r(2, 'B'), r(3, 'C'), r(4, 'D')]);
+    expect(ctor.mock.calls[0][0]).toContain('4건');
+  });
+
+  it('Notification API가 없으면 크래시 없이 무시한다', () => {
+    vi.stubGlobal('Notification', undefined);
+    expect(() => notifyTop3([r(1, 'A')])).not.toThrow();
+  });
 });

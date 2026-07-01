@@ -36,6 +36,17 @@ function formatCountdown(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// 데이터 기준 시각(HH:MM:SS, KST).
+function formatKstClock(d: Date): string {
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return kst.toISOString().slice(11, 19);
+}
+
+// 데이터 나이(초). 미래 시각/시계 오차는 0으로 클램프.
+function ageSeconds(nowMs: number, at: Date): number {
+  return Math.max(0, Math.floor((nowMs - at.getTime()) / 1000));
+}
+
 function urgencyClass(ms: number): string {
   if (ms <= 0) return 'gh-closed';
   if (ms < 60 * 1000) return 'gh-danger'; // 1분 미만 적색 점멸
@@ -54,10 +65,17 @@ export default function GlobalHeader() {
   const [remaining, setRemaining] = useState<number>(() =>
     msUntilClose(new Date()),
   );
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [verdict, setVerdict] = useState<Verdict | null>(null);
+  // 보드 데이터를 받은 클라이언트 기준 시각(run_date는 날짜뿐이라 신선도 계산 불가).
+  const [dataAt, setDataAt] = useState<Date | null>(null);
 
   useEffect(() => {
-    const tick = () => setRemaining(msUntilClose(new Date()));
+    const tick = () => {
+      const now = new Date();
+      setRemaining(msUntilClose(now));
+      setNowMs(now.getTime());
+    };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
@@ -67,7 +85,9 @@ export default function GlobalHeader() {
     let alive = true;
     fetchRecommendations(todayKst())
       .then((board) => {
-        if (alive) setVerdict(deriveVerdict(Object.values(board.regimes)));
+        if (!alive) return;
+        setVerdict(deriveVerdict(Object.values(board.regimes)));
+        setDataAt(new Date());
       })
       .catch(() => {
         /* 정직성 배너·카운트다운은 데이터 없이도 상시 노출 */
@@ -88,6 +108,15 @@ export default function GlobalHeader() {
         >
           ⏱ 마감까지 {formatCountdown(remaining)}
         </span>
+        {dataAt && (
+          <span
+            className="gh-timestamp"
+            data-testid="data-timestamp"
+            title="데이터 기준 시각 · 경과 시간"
+          >
+            기준 {formatKstClock(dataAt)} · {ageSeconds(nowMs, dataAt)}초 전
+          </span>
+        )}
       </div>
 
       <div className="gh-mid">
