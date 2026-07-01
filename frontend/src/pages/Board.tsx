@@ -14,6 +14,9 @@ import Scanner from '../components/Scanner';
 import HealthBadge from '../components/HealthBadge';
 import IndexStrip from '../components/IndexStrip';
 import SectorHeatmap from '../components/SectorHeatmap';
+import MarketInvestors from '../components/MarketInvestors';
+import CalendarWidget from '../components/CalendarWidget';
+import DisclosuresWidget from '../components/DisclosuresWidget';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
 import Onboarding from '../components/Onboarding';
 
@@ -109,7 +112,15 @@ export default function Board() {
       )}
 
       <div className="board-top">
-        <SectorHeatmap />
+        <CalendarWidget />
+        <div className="board-market-panel">
+          <SectorHeatmap />
+          <MarketInvestors />
+        </div>
+      </div>
+
+      <div className="board-widgets">
+        <DisclosuresWidget />
       </div>
 
       {board.recommendations.length === 0 ? (
