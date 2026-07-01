@@ -36,7 +36,7 @@ export default function PerfTable({ rows }: { rows: PickResult[] }) {
               {r.name} <small>{r.ticker}</small>
             </td>
             <td>{r.grade}</td>
-            <td>{formatPrice(r.buy_price_final)}</td>
+            <td>{r.buy_price_final === null ? '(미확정)' : formatPrice(r.buy_price_final)}</td>
             <td data-testid="perf-vwap">
               {r.vwap_0900_1000 === null ? '(잠김)' : formatPrice(r.vwap_0900_1000)}
             </td>

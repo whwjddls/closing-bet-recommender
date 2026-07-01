@@ -98,7 +98,7 @@ export interface PickResult {
   ticker: string;
   name: string;
   grade: Grade;
-  buy_price_final: number;
+  buy_price_final: number | null;
   vwap_0900_1000: number | null;
   morning_return: number | null;
   outcome: Outcome;

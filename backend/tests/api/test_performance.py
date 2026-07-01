@@ -12,8 +12,8 @@ def _rec(rid, grade="S", regime=1.0, ticker="000660"):
                           provisional_flag=True, created_at=datetime.now())
 
 
-def _perf(rid, outcome, ret, vwap=10.0, flag=False):
-    return Performance(rec_id=rid, eval_date=date(2026, 6, 30), buy_price_final=10.0,
+def _perf(rid, outcome, ret, vwap=10.0, flag=False, bpf=10.0):
+    return Performance(rec_id=rid, eval_date=date(2026, 6, 30), buy_price_final=bpf,
                        vwap_0900_1000=vwap, morning_return=ret, outcome=outcome,
                        dart_overnight_flag=flag, scored_at=datetime.now())
 
@@ -56,3 +56,15 @@ def test_performance_empty(client):
     assert agg["by_grade"] == [] and agg["by_regime"] == []
     assert agg["cumulative_curve"] == []
     assert body["picks"] == []
+
+
+def test_performance_na_missing_close_serializes_null_not_500(client, db_session):
+    # 수정(c) 로 확정종가 결측(NA) 행은 buy_price_final=None 으로 영속됨 → /performance 가 500 나면 안 됨(#1)
+    db_session.add(_rec(1, "S", 1.0, "000660"))
+    db_session.add(_perf(1, "NA", None, vwap=None, bpf=None))
+    db_session.commit()
+    resp = client.get("/performance")
+    assert resp.status_code == 200
+    pick = resp.json()["picks"][0]
+    assert pick["outcome"] == "NA"
+    assert pick["buy_price_final"] is None

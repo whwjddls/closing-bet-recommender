@@ -66,7 +66,7 @@ class PickResult(BaseModel):
     ticker: str
     name: str
     grade: str
-    buy_price_final: float
+    buy_price_final: float | None = None    # NA(확정종가 결측) 픽은 None (#1 콜드/결측 500 방지)
     vwap_0900_1000: float | None = None
     morning_return: float | None = None
     outcome: str                        # SUCCESS/FAIL/NA
