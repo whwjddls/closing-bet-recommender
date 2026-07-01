@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
 
 from app.backtest.ic import walk_forward_rank_ic, baseline_ic, acceptance
+from app.backtest.reconstruct import guard_final_dates, point_in_time_universe
 
 SUCCESS = "SUCCESS"
 FAIL = "FAIL"
@@ -121,23 +122,37 @@ def run_backtest(
     load_price_panel=None,
     load_vwap_panel=None,
     trading_days=None,
-    survivorship_source: bool = True,
+    membership=None,
+    survivorship_source: bool | None = None,
     signal_col: str = "signal",
 ) -> BacktestResult:
     """공개 백테스트 래퍼(계약 §4). 내부 합성:
-    reconstruct(시점복원 풀·15:20-등가 → 확정 close[t])
+    reconstruct(시점복원 유니버스·룩어헤드 가드 → 확정 close[t])
     → score(확정 close[t] 진입 · 익일 오전 VWAP[09:00–10:00, t+1] 채점)
     → summarize(N·A 분모 제외 집계)
     → ic.walk_forward_rank_ic + acceptance(go/no-go) 묶음.
     공개 시그니처는 (start, end) 2-인자(계약 §4); 외부 데이터(pykrx/KIS)는
-    load_* 콜러블로 keyword-only 주입(DI) — 네트워크 없이 결정론적 테스트."""
+    load_* 콜러블로 keyword-only 주입(DI) — 네트워크 없이 결정론적 테스트.
+
+    생존편향: ``survivorship_source`` 는 자동 True 금지(§10.3). 미지정 시 실제 상폐/
+    정리매매 membership 소스 유무로 파생하고, 소스가 없으면 acceptance 가 DOWNSCOPE 로
+    게이팅한다(go/no-go 조용한 통과 금지). membership 이 있으면 각 run_date 시점의
+    point-in-time 유니버스로 픽을 제한(생존편향 제거)하고 n_picks 를 그 재구성 기준으로 센다."""
     if load_price_panel is None or load_vwap_panel is None:
         raise ValueError(
             "run_backtest: load_price_panel·load_vwap_panel 주입 필요 "
             "(서브시스템 1 데이터레이어 바인딩 또는 테스트 스텁)."
         )
+    # 생존편향 소스 파생 — 명시 주입이 없으면 membership 유무로 결정(자동 True 금지)
+    if survivorship_source is None:
+        survivorship_source = membership is not None and len(membership) > 0
+
     panel = load_price_panel(start, end)
     vwap_panel = load_vwap_panel(start, end)
+
+    # 룩어헤드 가드: FINAL 가격패널은 백테스트 end 를 넘는 행을 포함해선 안 된다
+    # (as_of=end+1일 → end 당일까지만 허용, end 초과 행은 LookaheadError).
+    guard_final_dates(end + timedelta(days=1), panel["date"], label="price panel")
 
     days = trading_days
     if days is None:
@@ -148,6 +163,15 @@ def run_backtest(
 
     # reconstruct/score: 진입가 = 확정 close[t], 채점 = 익일 오전 VWAP[t+1]
     picks = panel[["date", "ticker", signal_col]].rename(columns={"date": "run_date"})
+
+    # point-in-time 유니버스: membership 소스가 있으면 각 시점 상장종목으로 제한(생존편향 제거)
+    if membership is not None and len(membership) > 0:
+        kept = [
+            grp[grp["ticker"].isin(point_in_time_universe(membership, run_date))]
+            for run_date, grp in picks.groupby("run_date", sort=False)
+        ]
+        picks = pd.concat(kept) if kept else picks.iloc[0:0]
+
     picks = attach_eval_dates(picks, days)
     picks = attach_entry_close(picks, panel)
     scored = score(picks, vwap_panel)

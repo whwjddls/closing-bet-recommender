@@ -143,3 +143,63 @@ def test_run_backtest_requires_injected_data_loaders():
     # (start,end)만으로는 외부 데이터 의존 — 주입 콜러블 없으면 fail-fast
     with pytest.raises(ValueError):
         run_backtest(date(2026, 6, 29), date(2026, 6, 30))
+
+
+def _price_panel_abc(start, end):
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2026-06-29", "2026-06-29", "2026-06-29",
+                 "2026-06-30", "2026-06-30", "2026-06-30"]
+            ),
+            "ticker": ["A", "B", "C", "A", "B", "C"],
+            "close": [100.0] * 6,
+            "signal": [3.0, 2.0, 1.0, 3.0, 2.0, 1.0],
+        }
+    )
+
+
+def _vwap_panel_abc(start, end):
+    return pd.DataFrame(
+        {
+            "eval_date": pd.to_datetime(
+                ["2026-06-30", "2026-06-30", "2026-06-30",
+                 "2026-07-01", "2026-07-01", "2026-07-01"]
+            ),
+            "ticker": ["A", "B", "C", "A", "B", "C"],
+            "vwap_0900_1000": [103.0, 102.0, 101.0, 103.0, 102.0, 101.0],
+        }
+    )
+
+
+_DAYS_ABC = ["2026-06-29", "2026-06-30", "2026-07-01"]
+
+
+def test_run_backtest_does_not_silently_assume_survivorship_source():
+    # survivorship_source 미지정 + membership 미확보 → 자동 True 금지.
+    # acceptance 는 생존편향 게이팅으로 DOWNSCOPE(go/no-go 조용한 통과 방지, §10.3).
+    res = run_backtest(
+        date(2026, 6, 29), date(2026, 6, 30),
+        load_price_panel=_price_panel_abc, load_vwap_panel=_vwap_panel_abc,
+        trading_days=_DAYS_ABC,
+    )
+    assert "DOWNSCOPE" in res.note
+
+
+def test_run_backtest_restricts_to_point_in_time_universe_with_membership():
+    # membership 소스가 있으면 각 run_date 시점 상장종목으로 픽을 제한(생존편향 제거)하고
+    # n_picks 를 그 재구성 기준으로 센다. C 는 membership 밖 → 제외 → A,B × 2일 = 4픽.
+    membership = pd.DataFrame(
+        {
+            "ticker": ["A", "B"],
+            "listing_date": ["2000-01-01", "2000-01-01"],
+            "delisting_date": [pd.NaT, pd.NaT],
+        }
+    )
+    res = run_backtest(
+        date(2026, 6, 29), date(2026, 6, 30),
+        load_price_panel=_price_panel_abc, load_vwap_panel=_vwap_panel_abc,
+        trading_days=_DAYS_ABC, membership=membership,
+    )
+    assert res.n_picks == 4
+    assert "DOWNSCOPE" not in res.note        # membership 확보 → survivorship 파생 True
