@@ -121,7 +121,7 @@ def test_daily_run_to_recommendations_roundtrip():
     run_date = date(2026, 6, 30)
 
     regimes = {"KOSPI": RegimeInfo(market="KOSPI", index_level=2700.0, ma5=2680.0,
-                                   regime_mult=1.0, cond_a=True, cond_b=True)}
+                                   ma5_prev=2670.0, regime_mult=1.0, cond_a=True, cond_b=True)}
     result = RunResult(run_date=run_date, session_type="정규", data_available=True,
                        kis_coverage_pct=90.0,
                        recommendations=[_rec_row(1, "000660", "SK하이닉스")],
@@ -151,6 +151,11 @@ def test_daily_run_to_recommendations_roundtrip():
     row = body["recommendations"][0]
     assert row["spark"] == [1.0, 2.0, 3.0]                      # spark 엔드투엔드
     assert row["base_flag"] is True                            # base_flag 엔드투엔드 (required bool)
+    # 전일 5MA(ma5_prev)가 RegimeSnapshot 으로 실제 영속화되어야 한다(cond_b/slope 감사)
+    from app.store.models import RegimeSnapshot
+    with factory() as db:
+        snap = db.get(RegimeSnapshot, (run_date, "KOSPI"))
+    assert snap is not None and snap.ma5_prev == 2670.0
 
 
 # ── (3) 실제 LiveBrokerDataAdapter ↔ orchestrate_run 엔진-대면 표면 ─────────

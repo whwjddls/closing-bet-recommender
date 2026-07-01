@@ -92,6 +92,20 @@ def test_modeled_rvol_threshold():
     assert compute_modeled_avg([1.0e8] * 20, min_sessions=20) == 1.0e8    # ≥20세션 → 평균
 
 
+def test_orchestrate_populates_real_ma5_prev_for_slope_audit():
+    """cond_b(5MA 기울기) 감사를 위해 전일 5MA(ma5_prev)가 실제 계산·전파되어야 한다(None 금지).
+    KOSPI 입력 prev5=[2650,2655,2660,2665,2670] → ma5_prev=(합)/5=2660.0."""
+    store = DictStore()
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=FakeAdapter(), store=store, run_pipeline_fn=fake_run_pipeline)
+    kospi = res.regimes["KOSPI"]
+    assert kospi.ma5_prev is not None
+    assert kospi.ma5_prev == 2660.0
+    # store.save_regime 로 전파되어 RegimeSnapshot.ma5_prev 로 영속화 가능해야 한다
+    saved = {market: info for market, info in store.regimes}
+    assert saved["KOSPI"].ma5_prev == 2660.0
+
+
 class PrefetchStore(DictStore):
     """장전 FINAL 캐시(load_prefetch)를 노출하는 store 페이크 (00 §2 재활용)."""
 

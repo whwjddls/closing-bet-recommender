@@ -22,6 +22,7 @@ class RegimeInfo:
     market: str
     index_level: float
     ma5: float
+    ma5_prev: float          # 전일 5MA — cond_b(5MA 기울기) 감사용, 영속화 대상
     regime_mult: float
     cond_a: bool
     cond_b: bool
@@ -119,8 +120,8 @@ def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
     for market in ("KOSPI", "KOSDAQ"):
         idx, prev5 = adapter.regime_inputs(market)
         rr = compute_regime(idx, prev5)
-        info = RegimeInfo(market=market, index_level=idx, ma5=rr.ma5, regime_mult=rr.regime_mult,
-                          cond_a=rr.cond_a, cond_b=rr.cond_b)
+        info = RegimeInfo(market=market, index_level=idx, ma5=rr.ma5, ma5_prev=rr.ma5_prev,
+                          regime_mult=rr.regime_mult, cond_a=rr.cond_a, cond_b=rr.cond_b)
         regimes[market] = info
         store.save_regime(run_date, market, info)
     regime_by_market = {m: r.regime_mult for m, r in regimes.items()}   # dict[str, float]
