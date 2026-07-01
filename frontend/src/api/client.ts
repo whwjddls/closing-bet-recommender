@@ -63,7 +63,7 @@ export interface RegimeInfo {
 // §5 prose: /recommendations/{date} envelope.
 export interface RecommendationsResponse {
   run_date: string;
-  session_type: string;
+  session_type: string | null;
   data_available: boolean;
   kis_coverage_pct: number;
   regimes: Record<string, RegimeInfo>;
@@ -154,7 +154,7 @@ export interface UniverseRow {
 }
 
 export interface UniverseResponse {
-  as_of: string;
+  as_of: string | null;
   rows: UniverseRow[];
 }
 

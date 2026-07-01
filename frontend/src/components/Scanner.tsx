@@ -1,12 +1,19 @@
 import type { UniverseRow } from '../api/client';
 import { formatPrice } from '../lib/format';
 
-export default function Scanner({ rows }: { rows: UniverseRow[] }) {
+export default function Scanner({
+  rows,
+  asOf = null,
+}: {
+  rows: UniverseRow[];
+  asOf?: string | null;
+}) {
   if (rows.length === 0) {
     return <p data-testid="scan-empty">후보 풀 데이터가 없습니다.</p>;
   }
   return (
     <table className="scanner">
+      <caption data-testid="scan-as-of">스캔 기준일 {asOf ?? '-'}</caption>
       <thead>
         <tr>
           <th>종목/코드</th>

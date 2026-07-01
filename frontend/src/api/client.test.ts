@@ -74,6 +74,23 @@ describe('api client', () => {
     expect(res.status).toBe('OK');
   });
 
+  it('nullable 계약: session_type/as_of 가 null 이어도 그대로 통과시킨다', async () => {
+    mockFetchOnce({
+      run_date: '2026-06-30',
+      session_type: null,
+      data_available: false,
+      kis_coverage_pct: 0,
+      regimes: {},
+      recommendations: [],
+    });
+    const rec = await fetchRecommendations('2026-06-30');
+    expect(rec.session_type).toBeNull();
+
+    mockFetchOnce({ as_of: null, rows: [] });
+    const uni = await fetchUniverse();
+    expect(uni.as_of).toBeNull();
+  });
+
   it('비정상 응답(ok=false)은 throw 하여 UI가 fail-closed 할 수 있게 한다', async () => {
     mockFetchOnce({}, false, 503);
     await expect(fetchHealth()).rejects.toThrow(/503/);

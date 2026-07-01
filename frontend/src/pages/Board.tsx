@@ -57,7 +57,7 @@ export default function Board() {
         {health && <HealthBadge health={health} />}
         <span>
           {' '}
-          세션 {board.session_type} · 커버리지 {board.kis_coverage_pct}%
+          세션 {board.session_type ?? '-'} · 커버리지 {board.kis_coverage_pct}%
         </span>
       </header>
 
@@ -78,7 +78,9 @@ export default function Board() {
               RISK_OFF (모든 시장 5MA 아래). 시스템 정상 — 스캐너/최근 레짐
               컨텍스트를 유지합니다.
             </p>
-            {universe && <Scanner rows={universe.rows} />}
+            {universe && (
+              <Scanner rows={universe.rows} asOf={universe.as_of} />
+            )}
           </section>
         ) : (
           <p data-testid="board-empty">발행된 추천 종목이 없습니다.</p>

@@ -37,4 +37,16 @@ describe('Scanner', () => {
     render(<Scanner rows={[]} />);
     expect(screen.getByTestId('scan-empty')).toBeInTheDocument();
   });
+
+  it('as_of 를 스캔 기준일로 표기한다', () => {
+    render(<Scanner rows={[row({})]} asOf="2026-06-30" />);
+    expect(screen.getByTestId('scan-as-of')).toHaveTextContent(
+      '스캔 기준일 2026-06-30',
+    );
+  });
+
+  it('as_of 가 null 이면 - 로 폴백한다', () => {
+    render(<Scanner rows={[row({})]} asOf={null} />);
+    expect(screen.getByTestId('scan-as-of')).toHaveTextContent('스캔 기준일 -');
+  });
 });
