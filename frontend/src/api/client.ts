@@ -116,9 +116,51 @@ export interface MarketSector {
   change_pct: number; // 업종 등락률(%, +상승/−하락)
 }
 
+// 투자자별 순매수(억 단위, D-1 확정). +상승빨강 매수우위 / −하락파랑 매도우위.
+export interface MarketInvestors {
+  foreign_net: number; // 외국인 순매수(억)
+  institution_net: number; // 기관 순매수(억)
+  individual_net: number; // 개인 순매수(억)
+}
+
 export interface MarketResponse {
   breadth: MarketBreadth;
   sectors: MarketSector[];
+  // 백엔드가 뒤늦게 붙인 필드 — 구버전 응답 호환 위해 optional.
+  investors?: MarketInvestors;
+}
+
+// GET /calendar — 거래 세션 + 다가오는 만기/배당락/휴장 일정.
+export interface CalendarToday {
+  date: string;
+  is_trading_day: boolean;
+  session_type: string; // '정규' | '조기폐장' | '휴장' 등
+  close_time: string; // 'HH:MM'
+}
+
+export interface CalendarEvent {
+  date: string;
+  kind: string; // 'expiry' | 'ex_dividend' | 'holiday' 등(백엔드 문자열)
+  label: string;
+  d_day: number; // D-day (0=오늘, 양수=미래)
+}
+
+export interface CalendarResponse {
+  today: CalendarToday;
+  upcoming: CalendarEvent[];
+}
+
+// GET /disclosures — 최근 희석성/배당 공시.
+export interface DisclosureItem {
+  date: string;
+  ticker: string;
+  name: string;
+  kind: string; // '유상증자' | 'CB' | '배당' 등
+  title: string;
+}
+
+export interface DisclosuresResponse {
+  items: DisclosureItem[];
 }
 
 // §5 PickResult.
@@ -216,3 +258,6 @@ export const fetchPerformance = () =>
 export const fetchUniverse = () => getJson<UniverseResponse>(`/universe`);
 export const fetchHealth = () => getJson<HealthResponse>(`/health`);
 export const fetchMarket = () => getJson<MarketResponse>(`/market`);
+export const fetchCalendar = () => getJson<CalendarResponse>(`/calendar`);
+export const fetchDisclosures = () =>
+  getJson<DisclosuresResponse>(`/disclosures`);

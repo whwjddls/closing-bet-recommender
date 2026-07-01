@@ -1184,9 +1184,26 @@ td.col-risk.has-risk {
    ========================================================================== */
 
 .board-top {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  align-items: start;
+  gap: 12px;
   margin: 8px 0 12px;
+}
+
+.board-market-panel {
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 300px);
+  gap: 12px;
+  align-items: start;
+}
+
+.board-market-panel .sector-heatmap {
+  max-width: none;
+}
+
+.board-widgets {
+  margin: 0 0 16px;
 }
 
 .sector-heatmap {
@@ -1270,13 +1287,350 @@ td.col-risk.has-risk {
   font-size: 12.5px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .board-top {
-    justify-content: stretch;
+    grid-template-columns: 1fr;
   }
+  .board-market-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
   .sector-heatmap {
     max-width: none;
   }
+}
+
+/* ============================================================================
+   투자자별 수급 요약(MarketInvestors) — GET /market investors §S3
+   ========================================================================== */
+
+.market-investors {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.market-investors .mi-title {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.market-investors .mi-scope {
+  color: var(--text-lo);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.market-investors .mi-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.market-investors .mi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  min-height: 34px;
+}
+
+.market-investors .mi-label {
+  color: var(--text-mid);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.market-investors .mi-net {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.market-investors .mi-empty,
+.market-investors .mi-loading {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   거래 캘린더 위젯(CalendarWidget) — GET /calendar §S4
+   ========================================================================== */
+
+.calendar-widget {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.calendar-widget .cal-title {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.calendar-widget .cal-today {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-lo);
+  margin-bottom: 10px;
+}
+
+.calendar-widget .cal-today.session-open {
+  border-left-color: var(--regime-go);
+}
+.calendar-widget .cal-today.session-early {
+  border-left-color: var(--provisional);
+}
+.calendar-widget .cal-today.session-closed {
+  border-left-color: var(--text-lo);
+  opacity: 0.85;
+}
+
+.calendar-widget .cal-today-date {
+  font-weight: 700;
+  color: var(--text-hi);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-widget .cal-today-badge {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.calendar-widget .session-open .cal-today-badge {
+  color: var(--regime-go);
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+.calendar-widget .session-early .cal-today-badge {
+  color: var(--provisional);
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.calendar-widget .session-closed .cal-today-badge {
+  color: var(--text-mid);
+  background: var(--bg-1);
+  border-color: var(--border);
+}
+
+.calendar-widget .cal-today-close {
+  margin-left: auto;
+  color: var(--text-mid);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-widget .cal-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calendar-widget .cal-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.calendar-widget .cal-chip-dday {
+  min-width: 46px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-align: center;
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+  background: var(--bg-1);
+}
+
+.calendar-widget .cal-chip-label {
+  color: var(--text-hi);
+  font-weight: 600;
+}
+
+/* kind별 좌측 색 강조 + D-day 칩 색 */
+.calendar-widget .cal-chip--expiry {
+  border-left: 3px solid var(--grade-s);
+}
+.calendar-widget .cal-chip--expiry .cal-chip-dday {
+  color: var(--grade-s);
+  border-color: rgba(255, 213, 74, 0.45);
+}
+.calendar-widget .cal-chip--exdiv {
+  border-left: 3px solid var(--down);
+}
+.calendar-widget .cal-chip--exdiv .cal-chip-dday {
+  color: var(--down);
+  border-color: rgba(59, 130, 246, 0.45);
+}
+.calendar-widget .cal-chip--holiday {
+  border-left: 3px solid var(--risk);
+}
+.calendar-widget .cal-chip--holiday .cal-chip-dday {
+  color: var(--risk);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+.calendar-widget .cal-chip--default {
+  border-left: 3px solid var(--border);
+}
+
+.calendar-widget .cal-none,
+.calendar-widget .cal-empty,
+.calendar-widget .cal-loading {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   공시 일정 위젯(DisclosuresWidget) — GET /disclosures §S5
+   희석성 공시는 리스크 적색 톤.
+   ========================================================================== */
+
+.disclosures-widget {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.disclosures-widget .dsc-title {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.disclosures-widget .dsc-scope {
+  color: var(--text-lo);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.disclosures-widget .dsc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.disclosures-widget .dsc-row {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-lo);
+}
+
+.disclosures-widget .dsc-row--risk {
+  border-left-color: var(--risk);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.disclosures-widget .dsc-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.disclosures-widget .dsc-date {
+  color: var(--text-mid);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclosures-widget .dsc-name {
+  color: var(--text-hi);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.disclosures-widget .dsc-code {
+  color: var(--text-lo);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclosures-widget .dsc-kind {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.disclosures-widget .dsc-kind--dilution {
+  color: #fff;
+  background: var(--risk);
+  border-color: var(--risk);
+}
+
+.disclosures-widget .dsc-kind--neutral {
+  color: var(--down);
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.disclosures-widget .dsc-item-title {
+  margin: 0;
+  color: var(--text-mid);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.disclosures-widget .dsc-empty,
+.disclosures-widget .dsc-loading {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
 }
 
 /* ============================================================================
