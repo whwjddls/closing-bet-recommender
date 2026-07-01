@@ -21,7 +21,8 @@ def _rec_row(rank, ticker, name, grade="S"):
                            s_shin=1.16, s_geo=0.83, rvol_confirm=0.93, supply_tilt=1.03,
                            regime_mult=1.0, veto=1, core=1.12, final=1.12, grade=grade,
                            near_252=1.02, near_60=1.04, rvol=2.5, target_price=25200.0,
-                           stop_price=23800.0, provisional_flag=True)
+                           stop_price=23800.0, spark=[1.0, 2.0, 3.0], base_flag=True,
+                           provisional_flag=True)
 
 
 def _result(coverage=90.0, data_available=True, recs=None):

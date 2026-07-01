@@ -29,16 +29,15 @@ def _desktop_notify(title: str, message: str) -> None:
 
 
 def _default_run_pipeline(run_date: date, snapshot_at: datetime):
-    """프로덕션 기본 seam — 00 §3 ``orchestrate_run`` 을 라이브 adapter/store 로 호출한다.
+    """프로덕션 기본 seam — 라이브 pykrx/KIS/DART 클라이언트 + LiveBrokerDataAdapter +
+    store 페이사드로 바인딩된 00 §3 ``orchestrate_run`` 을 호출한다.
 
-    adapter/store 프로덕션 와이어링은 데이터/스토어 레이어 소유이며 본 서브시스템 범위 밖이다.
-    그 전까지 운영 실행은 라이브 콜라보레이터로 바인딩된 ``orchestrate_run`` 을
-    ``run_pipeline=`` 인자로 주입해야 한다(fail-closed).
+    무거운/네트워크 의존은 ``live_binding`` 내부에서 지연 임포트한다(테스트는 run_pipeline 주입).
+    크리덴셜 미설정 시 fail-closed 로 명시적 실패한다.
     """
-    raise NotImplementedError(
-        "daily_run 운영 실행에는 라이브 adapter/store 로 바인딩된 orchestrate_run(00 §3)을 "
-        "run_pipeline= 인자로 주입해야 한다(데이터/스토어 레이어 소유)."
-    )
+    from app.scheduler.live_binding import build_live_run_pipeline
+
+    return build_live_run_pipeline()(run_date, snapshot_at)
 
 
 def _upsert_run(db, run_date, *, status, published, coverage, session_type, reason, started):
@@ -68,7 +67,9 @@ def _persist_recs(db, run_date, result):
             buy_price_final=None, s_shin=r.s_shin, s_geo=r.s_geo, rvol_confirm=r.rvol_confirm,
             supply_tilt=r.supply_tilt, regime_mult=r.regime_mult, veto=r.veto, core=r.core,
             final=r.final, grade=r.grade, near_252=r.near_252, near_60=r.near_60, rvol=r.rvol,
-            target_price=r.target_price, stop_price=r.stop_price, provisional_flag=True, created_at=now,
+            target_price=r.target_price, stop_price=r.stop_price,
+            spark=r.spark, base_flag=r.base_flag,
+            provisional_flag=True, created_at=now,
         ))
 
 
