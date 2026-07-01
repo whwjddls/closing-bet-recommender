@@ -133,3 +133,52 @@ class DartClient:
         for corp_code, ticker, _name in entries:
             self._map[ticker] = corp_code
         return len(entries)
+
+
+# ── 모듈 정본 인터페이스(00 §2) — 익일 재스캔 스케줄러 기본 바인딩 ──────────
+DART_LIST_URL = "https://opendart.fss.or.kr/api/list.json"
+
+
+def _default_transport(params: dict) -> dict | None:
+    import requests
+
+    resp = requests.get(DART_LIST_URL, params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _load_corp_code_map() -> dict[str, str]:
+    """운영 corp_code_map(ticker→corp_code) 을 CorpCodeMap 테이블에서 로드."""
+    from sqlalchemy import select
+
+    from app.store.db import SessionLocal
+    from app.store.models import CorpCodeMap
+
+    with SessionLocal() as db:
+        rows = db.scalars(select(CorpCodeMap)).all()
+        return {r.ticker: r.corp_code for r in rows if r.ticker}
+
+
+def _api_key_from_env() -> str:
+    import os
+
+    value = os.environ.get("DART_API_KEY")
+    if not value:
+        raise RuntimeError(
+            "운영 DART 크리덴셜 미설정: 환경변수 DART_API_KEY 필요(fail-closed).")
+    return value
+
+
+def build_default_client() -> DartClient:
+    """운영 기본 DartClient — env api_key + DB corp_code_map + 실 transport 조립."""
+    return DartClient(_default_transport, _load_corp_code_map(),
+                      api_key=_api_key_from_env())
+
+
+def overnight_scan(ticker: str, since: dt.datetime, until: dt.datetime,
+                   client: DartClient | None = None) -> bool:
+    """모듈 정본 래퍼(익일 재스캔 스케줄러 기본 바인딩, 00 §2).
+
+    ``scoring_job`` 이 ``from app.data.dart_client import overnight_scan`` 으로 지연
+    바인딩한다. 미주입 시 env/DB 기본 클라이언트로 위임."""
+    return (client or build_default_client()).overnight_scan(ticker, since, until)

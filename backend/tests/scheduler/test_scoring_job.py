@@ -66,6 +66,15 @@ def test_scoring_no_lookahead_uses_t_for_close_and_t_plus_1_for_vwap(session_fac
     assert close_args[0] < vwap_args[0]          # 룩어헤드 없음
 
 
+def test_scoring_binds_real_module_collaborators_without_import_error(session_factory):
+    # 실제 기본 바인딩(NO 주입/NO override): fetch_confirmed_close/fetch_morning_vwap/
+    # overnight_scan 을 실 모듈 함수로 지연 바인딩한다. 추천 0건 거래일이라 네트워크
+    # 호출 없이 ImportError 없이 0건 채점되어야 한다(모듈 정본 함수 미존재 회귀 방지).
+    scored = scoring_job.run_scoring(
+        date(2026, 6, 30), calendar=_cal(), session_factory=session_factory)
+    assert scored == 0
+
+
 def test_scoring_is_idempotent(session_factory):
     with session_factory() as db:
         _rec(db, 1, "AAA"); db.commit()

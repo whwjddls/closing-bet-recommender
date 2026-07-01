@@ -165,3 +165,63 @@ class KisClient:
         if den == 0:
             return None                                   # 거래 결측 → None
         return num / den
+
+
+# ── 모듈 정본 인터페이스(00 §2) — 익일 채점 스케줄러 기본 바인딩 ──────────
+KIS_DEFAULT_BASE_URL = "https://openapi.koreainvestment.com:9443"
+
+
+class _RealClock:
+    """운영 기본 시계 — KIS 레이트버짓/토큰 만료(monotonic)."""
+
+    def now(self) -> float:
+        import time
+
+        return time.monotonic()
+
+    def sleep(self, seconds: float) -> None:
+        import time
+
+        time.sleep(seconds)
+
+
+def _default_transport(method: str, url: str, *, headers=None,
+                       json=None, params=None) -> dict:
+    import requests
+
+    resp = requests.request(method, url, headers=headers, json=json,
+                            params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _config_from_env() -> KisConfig:
+    import os
+
+    def _require(name: str) -> str:
+        value = os.environ.get(name)
+        if not value:
+            raise RuntimeError(
+                f"운영 KIS 크리덴셜 미설정: 환경변수 {name} 필요(fail-closed).")
+        return value
+
+    return KisConfig(
+        app_key=_require("KIS_APP_KEY"),
+        app_secret=_require("KIS_APP_SECRET"),
+        base_url=os.environ.get("KIS_BASE_URL", KIS_DEFAULT_BASE_URL),
+        account=_require("KIS_ACCOUNT"),
+    )
+
+
+def build_default_client() -> KisClient:
+    """운영 기본 KisClient — env 크리덴셜 + 실 transport/clock 조립(fail-closed)."""
+    return KisClient(_default_transport, _RealClock(), _config_from_env())
+
+
+def fetch_morning_vwap(ticker: str, d: date,
+                       client: KisClient | None = None) -> float | None:
+    """모듈 정본 래퍼(익일 채점 스케줄러 기본 바인딩, 00 §2).
+
+    ``scoring_job`` 이 ``from app.data.kis_client import fetch_morning_vwap`` 로 지연
+    바인딩한다(pykrx 모듈 정본 함수와 동일 패턴). 미주입 시 env 기본 클라이언트로 위임."""
+    return (client or build_default_client()).fetch_morning_vwap(ticker, d)
