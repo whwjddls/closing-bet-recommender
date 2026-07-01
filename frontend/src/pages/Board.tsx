@@ -13,6 +13,7 @@ import RegimeGauge from '../components/RegimeGauge';
 import Scanner from '../components/Scanner';
 import HealthBadge from '../components/HealthBadge';
 import IndexStrip from '../components/IndexStrip';
+import SectorHeatmap from '../components/SectorHeatmap';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
 
 function todayKst(): string {
@@ -104,6 +105,10 @@ export default function Board() {
           반-리스크 레짐(0.5x): 일부 시장이 약화/눌림 상태입니다.
         </p>
       )}
+
+      <div className="board-top">
+        <SectorHeatmap />
+      </div>
 
       {board.recommendations.length === 0 ? (
         isRiskOff ? (

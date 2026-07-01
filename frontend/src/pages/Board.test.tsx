@@ -76,6 +76,19 @@ function setup(recRes: RecommendationsResponse) {
   vi.spyOn(api, 'fetchRecommendations').mockResolvedValue(recRes);
   vi.spyOn(api, 'fetchUniverse').mockResolvedValue(universe);
   vi.spyOn(api, 'fetchHealth').mockResolvedValue(health);
+  vi.spyOn(api, 'fetchMarket').mockResolvedValue({
+    breadth: {
+      advancers: 520,
+      decliners: 310,
+      unchanged: 40,
+      new_highs: 12,
+      limit_ups: 3,
+    },
+    sectors: [
+      { name: '반도체', change_pct: 2.1 },
+      { name: '2차전지', change_pct: -1.4 },
+    ],
+  });
 }
 
 const wrap = () =>
