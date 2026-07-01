@@ -8,6 +8,8 @@ export interface Badge {
 // Recommendation 신호 필드 → 표시용 배지 칩(key는 CSS/식별, label은 표기).
 export function deriveBadges(rec: Recommendation): Badge[] {
   const badges: Badge[] = [];
+  // 리스크(희석 veto)를 최우선 노출 — veto<1 이면 게이트가 감점/차단(정상=1).
+  if (rec.veto < 1) badges.push({ key: 'veto', label: '⚠희석' });
   // 콜드스타트에서 near_252/rvol 은 null 일 수 있다 — null 은 배지 미부여(?? 0).
   if ((rec.near_252 ?? 0) >= 0.99) badges.push({ key: 'shin', label: '신고가' });
   if ((rec.rvol ?? 0) >= 2) badges.push({ key: 'rvol', label: 'RVOL' });

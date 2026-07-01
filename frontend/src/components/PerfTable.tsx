@@ -1,5 +1,5 @@
 import type { PickResult } from '../api/client';
-import { formatPrice, formatPercent } from '../lib/format';
+import { formatPrice, formatPercent, directionClass } from '../lib/format';
 
 const OUTCOME_LABEL: Record<PickResult['outcome'], string> = {
   SUCCESS: '✅성공',
@@ -40,7 +40,12 @@ export default function PerfTable({ rows }: { rows: PickResult[] }) {
             <td data-testid="perf-vwap">
               {r.vwap_0900_1000 === null ? '(잠김)' : formatPrice(r.vwap_0900_1000)}
             </td>
-            <td data-testid="perf-return">{formatPercent(r.morning_return)}</td>
+            <td
+              data-testid="perf-return"
+              className={`num dir-${directionClass(r.morning_return)}`}
+            >
+              {formatPercent(r.morning_return)}
+            </td>
             <td>{OUTCOME_LABEL[r.outcome]}</td>
             <td>
               {r.dart_overnight_flag && (
