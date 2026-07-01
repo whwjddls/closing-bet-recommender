@@ -37,9 +37,9 @@ export interface Recommendation {
   stop_price: number;
   score: number;
   grade: Grade;
-  near_252: number;
-  near_60: number;
-  rvol: number;
+  near_252: number | null; // 콜드스타트(<252거래일 이력)면 null
+  near_60: number | null; // 콜드스타트(60일 고가 미확보)면 null
+  rvol: number | null; // 콜드스타트(<20세션 MODELED 분모)면 null
   s_shin: number;
   rvol_confirm: number;
   supply_tilt: number;

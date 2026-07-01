@@ -49,4 +49,12 @@ describe('deriveBadges', () => {
     const keys = deriveBadges({ ...base, base_flag: true }).map((b) => b.key);
     expect(keys).toContain('base');
   });
+  it('콜드스타트: near_252/rvol 이 null 이면 예외 없이 shin/rvol 배지를 생략', () => {
+    const keys = deriveBadges({ ...base, near_252: null, rvol: null }).map(
+      (b) => b.key,
+    );
+    expect(keys).not.toContain('shin');
+    expect(keys).not.toContain('rvol');
+    expect(keys).toContain('supply_up'); // 다른 배지는 정상 산출
+  });
 });

@@ -72,6 +72,21 @@ def test_recommendations_empty_board_keeps_data_available(client, db_session):
     assert body["regimes"]["KOSPI"]["regime_mult"] == 0.0
 
 
+def test_recommendations_cold_start_null_signals_serialize_200(client, db_session):
+    """콜드스타트: rvol(<20세션 MODELED 분모 미축적)·near_252(<252거래일 이력)·near_60 이
+    None 이어도 응답이 500(ValidationError) 없이 200 으로 직렬화되어야 한다(정당한 초기 상태)."""
+    db_session.add(_published_run())
+    db_session.add(_rec(rank=1, rvol=None, near_252=None, near_60=None))
+    db_session.add(_regime())
+    db_session.commit()
+    resp = client.get("/recommendations/2026-06-30")
+    assert resp.status_code == 200
+    row = resp.json()["recommendations"][0]
+    assert row["rvol"] is None
+    assert row["near_252"] is None
+    assert row["near_60"] is None
+
+
 def test_recommendations_unpublished_run_has_no_rows(client, db_session):
     db_session.add(Run(run_date=date(2026, 6, 30), started_at=datetime.now(), finished_at=datetime.now(),
                        status="UNPUBLISHED", kis_coverage_pct=61.0, board_published=False,

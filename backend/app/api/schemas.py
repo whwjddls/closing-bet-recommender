@@ -36,9 +36,9 @@ class RecommendationRow(BaseModel):
     stop_price: float
     score: float                        # = final
     grade: str                          # S/A/B/C (core 기준)
-    near_252: float
-    near_60: float
-    rvol: float
+    near_252: float | None = None       # <252거래일 이력이면 None (콜드스타트)
+    near_60: float | None = None        # 60일 고가 미확보 시 None (콜드스타트)
+    rvol: float | None = None           # <20세션 MODELED 분모 미축적이면 None (콜드스타트)
     s_shin: float
     rvol_confirm: float
     supply_tilt: float
