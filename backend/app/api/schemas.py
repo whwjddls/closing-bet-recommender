@@ -140,6 +140,24 @@ class RecommendationsResponse(BaseModel):
     recommendations: list[RecommendationRow] = []
 
 
+class Breadth(BaseModel):               # 시장 폭(등락 집계) — /market 위젯
+    advancers: int
+    decliners: int
+    unchanged: int
+    new_highs: int
+    limit_ups: int
+
+
+class SectorChange(BaseModel):          # 업종별 등락률 — /market 위젯
+    name: str
+    change_pct: float
+
+
+class MarketResponse(BaseModel):
+    breadth: Breadth
+    sectors: list[SectorChange] = []
+
+
 class UniverseRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     ticker: str

@@ -13,6 +13,7 @@ COL_LOW = "저가"
 COL_CLOSE = "종가"
 COL_VOLUME = "거래량"
 COL_VALUE = "거래대금"
+COL_CHANGE_PCT = "등락률"
 NET_VALUE_COL = "순매수거래대금"
 # 아키텍처 §1/§3.2-D: 시장별 1회로 외인+기관 결합 value 조회.
 # 정확한 investor 인자 문자열은 KIS/pykrx 스파이크 항목(설계 §10.3) — 여기선 상수화.
@@ -302,3 +303,76 @@ def health_check(pykrx_module: Any | None = None, *,
     if not supply:
         return HealthResult(False, latest, rows, "D-1 외인/기관 수급 결손")
     return HealthResult(True, latest, rows, "ok")
+
+
+# ── /market 위젯: 시장 폭(breadth) + 업종 등락(sectors) ──────────────────
+LIMIT_UP_PCT = 29.0             # 상한가 근접(+30% 근처) 임계
+SECTOR_LOOKBACK_DAYS = 10       # 업종지수 종가-종가 등락 산출용 짧은 룩백
+# 주요 KOSPI 업종지수(코드→명). pykrx get_index_ohlcv 로 종가-종가 등락 산출.
+MARKET_SECTOR_INDICES: dict[str, str] = {
+    "1005": "음식료품", "1008": "화학", "1009": "의약품", "1011": "철강금속",
+    "1012": "기계", "1013": "전기전자", "1015": "운수장비", "1016": "유통업",
+    "1018": "건설업", "1020": "통신업", "1021": "금융업", "1026": "서비스업",
+}
+_EMPTY_BREADTH: dict[str, int] = {
+    "advancers": 0, "decliners": 0, "unchanged": 0, "new_highs": 0, "limit_ups": 0,
+}
+
+
+def latest_trading_day(pykrx_module: Any | None = None) -> dt.date:
+    """pykrx 기준 최근 거래일. get_nearest_business_day_in_a_week() → date."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    day = _parse_day(px.get_nearest_business_day_in_a_week())
+    return day or dt.date.today()
+
+
+def market_breadth(asof: dt.date, pykrx_module: Any | None = None) -> dict:
+    """시장 폭: 당일 스냅샷 등락률 부호로 상승/하락/보합 집계, +30% 근접 상한가 수,
+    당일 고가에 종가 도달(신고가 근접) 수. 스냅샷 없으면 0 집계(200 유지)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    df = px.get_market_ohlcv_by_ticker(_yyyymmdd(asof), "ALL")
+    if df is None or len(df) == 0:
+        return dict(_EMPTY_BREADTH)
+    chg = df[COL_CHANGE_PCT].astype(float)
+    close = df[COL_CLOSE].astype(float)
+    high = df[COL_HIGH].astype(float)
+    return {
+        "advancers": int((chg > 0).sum()),
+        "decliners": int((chg < 0).sum()),
+        "unchanged": int((chg == 0).sum()),
+        # 전 종목 252거래일 조회는 요청당 수천 콜이라 비현실적 → 당일 고가 도달을 신고가 근사로 집계
+        "new_highs": int((close >= high).sum()),
+        "limit_ups": int((chg >= LIMIT_UP_PCT).sum()),
+    }
+
+
+def sector_changes(asof: dt.date, pykrx_module: Any | None = None) -> list[dict]:
+    """업종별 등락: 주요 업종지수 종가-종가 등락률(%)을 내림차순 정렬해 반환.
+    지수 조회 실패/행 부족 종목은 건너뛴다(방어적). 결과 없으면 빈 리스트."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    to_s = _yyyymmdd(asof)
+    frm_s = _yyyymmdd(asof - dt.timedelta(days=SECTOR_LOOKBACK_DAYS))
+    out: list[dict] = []
+    for code, name in MARKET_SECTOR_INDICES.items():
+        try:
+            df = px.get_index_ohlcv(frm_s, to_s, code)
+        except Exception:                                   # noqa: BLE001  (외부 IO)
+            continue
+        if df is None or len(df) < 2:
+            continue
+        closes = df[COL_CLOSE].astype(float).to_numpy()
+        change_pct = (closes[-1] / closes[-2] - 1.0) * 100.0
+        out.append({"name": name, "change_pct": float(change_pct)})
+    out.sort(key=lambda s: s["change_pct"], reverse=True)
+    return out
+
+
+def market_overview(pykrx_module: Any | None = None) -> dict:
+    """/market 데이터: 최근 거래일 기준 breadth + sectors. pykrx 모듈 주입."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    asof = latest_trading_day(px)
+    return {
+        "asof": asof,
+        "breadth": market_breadth(asof, px),
+        "sectors": sector_changes(asof, px),
+    }

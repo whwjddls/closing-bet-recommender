@@ -17,6 +17,10 @@ from app.data.pykrx_client import (
     fetch_confirmed_close,
     health_check,
     overnight_gap_stats,
+    latest_trading_day,
+    market_breadth,
+    sector_changes,
+    market_overview,
 )
 
 
@@ -311,3 +315,86 @@ def test_health_check_fail_closed_on_insufficient_rows():
     res = health_check(px, today=dt.date(2026, 6, 30), min_rows=120)
     assert res.ok is False
     assert "rows" in res.detail
+
+
+# ── /market: breadth(시장 폭) + sectors(업종 등락) ─────────
+class _FakeMarketPx:
+    """market_* 전용 주입 fake — 스냅샷/업종지수/최근거래일 제공."""
+
+    def __init__(self, snapshot=None, sector_dfs=None, nearest="20260630"):
+        self.snapshot = snapshot
+        self.sector_dfs = sector_dfs or {}
+        self.nearest = nearest
+
+    def get_nearest_business_day_in_a_week(self, *args, **kw):
+        return self.nearest
+
+    def get_market_ohlcv_by_ticker(self, date, market="ALL"):
+        return self.snapshot
+
+    def get_index_ohlcv(self, fromdate, todate, index_code):
+        return self.sector_dfs.get(index_code)
+
+
+def _snapshot():
+    # 등락률 부호로 adv/dec/unchanged; +29↑ 상한가; 종가>=고가 신고가 근사
+    return pd.DataFrame(
+        {
+            "고가": [100.0, 100.0, 100.0, 100.0, 100.0],
+            "종가": [100.0, 90.0, 100.0, 80.0, 70.0],
+            "등락률": [1.5, -0.5, 0.0, 30.0, 29.5],
+        },
+        index=["000660", "005930", "035720", "091990", "247540"],
+    )
+
+
+def _sector_df(prev, last):
+    return pd.DataFrame({"종가": [float(prev), float(last)]}, index=["20260629", "20260630"])
+
+
+def test_latest_trading_day_parses_nearest_business_day():
+    px = _FakeMarketPx(nearest="20260630")
+    assert latest_trading_day(px) == dt.date(2026, 6, 30)
+
+
+def test_market_breadth_counts_by_sign_and_limits():
+    px = _FakeMarketPx(snapshot=_snapshot())
+    b = market_breadth(dt.date(2026, 6, 30), px)
+    assert b["advancers"] == 3          # 1.5, 30.0, 29.5
+    assert b["decliners"] == 1          # -0.5
+    assert b["unchanged"] == 1          # 0.0
+    assert b["limit_ups"] == 2          # >=29.0 → 30.0, 29.5
+    assert b["new_highs"] == 2          # 종가>=고가 → 100/100, 100/100
+
+
+def test_market_breadth_empty_snapshot_returns_zeros():
+    px = _FakeMarketPx(snapshot=None)
+    b = market_breadth(dt.date(2026, 6, 30), px)
+    assert b == {"advancers": 0, "decliners": 0, "unchanged": 0,
+                 "new_highs": 0, "limit_ups": 0}
+
+
+def test_sector_changes_sorted_desc_close_to_close():
+    px = _FakeMarketPx(sector_dfs={
+        "1013": _sector_df(100.0, 110.0),   # 전기전자 +10%
+        "1008": _sector_df(100.0, 95.0),    # 화학 -5%
+    })
+    out = sector_changes(dt.date(2026, 6, 30), px)
+    assert [s["name"] for s in out] == ["전기전자", "화학"]   # 내림차순
+    assert out[0]["change_pct"] == pytest.approx(10.0)
+    assert out[1]["change_pct"] == pytest.approx(-5.0)
+
+
+def test_sector_changes_empty_when_no_index_data():
+    px = _FakeMarketPx(sector_dfs={})
+    assert sector_changes(dt.date(2026, 6, 30), px) == []
+
+
+def test_market_overview_combines_breadth_and_sectors():
+    px = _FakeMarketPx(snapshot=_snapshot(),
+                       sector_dfs={"1013": _sector_df(100.0, 110.0)},
+                       nearest="20260630")
+    data = market_overview(px)
+    assert data["asof"] == dt.date(2026, 6, 30)
+    assert data["breadth"]["advancers"] == 3
+    assert data["sectors"][0]["name"] == "전기전자"

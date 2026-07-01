@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import backtest, health, performance, recommendations, stock, universe
+from app.api import backtest, health, market, performance, recommendations, stock, universe
 from app.store.db import init_db
 
 
@@ -27,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(performance.router)
     app.include_router(universe.router)
     app.include_router(backtest.router)
+    app.include_router(market.router)
     return app
 
 
