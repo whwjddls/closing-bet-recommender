@@ -1,5 +1,8 @@
 from datetime import date, datetime
 
+import pandas as pd
+
+import app.data.pykrx_client as pykrx_client
 from app.api.stock import get_chart_provider
 from app.store.models import Recommendation
 
@@ -61,3 +64,40 @@ def test_stock_specific_date_query(client, db_session):
 def test_stock_404_when_missing(client):
     # 차트 공급자 미오버라이드 — 404 가 차트 호출보다 먼저라 지연 임포트도 일어나지 않음
     assert client.get("/stock/999999").status_code == 404
+
+
+class _FakePykrxChart:
+    """차트용 주입형 가짜 pykrx 모듈 — 네트워크 없음."""
+
+    def get_market_ohlcv(self, fromdate, todate, ticker):
+        idx = pd.to_datetime(
+            ["2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30"])
+        return pd.DataFrame(
+            {
+                "시가": [100.0, 104.0, 103.0, 107.0, 109.0],
+                "고가": [105.0, 108.0, 106.0, 111.0, 120.0],
+                "저가": [99.0, 102.0, 101.0, 105.0, 108.0],
+                "종가": [104.0, 103.0, 105.0, 110.0, 115.0],
+                "거래량": [1000, 1500, 1200, 2000, 2500],
+            },
+            index=idx,
+        )
+
+
+def test_stock_uses_default_pykrx_chart_provider(client, db_session, monkeypatch):
+    # get_chart_provider 미오버라이드 → 실제 기본 provider(pykrx_client.get_stock_chart)
+    # 경로를 구동한다. 외부 pykrx 네트워크만 가짜 모듈로 대체(500·미존재 함수 회귀 방지).
+    monkeypatch.setattr(pykrx_client, "_load_pykrx", lambda: _FakePykrxChart())
+    db_session.add(_rec(date(2026, 6, 30)))
+    db_session.commit()
+
+    resp = client.get("/stock/000660")
+    assert resp.status_code == 200                     # 500 아님
+    body = resp.json()
+    assert body["high_52w"] == 120.0                   # 전체 고가 최대
+    assert body["prior_high"] == 111.0                 # 당일(120) 제외 직전고점
+    assert len(body["candles"]) == 5
+    assert body["candles"][0]["open"] == 100.0
+    assert body["candles"][-1]["close"] == 115.0
+    assert body["base_box"]["low"] == 99.0             # 최근 윈도우 저가최소
+    assert body["base_box"]["high"] == 120.0           # 최근 윈도우 고가최대

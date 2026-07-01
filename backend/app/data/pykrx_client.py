@@ -7,9 +7,11 @@ from typing import Any
 from app.data.broker_adapter import HealthCheckResult
 from app.data.mapping import Market, pykrx_index_code, pykrx_market_name
 
+COL_OPEN = "시가"
 COL_HIGH = "고가"
 COL_LOW = "저가"
 COL_CLOSE = "종가"
+COL_VOLUME = "거래량"
 COL_VALUE = "거래대금"
 NET_VALUE_COL = "순매수거래대금"
 # 아키텍처 §1/§3.2-D: 시장별 1회로 외인+기관 결합 value 조회.
@@ -184,6 +186,59 @@ def fetch_confirmed_close(ticker: str, d: dt.date,
     if df is None or len(df) == 0:
         raise ValueError(f"no confirmed close for {ticker} on {d_s}")
     return float(df[COL_CLOSE].iloc[-1])
+
+
+CHART_LOOKBACK_DAYS = 400        # ≥252 거래일 확보용 달력 룩백
+CHART_CANDLE_COUNT = 60          # 상세 차트에 노출할 최근 캔들 수
+WINDOW_52W = 252                 # 52주 신고가 윈도우(거래일)
+PRIOR_HIGH_WINDOW = 60           # 직전고점(돌파 저항) 윈도우
+BASE_BOX_WINDOW = 20             # 베이스박스(최근 정체 구간) 윈도우
+
+
+def _index_date_str(value: Any) -> str:
+    d = _parse_day(value)
+    return d.strftime("%Y-%m-%d") if d else str(value)
+
+
+def get_stock_chart(code: str, run_date: dt.date,
+                    pykrx_module: Any | None = None) -> dict:
+    """종목 상세 차트(00 §5): 최근 캔들·52주최고·직전고점·베이스박스.
+
+    룩어헤드 금지 — todate=run_date(추천 산출일의 확정 종가일)까지만 조회한다.
+    반환: ``{candles, high_52w, prior_high, base_box}``. 이력 없으면 빈 캔들·0 반환."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    todate = _yyyymmdd(run_date)
+    frm = _yyyymmdd(run_date - dt.timedelta(days=CHART_LOOKBACK_DAYS))
+    df = px.get_market_ohlcv(frm, todate, code)
+    if df is None or len(df) == 0:
+        return {"candles": [], "high_52w": 0.0, "prior_high": 0.0, "base_box": None}
+
+    highs = df[COL_HIGH].astype(float)
+    high_52w = float(highs.tail(WINDOW_52W).max())
+    prior = highs.iloc[:-1].tail(PRIOR_HIGH_WINDOW)     # 당일 제외 직전고점(돌파 저항)
+    prior_high = float(prior.max()) if len(prior) else float(highs.iloc[-1])
+
+    box_df = df.tail(BASE_BOX_WINDOW)
+    base_box = {
+        "start": _index_date_str(box_df.index[0]),
+        "end": _index_date_str(box_df.index[-1]),
+        "low": float(box_df[COL_LOW].astype(float).min()),
+        "high": float(box_df[COL_HIGH].astype(float).max()),
+    }
+
+    candles = [
+        {
+            "date": _index_date_str(idx),
+            "open": float(row[COL_OPEN]),
+            "high": float(row[COL_HIGH]),
+            "low": float(row[COL_LOW]),
+            "close": float(row[COL_CLOSE]),
+            "volume": int(float(row[COL_VOLUME])),
+        }
+        for idx, row in df.tail(CHART_CANDLE_COUNT).iterrows()
+    ]
+    return {"candles": candles, "high_52w": high_52w,
+            "prior_high": prior_high, "base_box": base_box}
 
 
 def health_check(pykrx_module: Any | None = None, *,
