@@ -29,6 +29,10 @@
 | 18 | `frontend/src/api/client.ts:66` | `session_type`/`UniverseResponse.as_of` 백엔드는 null 반환하나 타입 non-nullable | `string | null`로 + 렌더 가드 |
 | 20 | `data/broker_adapter.py:89` | LiveBrokerDataAdapter가 end-to-end로 안 이어짐(Pass1서 메서드 추가됨, 확인 필요) | orchestrate_run이 실제 소비하는지 통합 확인 |
 
-## 마무리 후
-- Pass 2·3 완료 후 **적대적 검증 워크플로 재실행**(`docs/superpowers/plans/` 스크립트 참고)해 wiring 닫힘 확인.
-- 그 뒤 `superpowers:finishing-a-development-branch`로 브랜치 정리(merge/PR).
+## ✅ 최종 상태 (전 패스 완료 + 재검증 CLEAN)
+- **Pass 1**(라이브 경로) · **Pass 2**(프로덕션 스텁 6) · **Pass 3**(nits 3) · **Pass 4**(콜드스타트 500·#9 wiring·채점 견고성·ma5_prev 4) · **Pass 5**(#1 `/performance` NA buy_price_final null 500) — 모두 완료.
+- **최종 적대적 재검증: CLEAN** — 6개 엔드포인트 널-500 전수 스윕 안전, 원 20 + Pass4 4 무회귀, 곱셈-core 필드 required 정당성 확인. **backend 247 passed / frontend 58 passed, 둘 다 exit 0**, 스텁 잔재 0.
+
+## ⚠️ 알려진 한계 (크래시 아님, 후속)
+- **`UniverseCache` 프로덕션 writer 부재** → `/universe`(후보 풀 스캐너)가 실운영에서 항상 빈 200. 스캐너 화면을 채우려면 premarket/orchestrate_run에서 정적 위생 통과 유니버스를 `UniverseCache`에 upsert하는 writer 추가 필요. 방어책으로 `UniverseRow` 9필드를 Optional로 둘 수도. (스캐너는 스펙상 MVP 보조 화면)
+- `/backtest` n==0 시 `rank_ic` 등이 `NaN`으로 직렬화될 수 있음(비엄격 JSON, 500 아님) — 필요 시 null 치환.
