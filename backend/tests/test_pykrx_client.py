@@ -20,6 +20,7 @@ from app.data.pykrx_client import (
     latest_trading_day,
     market_breadth,
     sector_changes,
+    market_investors,
     market_overview,
 )
 
@@ -390,11 +391,71 @@ def test_sector_changes_empty_when_no_index_data():
     assert sector_changes(dt.date(2026, 6, 30), px) == []
 
 
+# ── /market: investors(투자자별 수급, 억 단위) ─────────────
+class _FakeInvestorPx(_FakeMarketPx):
+    """market_investors 전용 fake — 시장별 투자자 순매수 프레임 제공."""
+
+    def __init__(self, investor_dfs=None, raises=False, **kw):
+        super().__init__(**kw)
+        self.investor_dfs = investor_dfs or {}
+        self.raises = raises
+        self.investor_calls: list[tuple] = []
+
+    def get_market_trading_value_by_investor(self, fromdate, todate, market):
+        self.investor_calls.append((fromdate, todate, market))
+        if self.raises:
+            raise ConnectionError("investor outage")
+        return self.investor_dfs.get(market)
+
+
+def _investor_df(foreign, institution, individual):
+    # pykrx 순매수 컬럼(원 단위). 인덱스=투자자 구분.
+    return pd.DataFrame(
+        {"순매수": [float(individual), float(foreign), float(institution)]},
+        index=["개인", "외국인", "기관합계"],
+    )
+
+
+def test_market_investors_sums_markets_in_eok():
+    px = _FakeInvestorPx(investor_dfs={
+        "KOSPI": _investor_df(foreign=30_000_000_000, institution=-10_000_000_000,
+                              individual=-20_000_000_000),
+        "KOSDAQ": _investor_df(foreign=10_000_000_000, institution=5_000_000_000,
+                               individual=-15_000_000_000),
+    })
+    inv = market_investors(dt.date(2026, 6, 30), px)
+    # 억 단위(÷1e8): 외인 (300+100)=400, 기관 (-100+50)=-50, 개인 (-200-150)=-350
+    assert inv["foreign_net"] == pytest.approx(400.0)
+    assert inv["institution_net"] == pytest.approx(-50.0)
+    assert inv["individual_net"] == pytest.approx(-350.0)
+    # 시장별 1회 = 총 2회
+    assert {c[2] for c in px.investor_calls} == {"KOSPI", "KOSDAQ"}
+
+
+def test_market_investors_graceful_zero_on_outage():
+    px = _FakeInvestorPx(raises=True)
+    inv = market_investors(dt.date(2026, 6, 30), px)
+    assert inv == {"foreign_net": 0.0, "institution_net": 0.0, "individual_net": 0.0}
+
+
+def test_market_investors_zero_when_no_frame():
+    px = _FakeInvestorPx(investor_dfs={})
+    inv = market_investors(dt.date(2026, 6, 30), px)
+    assert inv == {"foreign_net": 0.0, "institution_net": 0.0, "individual_net": 0.0}
+
+
 def test_market_overview_combines_breadth_and_sectors():
-    px = _FakeMarketPx(snapshot=_snapshot(),
-                       sector_dfs={"1013": _sector_df(100.0, 110.0)},
-                       nearest="20260630")
+    px = _FakeInvestorPx(snapshot=_snapshot(),
+                         sector_dfs={"1013": _sector_df(100.0, 110.0)},
+                         nearest="20260630",
+                         investor_dfs={
+                             "KOSPI": _investor_df(30_000_000_000, -10_000_000_000,
+                                                   -20_000_000_000),
+                             "KOSDAQ": _investor_df(10_000_000_000, 5_000_000_000,
+                                                    -15_000_000_000),
+                         })
     data = market_overview(px)
     assert data["asof"] == dt.date(2026, 6, 30)
     assert data["breadth"]["advancers"] == 3
     assert data["sectors"][0]["name"] == "전기전자"
+    assert data["investors"]["foreign_net"] == pytest.approx(400.0)

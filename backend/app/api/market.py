@@ -2,7 +2,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends
 
-from app.api.schemas import Breadth, MarketResponse, SectorChange
+from app.api.schemas import Breadth, Investors, MarketResponse, SectorChange
 
 router = APIRouter(tags=["market"])
 
@@ -26,4 +26,10 @@ def get_market(provider: Callable = Depends(get_market_provider)) -> MarketRespo
         limit_ups=b.get("limit_ups", 0),
     )
     sectors = [SectorChange(**s) for s in data.get("sectors", [])]
-    return MarketResponse(breadth=breadth, sectors=sectors)
+    inv = data.get("investors") or {}
+    investors = Investors(
+        foreign_net=inv.get("foreign_net", 0.0),
+        institution_net=inv.get("institution_net", 0.0),
+        individual_net=inv.get("individual_net", 0.0),
+    )
+    return MarketResponse(breadth=breadth, sectors=sectors, investors=investors)

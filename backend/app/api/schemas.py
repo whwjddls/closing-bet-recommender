@@ -153,9 +153,16 @@ class SectorChange(BaseModel):          # 업종별 등락률 — /market 위젯
     change_pct: float
 
 
+class Investors(BaseModel):             # 투자자별 수급(D-1 순매수 거래대금, 억 단위) — /market 위젯
+    foreign_net: float
+    institution_net: float
+    individual_net: float
+
+
 class MarketResponse(BaseModel):
     breadth: Breadth
     sectors: list[SectorChange] = []
+    investors: Investors
 
 
 class UniverseRow(BaseModel):

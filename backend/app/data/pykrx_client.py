@@ -367,12 +367,50 @@ def sector_changes(asof: dt.date, pykrx_module: Any | None = None) -> list[dict]
     return out
 
 
+INVESTOR_NET_COL = "순매수"             # pykrx 투자자별 거래대금 순매수 컬럼(원 단위)
+EOK = 1e8                               # 억원 환산(1억 = 1e8원)
+# 시장 전체 투자자 구분(pykrx 인덱스 라벨) → 응답 필드
+INVESTOR_LABELS: dict[str, str] = {
+    "foreign_net": "외국인",
+    "institution_net": "기관합계",
+    "individual_net": "개인",
+}
+_EMPTY_INVESTORS: dict[str, float] = {
+    "foreign_net": 0.0, "institution_net": 0.0, "individual_net": 0.0,
+}
+
+
+def _investor_net(df: Any, label: str) -> float:
+    """투자자 라벨의 순매수거래대금(원). 라벨 부재 시 0(방어적)."""
+    if df is None or label not in df.index:
+        return 0.0
+    return float(df.loc[label, INVESTOR_NET_COL])
+
+
+def market_investors(asof: dt.date, pykrx_module: Any | None = None) -> dict:
+    """시장 전체 D-1(=asof, 최근 거래일) 외인/기관/개인 순매수 거래대금(억 단위 float).
+    시장별 1회(총 2회) 조회 후 합산. 조회 실패/행 부족 시 0(200 유지, 방어적)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    to_s = _yyyymmdd(asof)
+    totals = dict(_EMPTY_INVESTORS)
+    for market in (Market.KOSPI, Market.KOSDAQ):
+        try:
+            df = px.get_market_trading_value_by_investor(
+                to_s, to_s, pykrx_market_name(market))
+        except Exception:                                   # noqa: BLE001  (외부 IO)
+            continue
+        for field_name, label in INVESTOR_LABELS.items():
+            totals[field_name] += _investor_net(df, label)
+    return {k: v / EOK for k, v in totals.items()}          # 원 → 억
+
+
 def market_overview(pykrx_module: Any | None = None) -> dict:
-    """/market 데이터: 최근 거래일 기준 breadth + sectors. pykrx 모듈 주입."""
+    """/market 데이터: 최근 거래일 기준 breadth + sectors + investors. pykrx 모듈 주입."""
     px = pykrx_module if pykrx_module is not None else _load_pykrx()
     asof = latest_trading_day(px)
     return {
         "asof": asof,
         "breadth": market_breadth(asof, px),
         "sectors": sector_changes(asof, px),
+        "investors": market_investors(asof, px),
     }

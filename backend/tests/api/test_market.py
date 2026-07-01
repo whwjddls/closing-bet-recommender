@@ -14,6 +14,8 @@ def _fake_overview():
             {"name": "전기전자", "change_pct": 1.8},
             {"name": "화학", "change_pct": -0.9},
         ],
+        "investors": {"foreign_net": 400.0, "institution_net": -50.0,
+                      "individual_net": -350.0},
     }
 
 
@@ -28,6 +30,14 @@ def test_market_serializes_breadth_and_sectors(client):
     assert b["limit_ups"] == 2
     assert [s["name"] for s in body["sectors"]] == ["전기전자", "화학"]
     assert body["sectors"][0]["change_pct"] == 1.8
+
+
+def test_market_serializes_investors(client):
+    client.app.dependency_overrides[get_market_provider] = lambda: _fake_overview
+    inv = client.get("/market").json()["investors"]
+    assert inv["foreign_net"] == 400.0
+    assert inv["institution_net"] == -50.0
+    assert inv["individual_net"] == -350.0
 
 
 def test_market_empty_returns_200_not_500(client):
