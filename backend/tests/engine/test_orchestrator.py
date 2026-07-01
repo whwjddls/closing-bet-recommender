@@ -90,3 +90,76 @@ def test_orchestrate_pool_regime_coverage():
 def test_modeled_rvol_threshold():
     assert compute_modeled_avg([1.0e8] * 19, min_sessions=20) is None     # <20세션 → 중립
     assert compute_modeled_avg([1.0e8] * 20, min_sessions=20) == 1.0e8    # ≥20세션 → 평균
+
+
+class PrefetchStore(DictStore):
+    """장전 FINAL 캐시(load_prefetch)를 노출하는 store 페이크 (00 §2 재활용)."""
+
+    def load_prefetch(self, run_date):
+        return {"005930": SimpleNamespace(
+            h_ref_252=111.0, h_ref_60=99.0, atr20=4.5,
+            avg_value_20d=7.0e8, d1_supply_value=1.3e7)}
+
+
+def test_orchestrate_loads_persisted_final_prefetch_into_candidates():
+    """orchestrate_run 은 장전 영속화된 FINAL 번들(H_ref_252/H_ref_60/ATR20/
+    avg_value_20d/D-1 순매수)을 로드해 StaticCandidate 필드를 채워야 한다(placeholder 금지)."""
+    captured = {}
+
+    def capturing_pipeline(candidates, fetch_live, regime_by_market, modeled_avg,
+                           veto_by_ticker, max_emit):
+        captured["candidates"] = list(candidates)
+        return fake_run_pipeline(candidates, fetch_live, regime_by_market, modeled_avg,
+                                 veto_by_ticker, max_emit)
+
+    orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                    adapter=FakeAdapter(), store=PrefetchStore(),
+                    run_pipeline_fn=capturing_pipeline)
+
+    by_ticker = {c.ticker: c for c in captured["candidates"]}
+    overlaid = by_ticker["005930"]
+    assert overlaid.high_252 == 111.0          # h_ref_252 → high_252
+    assert overlaid.high_60 == 99.0            # h_ref_60 → high_60
+    assert overlaid.atr20 == 4.5               # ATR20
+    assert overlaid.avg_value_20d == 7.0e8     # 20일 평균거래대금
+    assert overlaid.d1_supply_value == 1.3e7   # D-1 순매수
+    # prefetch 에 없는 종목(000660)은 원본 후보값 유지
+    assert by_ticker["000660"].high_252 == 98.0
+
+
+def test_orchestrate_uses_real_orchestrator_store_prefetch_end_to_end():
+    """운영 seam: 실 OrchestratorStore.load_prefetch(final_cache)로 DB 영속화된 FINAL
+    번들이 orchestrate_run 후보에 반영되어야 한다(load_prefetch 미소비 회귀 방지)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.store.models import Base, FinalPrefetch
+    from app.store.orchestrator_store import OrchestratorStore
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    run_date = date(2026, 6, 30)
+    with Session() as db:
+        db.add(FinalPrefetch(run_date=run_date, ticker="005930", h_ref_252=111.0,
+                             h_ref_60=99.0, atr20=4.5, avg_value_20d=7.0e8,
+                             d1_supply_value=1.3e7))
+        db.commit()
+
+    captured = {}
+
+    def capturing_pipeline(candidates, fetch_live, regime_by_market, modeled_avg,
+                           veto_by_ticker, max_emit):
+        captured["candidates"] = list(candidates)
+        return fake_run_pipeline(candidates, fetch_live, regime_by_market, modeled_avg,
+                                 veto_by_ticker, max_emit)
+
+    with Session() as db:
+        orchestrate_run(run_date, datetime(2026, 6, 30, 15, 20), adapter=FakeAdapter(),
+                        store=OrchestratorStore(db), run_pipeline_fn=capturing_pipeline)
+
+    overlaid = {c.ticker: c for c in captured["candidates"]}["005930"]
+    assert overlaid.high_252 == 111.0
+    assert overlaid.avg_value_20d == 7.0e8
+    assert overlaid.d1_supply_value == 1.3e7

@@ -46,3 +46,12 @@ class OrchestratorStore:
         row.cond_a = info.cond_a
         row.cond_b = info.cond_b
         row.regime_mult = info.regime_mult
+
+    def load_prefetch(self, run_date: date):
+        """장전 영속화된 FINAL 캐시(00 §2)를 ticker→FinalPrefetch 로 로드.
+
+        orchestrate_run 이 StaticCandidate 의 FINAL 지표(H_ref/ATR20/avg_value_20d/
+        D-1 순매수)를 채우는 데 사용한다."""
+        from app.store import final_cache
+
+        return final_cache.load_prefetch(self._db, run_date)

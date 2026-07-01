@@ -10,7 +10,7 @@ adapter/store/run_pipeline_fn 은 모두 주입 경계 뒤에 있어 테스트�
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 
 from app.engine.pipeline import run_pipeline as _run_pipeline
@@ -73,11 +73,36 @@ def compute_modeled_avg(trailing_values, min_sessions: int = 20):
     return sum(trailing_values) / len(trailing_values)
 
 
+def _apply_prefetch(candidate, row):
+    """장전 FINAL 캐시 행(FinalPrefetch)의 FINAL 지표를 StaticCandidate 에 오버레이.
+
+    prefetch 값이 None 이면 후보의 기존값을 유지한다(장전 계산이 성립한 필드만 대체)."""
+    return replace(
+        candidate,
+        high_252=row.h_ref_252 if row.h_ref_252 is not None else candidate.high_252,
+        high_60=row.h_ref_60 if row.h_ref_60 is not None else candidate.high_60,
+        atr20=row.atr20 if row.atr20 is not None else candidate.atr20,
+        avg_value_20d=(row.avg_value_20d if row.avg_value_20d is not None
+                       else candidate.avg_value_20d),
+        d1_supply_value=(row.d1_supply_value if row.d1_supply_value is not None
+                         else candidate.d1_supply_value),
+    )
+
+
 def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
                     run_pipeline_fn=_run_pipeline, rvol_min_sessions: int = 20,
                     session_type: str = "정규", max_emit: int = 30) -> RunResult:
     # ① 후보풀 = 실 StaticCandidate 리스트 (어댑터가 prefetch/랭킹으로 구성)
     candidates = list(adapter.build_candidates(run_date, snapshot_at))
+    # ①' 장전 영속화된 FINAL 번들(H_ref/ATR20/avg_value_20d/D-1 순매수)을 로드해 후보에 오버레이
+    load_prefetch = getattr(store, "load_prefetch", None)
+    if load_prefetch is not None:
+        prefetch = load_prefetch(run_date)
+        if prefetch:
+            candidates = [
+                _apply_prefetch(c, prefetch[c.ticker]) if c.ticker in prefetch else c
+                for c in candidates
+            ]
     tickers = [c.ticker for c in candidates]
 
     # ② 라이브 시세 (벌크, 부분 실패 허용) → Mapping[str, LiveQuote]
