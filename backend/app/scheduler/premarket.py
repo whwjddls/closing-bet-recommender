@@ -70,8 +70,16 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
         notify("종가베팅 프리오픈 실패(fail-closed)", report.detail)
         return "BLOCKED"
 
-    prefetch_final(run_date)
-    logger.info("premarket prefetch done for %s", run_date)
+    bundle = prefetch_final(run_date)
+    if bundle is not None:            # 주입형 no-op fake 는 None → 저장 스킵(실 번들만 영속화)
+        from app.store import final_cache
+
+        with session_factory() as db:
+            saved = final_cache.persist_prefetch_bundle(db, bundle)
+            db.commit()
+        logger.info("premarket prefetch persisted %d tickers for %s", saved, run_date)
+    else:
+        logger.info("premarket prefetch done for %s", run_date)
     return "OK"
 
 

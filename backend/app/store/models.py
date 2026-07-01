@@ -128,6 +128,21 @@ class CorpCodeMap(Base):
     updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime)
 
 
+class FinalPrefetch(Base):
+    """장전 FINAL prefetch 캐시(00 §2) — premarket 이 산출한 종목별 FINAL 지표.
+    orchestrate_run 이 로드해 StaticCandidate(정적위생·신고가근접·수급) 구성에 사용."""
+
+    __tablename__ = "final_prefetch"
+
+    run_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String, primary_key=True)
+    h_ref_252: Mapped[float | None] = mapped_column(Float)
+    h_ref_60: Mapped[float | None] = mapped_column(Float)
+    atr20: Mapped[float | None] = mapped_column(Float)
+    avg_value_20d: Mapped[float | None] = mapped_column(Float)
+    d1_supply_value: Mapped[float | None] = mapped_column(Float)
+
+
 class Run(Base):
     __tablename__ = "runs"
 

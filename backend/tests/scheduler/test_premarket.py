@@ -79,6 +79,39 @@ def test_premarket_prefetches_when_health_ok(session_factory):
     assert prefetch_calls == [date(2026, 6, 30)]
 
 
+def test_premarket_persists_final_bundle_when_health_ok(session_factory):
+    # 00 §2: 헬스체크 통과 시 prefetch_final 이 산출한 FINAL 번들
+    # (H_ref_252/H_ref_60/ATR20/avg_value_20d/D-1 수급)을 FINAL 캐시에 영속화하고
+    # orchestrate_run 이 로드할 수 있어야 한다(번들 폐기 회귀 방지).
+    from app.data.pykrx_client import PrefetchBundle
+    from app.store import final_cache
+
+    bundle = PrefetchBundle(
+        run_date=date(2026, 6, 30), universe=["000660", "035720"],
+        h_ref_252={"000660": 24000.0}, h_ref_60={"000660": 23500.0},
+        atr20={"000660": 300.0}, avg_value_20d={"000660": 5e10},
+        net_purchases={"000660": 8e9}, index_ma5={"KOSPI": 2700.0})
+    report = SimpleNamespace(ok=True, latest_trading_day=date(2026, 6, 29),
+                             rows=2700, detail="ok")
+
+    rc = premarket.run_premarket(
+        date(2026, 6, 30), calendar=_cal(),
+        health_check=lambda: report,
+        prefetch_final=lambda d: bundle,
+        session_factory=session_factory, notify=lambda t, m: None)
+    assert rc == "OK"
+
+    with session_factory() as db:
+        cached = final_cache.load_prefetch(db, date(2026, 6, 30))
+    assert set(cached) == {"000660"}                  # 정적위생 계산 성립 종목만
+    row = cached["000660"]
+    assert row.h_ref_252 == 24000.0
+    assert row.h_ref_60 == 23500.0
+    assert row.atr20 == 300.0
+    assert row.avg_value_20d == 5e10
+    assert row.d1_supply_value == 8e9                 # D-1 수급 결합
+
+
 def test_premarket_skips_non_trading_day(session_factory):
     rc = premarket.run_premarket(
         date(2026, 7, 1), calendar=_cal(),
