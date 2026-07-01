@@ -10,8 +10,8 @@ veto/modeled 미지정은 fail-closed/중립 규칙을 따른다.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import Callable, List, Mapping, Optional, Sequence
+from dataclasses import dataclass, field, replace
+from typing import Callable, List, Mapping, Optional, Sequence, Tuple
 
 from app.engine.signals import hygiene
 from app.engine.signals.breakout import s_shin
@@ -24,6 +24,8 @@ from app.engine.pricing import freeze_prices
 MIN_COVERAGE = 0.70
 MAX_EMIT = 30
 VETO_FAIL_CLOSED = 0
+# base_flag(베이스 배지) 조-baseline 휴리스틱: 60일 고가 근접(=베이스 상단)이면 True.
+BASE_NEAR_60_FLOOR = 0.97
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,7 @@ class StaticCandidate:
     atr20: float
     d1_supply_value: float
     d1_value: float             # tie-break
+    recent_closes: Tuple[float, ...] = ()   # 스파크라인용 최근 확정 종가(정규화 전)
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,8 @@ class EngineRow:
     target_price: float
     stop_price: float
     d1_value: float
+    spark: List[float] = field(default_factory=list)   # 정규화된 최근 종가 series
+    base_flag: bool = False                            # 베이스(조) 돌파 배지
     provisional_flag: bool = True
 
 
@@ -87,6 +92,17 @@ class PipelineResult:
     reason: str                 # OK | RISK_OFF | EMPTY_UNIVERSE | LOW_COVERAGE | NO_DATA
     rows: List[EngineRow]
     coverage_pct: float
+
+
+def _normalized_spark(recent_closes: Sequence[float]) -> List[float]:
+    """최근 확정 종가를 피크(최댓값) 대비 0~1 로 정규화한 스파크라인 series."""
+    closes = [float(c) for c in recent_closes]
+    if not closes:
+        return []
+    peak = max(closes)
+    if peak <= 0:
+        return []
+    return [round(c / peak, 4) for c in closes]
 
 
 def run_pipeline(
@@ -138,6 +154,7 @@ def run_pipeline(
         if final <= 0:
             continue   # emit 규칙: final > 0
         pricing = freeze_prices(q.p_now, c.atr20, c.prev_high)
+        base_flag = b.near_60 >= BASE_NEAR_60_FLOOR          # 조-baseline 휴리스틱
         rows.append(EngineRow(
             rank=0, ticker=c.ticker, name=c.name, market=c.market,
             price_provisional=q.p_now,
@@ -147,6 +164,7 @@ def run_pipeline(
             grade=grade_of(core), near_252=b.near_252, near_60=b.near_60, rvol=rvol,
             target_price=pricing.target_price, stop_price=pricing.stop_price,
             d1_value=c.d1_value,
+            spark=_normalized_spark(c.recent_closes), base_flag=base_flag,
         ))
 
     if not rows:
