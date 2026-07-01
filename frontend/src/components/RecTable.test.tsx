@@ -20,7 +20,6 @@ function rec(p: Partial<Recommendation>): Recommendation {
     stop_price: 970,
     score: 0.9,
     grade: 'S',
-    badges: [],
     near_252: 1.0,
     near_60: 1.0,
     rvol: 2.5,

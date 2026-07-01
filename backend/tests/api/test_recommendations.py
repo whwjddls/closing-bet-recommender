@@ -44,7 +44,10 @@ def test_recommendations_returns_ranked_rows_and_regime_dict(client, db_session)
 
 
 def test_recommendations_response_schema_has_spark_and_base_flag(client, db_session):
-    """00 §5 정본: RecommendationRow 에 spark/base_flag/score/exit_label/badges 존재."""
+    """00 §5 정본: RecommendationRow 에 spark/base_flag/score/exit_label 존재.
+
+    배지는 프런트 deriveBadges 단일 산출 — 백엔드는 badges 를 직렬화하지 않는다.
+    """
     db_session.add(_published_run())
     db_session.add(_rec(rank=1))
     db_session.add(_regime())
@@ -54,7 +57,7 @@ def test_recommendations_response_schema_has_spark_and_base_flag(client, db_sess
     assert "base_flag" in row and row["base_flag"] is True
     assert row["score"] == 1.12                                    # = final
     assert row["exit_label"].startswith("익일 오전 VWAP")
-    assert "badges" in row and isinstance(row["badges"], list)
+    assert "badges" not in row                                     # 백엔드 미직렬화(프런트 단일 산출)
 
 
 def test_recommendations_empty_board_keeps_data_available(client, db_session):

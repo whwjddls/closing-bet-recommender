@@ -11,29 +11,14 @@ from app.store.models import Recommendation, RegimeSnapshot, Run
 router = APIRouter(tags=["recommendations"])
 
 
-def _badges(rec: Recommendation) -> list[str]:
-    """00 §5 badges: 신고가/RVOL/수급/시황/베이스 (저장된 신호값에서 결정론적으로 산출)."""
-    badges: list[str] = []
-    if (rec.near_252 or 0.0) >= 1.0:
-        badges.append("신고가")
-    if (rec.rvol or 0.0) >= 2.0:
-        badges.append("RVOL")
-    if (rec.supply_tilt or 0.0) >= 1.0:
-        badges.append("수급")
-    if (rec.regime_mult or 0.0) >= 1.0:
-        badges.append("시황")
-    if rec.base_flag:
-        badges.append("베이스")
-    return badges
-
-
 def _to_row(rec: Recommendation) -> RecommendationRow:
-    # 00 §5 RecommendationRow: score=final, grade=core 기준(저장값), spark/base_flag 포함
+    # 00 §5 RecommendationRow: score=final, grade=core 기준(저장값), spark/base_flag 포함.
+    # 배지는 프런트 deriveBadges 가 신호 필드에서 단일 산출한다(백엔드 미직렬화).
     return RecommendationRow(
         rank=rec.rank, ticker=rec.ticker, name=rec.name, market=rec.market,
         price_provisional=rec.price_provisional, buy_price_provisional=rec.buy_price_provisional,
         buy_price_final=rec.buy_price_final, target_price=rec.target_price, stop_price=rec.stop_price,
-        score=rec.final, grade=rec.grade, badges=_badges(rec),
+        score=rec.final, grade=rec.grade,
         near_252=rec.near_252, near_60=rec.near_60, rvol=rec.rvol,
         s_shin=rec.s_shin, rvol_confirm=rec.rvol_confirm, supply_tilt=rec.supply_tilt,
         regime_mult=rec.regime_mult, veto=rec.veto,

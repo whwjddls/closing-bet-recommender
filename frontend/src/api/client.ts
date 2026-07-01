@@ -22,7 +22,8 @@ export interface BaseBox {
   high: number;
 }
 
-// §5 RecommendationRow: score(=final), exit_label, badges, signal fields.
+// §5 RecommendationRow: score(=final), exit_label, signal fields.
+// 배지는 백엔드가 직렬화하지 않는다 — lib/badges.ts deriveBadges 가 단일 산출.
 export interface Recommendation {
   rank: number;
   ticker: string;
@@ -36,7 +37,6 @@ export interface Recommendation {
   stop_price: number;
   score: number;
   grade: Grade;
-  badges: string[];
   near_252: number;
   near_60: number;
   rvol: number;

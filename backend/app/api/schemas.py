@@ -36,7 +36,6 @@ class RecommendationRow(BaseModel):
     stop_price: float
     score: float                        # = final
     grade: str                          # S/A/B/C (core 기준)
-    badges: list[str] = []              # 신고가/RVOL/수급/시황/베이스
     near_252: float
     near_60: float
     rvol: float

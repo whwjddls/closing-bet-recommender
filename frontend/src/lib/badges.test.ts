@@ -15,7 +15,6 @@ const base: Recommendation = {
   stop_price: 23800,
   score: 1.12,
   grade: 'S',
-  badges: [],
   near_252: 1.02,
   near_60: 1.04,
   rvol: 2.5,

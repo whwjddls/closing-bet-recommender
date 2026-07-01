@@ -15,7 +15,6 @@ const r = (rank: number, name: string): Recommendation => ({
   stop_price: 1,
   score: 1,
   grade: 'S',
-  badges: [],
   near_252: 1,
   near_60: 1,
   rvol: 1,
