@@ -165,6 +165,25 @@ class MarketResponse(BaseModel):
     investors: Investors
 
 
+class CalEvent(BaseModel):              # 거래 캘린더 개별 이벤트 — /calendar 위젯
+    date: str                           # YYYY-MM-DD
+    kind: str                           # 휴장 | 조기폐장 | 만기 | 배당락
+    label: str
+    d_day: int                          # 오늘 기준 남은 일수
+
+
+class TodayInfo(BaseModel):             # 오늘 세션 정보 — /calendar 위젯
+    date: str                           # YYYY-MM-DD
+    is_trading_day: bool
+    session_type: str                   # 정규 | 특수
+    close_time: str                     # HH:MM
+
+
+class CalendarResponse(BaseModel):
+    today: TodayInfo
+    upcoming: list[CalEvent] = []
+
+
 class UniverseRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     ticker: str
