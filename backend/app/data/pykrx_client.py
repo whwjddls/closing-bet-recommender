@@ -276,6 +276,29 @@ def overnight_gap_stats(ticker: str, asof: dt.date, lookback_days: int = 252,
     }
 
 
+def kospi_index_curve(start: dt.date, end: dt.date,
+                      pykrx_module: Any | None = None) -> list[dict]:
+    """KOSPI 지수 누적수익 곡선(성과추적 벤치마크). ``[start, end]`` 구간 종가를
+    첫 종가 대비 누적수익(close/close[0]-1)으로 환산해 ``[{date, cum}]`` 반환.
+    조회 실패/행 없음/기준가 0 → 빈 리스트(벤치마크 미가용 graceful)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    frm_s, to_s = _yyyymmdd(start), _yyyymmdd(end)
+    try:
+        df = px.get_index_ohlcv(frm_s, to_s, pykrx_index_code(Market.KOSPI))
+    except Exception:                                   # noqa: BLE001  (외부 IO)
+        return []
+    if df is None or len(df) == 0:
+        return []
+    closes = df[COL_CLOSE].astype(float).to_numpy()
+    base = closes[0]
+    if base == 0:
+        return []
+    return [
+        {"date": _index_date_str(idx), "cum": float(close / base - 1.0)}
+        for idx, close in zip(df.index, closes)
+    ]
+
+
 def health_check(pykrx_module: Any | None = None, *,
                  today: dt.date | None = None, min_rows: int = 120) -> HealthResult:
     """무인자 장전 헬스체크(00 §2). 지수 OHLCV(todate=D-1) + D-1 외인/기관 수급·거래대금

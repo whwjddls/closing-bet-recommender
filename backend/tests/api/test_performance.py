@@ -1,5 +1,15 @@
 from datetime import date, datetime
 
+import pytest
+
+from app.api.performance import (
+    classify_fail_reason,
+    compute_max_consec_loss_days,
+    compute_mdd,
+    compute_payoff_ratio,
+    get_benchmark_provider,
+    wilson_ci,
+)
 from app.store.models import Performance, Recommendation
 
 
@@ -12,8 +22,8 @@ def _rec(rid, grade="S", regime=1.0, ticker="000660"):
                           provisional_flag=True, created_at=datetime.now())
 
 
-def _perf(rid, outcome, ret, vwap=10.0, flag=False, bpf=10.0):
-    return Performance(rec_id=rid, eval_date=date(2026, 6, 30), buy_price_final=bpf,
+def _perf(rid, outcome, ret, vwap=10.0, flag=False, bpf=10.0, eval_date=date(2026, 6, 30)):
+    return Performance(rec_id=rid, eval_date=eval_date, buy_price_final=bpf,
                        vwap_0900_1000=vwap, morning_return=ret, outcome=outcome,
                        dart_overnight_flag=flag, scored_at=datetime.now())
 
@@ -56,6 +66,105 @@ def test_performance_empty(client):
     assert agg["by_grade"] == [] and agg["by_regime"] == []
     assert agg["cumulative_curve"] == []
     assert body["picks"] == []
+
+
+# ── S1 성과추적 강화: 순수 함수 단위 검증 ──────────────────────────────
+def test_wilson_ci_bounds_and_known_value():
+    low, high = wilson_ci(8, 10)
+    assert 0.0 <= low <= high <= 1.0
+    assert low == pytest.approx(0.4902, abs=1e-3)
+    assert high == pytest.approx(0.9434, abs=1e-3)
+
+
+def test_wilson_ci_empty_sample_is_zero_zero():
+    assert wilson_ci(0, 0) == (0.0, 0.0)
+
+
+def test_compute_mdd_peak_to_trough():
+    # 누적곡선 [0.02,-0.01,-0.02,0.02] → 최대낙폭 0.03-(-0.02)=0.04
+    assert compute_mdd([0.02, -0.01, -0.02, 0.02]) == pytest.approx(0.04)
+
+
+def test_compute_mdd_empty_is_zero():
+    assert compute_mdd([]) == 0.0
+
+
+def test_compute_payoff_ratio_profit_over_loss():
+    # 이익 [0.02,0.04] 평균 0.03 / 손실 [-0.03,-0.01] 절대평균 0.02 = 1.5
+    assert compute_payoff_ratio([0.02, -0.03, -0.01, 0.04]) == pytest.approx(1.5)
+
+
+def test_compute_payoff_ratio_zero_when_no_losses():
+    assert compute_payoff_ratio([0.02, 0.04]) == 0.0
+
+
+def test_compute_max_consec_loss_days_counts_run():
+    # 일별 합 [+, -, -, +] → 최대 연속 손실일 2
+    daily = {date(2026, 6, 29): 0.02, date(2026, 6, 30): -0.03,
+             date(2026, 7, 1): -0.01, date(2026, 7, 2): 0.04}
+    assert compute_max_consec_loss_days(daily) == 2
+
+
+def test_classify_fail_reason():
+    assert classify_fail_reason("FAIL", -0.05) == "갭하락"       # < -0.02
+    assert classify_fail_reason("FAIL", -0.01) == "장중반전"     # >= -0.02
+    assert classify_fail_reason("SUCCESS", -0.05) is None        # 비-FAIL → None
+    assert classify_fail_reason("NA", None) is None
+
+
+def test_performance_new_aggregate_metrics_and_fail_reason(client, db_session):
+    db_session.add_all([_rec(1, "S", 1.0, "000660"), _rec(2, "S", 1.0, "005930"),
+                        _rec(3, "S", 1.0, "035720"), _rec(4, "S", 1.0, "091990")])
+    db_session.add_all([
+        _perf(1, "SUCCESS", 0.02, eval_date=date(2026, 6, 29)),
+        _perf(2, "FAIL", -0.03, eval_date=date(2026, 6, 30)),   # 갭하락(< -0.02)
+        _perf(3, "FAIL", -0.01, eval_date=date(2026, 7, 1)),    # 장중반전
+        _perf(4, "SUCCESS", 0.04, eval_date=date(2026, 7, 2)),
+    ])
+    db_session.commit()
+    agg = client.get("/performance").json()["aggregate"]
+    assert agg["mdd"] == pytest.approx(0.04)
+    assert agg["payoff_ratio"] == pytest.approx(1.5)
+    assert agg["max_consec_losses"] == 2
+    picks = {p["ticker"]: p for p in client.get("/performance").json()["picks"]}
+    assert picks["005930"]["fail_reason"] == "갭하락"
+    assert picks["035720"]["fail_reason"] == "장중반전"
+    assert picks["000660"]["fail_reason"] is None                # SUCCESS
+
+
+def test_performance_buckets_include_wilson_ci(client, db_session):
+    db_session.add_all([_rec(1, "S", 1.0, "000660"), _rec(2, "S", 1.0, "005930")])
+    db_session.add_all([_perf(1, "SUCCESS", 0.01), _perf(2, "FAIL", -0.01)])
+    db_session.commit()
+    agg = client.get("/performance").json()["aggregate"]
+    g = agg["by_grade"][0]
+    assert 0.0 <= g["ci_low"] <= g["hit_rate"] <= g["ci_high"] <= 1.0
+    r = agg["by_regime"][0]
+    assert 0.0 <= r["ci_low"] <= r["hit_rate"] <= r["ci_high"] <= 1.0
+
+
+def _fake_benchmark(start, end):
+    return [{"date": "2026-06-29", "cum": 0.0}, {"date": "2026-06-30", "cum": 0.011}]
+
+
+def test_performance_benchmark_curve_from_provider(client, db_session):
+    client.app.dependency_overrides[get_benchmark_provider] = lambda: _fake_benchmark
+    db_session.add(_rec(1, "S", 1.0, "000660"))
+    db_session.add(_perf(1, "SUCCESS", 0.01, eval_date=date(2026, 6, 30)))
+    db_session.commit()
+    agg = client.get("/performance").json()["aggregate"]
+    assert agg["benchmark_curve"] == [{"date": "2026-06-29", "cum": 0.0},
+                                      {"date": "2026-06-30", "cum": 0.011}]
+
+
+def test_performance_benchmark_curve_empty_when_unavailable(client, db_session):
+    client.app.dependency_overrides[get_benchmark_provider] = \
+        lambda: (lambda start, end: [])
+    db_session.add(_rec(1, "S", 1.0, "000660"))
+    db_session.add(_perf(1, "SUCCESS", 0.01, eval_date=date(2026, 6, 30)))
+    db_session.commit()
+    agg = client.get("/performance").json()["aggregate"]
+    assert agg["benchmark_curve"] == []
 
 
 def test_performance_na_missing_close_serializes_null_not_500(client, db_session):

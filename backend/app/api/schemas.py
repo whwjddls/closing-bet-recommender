@@ -79,18 +79,23 @@ class PickResult(BaseModel):
     morning_return: float | None = None
     outcome: str                        # SUCCESS/FAIL/NA
     dart_overnight_flag: bool
+    fail_reason: str | None = None      # FAIL 픽 원인(갭하락/장중반전); 비-FAIL은 None
 
 
 class GradeBucket(BaseModel):
     grade: str
     hit_rate: float
     n: int
+    ci_low: float = 0.0                  # hit_rate Wilson 95% 신뢰구간 하한
+    ci_high: float = 0.0                 # hit_rate Wilson 95% 신뢰구간 상한
 
 
 class RegimeBucket(BaseModel):
     regime: str
     hit_rate: float
     n: int
+    ci_low: float = 0.0                  # hit_rate Wilson 95% 신뢰구간 하한
+    ci_high: float = 0.0                 # hit_rate Wilson 95% 신뢰구간 상한
 
 
 class CurvePoint(BaseModel):
@@ -106,6 +111,10 @@ class PerformanceAggregate(BaseModel):
     by_grade: list[GradeBucket] = []
     by_regime: list[RegimeBucket] = []
     cold_start: bool                    # sample_size < 30
+    mdd: float = 0.0                    # 누적곡선 최대낙폭(peak-to-trough, 양수 크기)
+    payoff_ratio: float = 0.0          # 손익비 = 평균이익 / |평균손실|
+    max_consec_losses: int = 0         # 최대 연속 손실일(일별 합 < 0 연속)
+    benchmark_curve: list[CurvePoint] = []   # 코스피 누적수익(같은 eval 기간); 미가용 시 []
 
 
 class PerformanceResponse(BaseModel):

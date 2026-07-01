@@ -22,6 +22,7 @@ from app.data.pykrx_client import (
     sector_changes,
     market_investors,
     market_overview,
+    kospi_index_curve,
 )
 
 
@@ -459,3 +460,39 @@ def test_market_overview_combines_breadth_and_sectors():
     assert data["breadth"]["advancers"] == 3
     assert data["sectors"][0]["name"] == "전기전자"
     assert data["investors"]["foreign_net"] == pytest.approx(400.0)
+
+
+# ── S1: KOSPI 벤치마크 누적수익 곡선 ───────────────────────
+class _FakeIndexPx:
+    """kospi_index_curve 전용 fake — KOSPI 지수 종가 프레임 제공."""
+
+    def __init__(self, closes=None, raises=False):
+        self.closes = closes
+        self.raises = raises
+        self.calls: list[tuple] = []
+
+    def get_index_ohlcv(self, fromdate, todate, index_code):
+        self.calls.append((fromdate, todate, index_code))
+        if self.raises:
+            raise ConnectionError("index outage")
+        if self.closes is None:
+            return None
+        idx = pd.to_datetime(["2026-06-29", "2026-06-30", "2026-07-01"][:len(self.closes)])
+        return pd.DataFrame({"종가": self.closes}, index=idx)
+
+
+def test_kospi_index_curve_cumulative_return_from_base():
+    px = _FakeIndexPx(closes=[100.0, 101.0, 99.0])
+    curve = kospi_index_curve(dt.date(2026, 6, 29), dt.date(2026, 7, 1), px)
+    assert [p["cum"] for p in curve] == pytest.approx([0.0, 0.01, -0.01])
+    assert curve[0]["date"] == "2026-06-29"
+    assert px.calls[-1] == ("20260629", "20260701", "1001")     # KOSPI pykrx code
+
+
+def test_kospi_index_curve_empty_when_no_data():
+    assert kospi_index_curve(dt.date(2026, 6, 29), dt.date(2026, 7, 1), _FakeIndexPx(None)) == []
+
+
+def test_kospi_index_curve_empty_on_outage():
+    assert kospi_index_curve(dt.date(2026, 6, 29), dt.date(2026, 7, 1),
+                             _FakeIndexPx(raises=True)) == []
