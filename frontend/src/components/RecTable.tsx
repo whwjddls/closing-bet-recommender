@@ -21,9 +21,14 @@ function hasRisk(r: Recommendation): boolean {
 
 export default function RecTable({
   recommendations,
+  pickedTickers,
+  onTogglePick,
 }: {
   recommendations: Recommendation[];
+  pickedTickers?: Set<string>;
+  onTogglePick?: (ticker: string) => void;
 }) {
+  const showPick = typeof onTogglePick === 'function';
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [marketFilter, setMarketFilter] = useState<'ALL' | Market>('ALL');
   const [supplyUpOnly, setSupplyUpOnly] = useState(false);
@@ -142,6 +147,7 @@ export default function RecTable({
               <th>등급</th>
               <th>신호</th>
               <th>차트</th>
+              {showPick && <th className="col-pick">담기</th>}
             </tr>
           </thead>
           <tbody>
@@ -223,6 +229,26 @@ export default function RecTable({
                   <td>
                     <MiniChart data={r.spark} />
                   </td>
+                  {showPick && (
+                    <td className="col-pick">
+                      {(() => {
+                        const isPicked = pickedTickers?.has(r.ticker) ?? false;
+                        return (
+                          <button
+                            type="button"
+                            data-testid="pick-toggle"
+                            data-picked={isPicked}
+                            className={`pick-btn${isPicked ? ' picked' : ''}`}
+                            aria-pressed={isPicked}
+                            aria-label={`${r.name} ${isPicked ? '빼기' : '담기'}`}
+                            onClick={() => onTogglePick?.(r.ticker)}
+                          >
+                            {isPicked ? '담음' : '담기'}
+                          </button>
+                        );
+                      })()}
+                    </td>
+                  )}
                 </tr>
               );
             })}

@@ -12,6 +12,8 @@ import RecTable from '../components/RecTable';
 import RegimeGauge from '../components/RegimeGauge';
 import Scanner from '../components/Scanner';
 import HealthBadge from '../components/HealthBadge';
+import IndexStrip from '../components/IndexStrip';
+import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
 
 function todayKst(): string {
   return new Date().toISOString().slice(0, 10);
@@ -22,6 +24,19 @@ export default function Board() {
   const [universe, setUniverse] = useState<UniverseResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 담은 픽 티커 집합(클라이언트 전용 상태 — 신규 API 없음).
+  const [pickedTickers, setPickedTickers] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const togglePick = (ticker: string) =>
+    setPickedTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  const clearPicks = () => setPickedTickers(new Set());
 
   useEffect(() => {
     if (
@@ -41,16 +56,36 @@ export default function Board() {
   }, []);
 
   if (error)
-    return <p data-testid="board-error">보드를 불러오지 못했습니다: {error}</p>;
-  if (!board) return <p>로딩 중…</p>;
+    return (
+      <>
+        <IndexStrip regimes={[]} />
+        <main>
+          <p data-testid="board-error">보드를 불러오지 못했습니다: {error}</p>
+        </main>
+      </>
+    );
+  if (!board)
+    return (
+      <>
+        <IndexStrip regimes={[]} />
+        <main>
+          <p>로딩 중…</p>
+        </main>
+      </>
+    );
 
   const regimes = Object.values(board.regimes);
   const isRiskOff =
     regimes.length > 0 && regimes.every((r) => r.regime_mult === 0);
   const hasReducedRisk = regimes.some((r) => r.regime_mult === 0.5);
+  const pickedRecs = board.recommendations.filter((r) =>
+    pickedTickers.has(r.ticker),
+  );
 
   return (
-    <main>
+    <>
+      <IndexStrip regimes={regimes} />
+      <main>
       <header>
         <h1>종가베팅 추천 {board.run_date}</h1>
         <RegimeGauge regimes={regimes} />
@@ -86,8 +121,19 @@ export default function Board() {
           <p data-testid="board-empty">발행된 추천 종목이 없습니다.</p>
         )
       ) : (
-        <RecTable recommendations={board.recommendations} />
+        <RecTable
+          recommendations={board.recommendations}
+          pickedTickers={pickedTickers}
+          onTogglePick={togglePick}
+        />
       )}
-    </main>
+        <PicksTraySpacer />
+      </main>
+      <PicksTray
+        picks={pickedRecs}
+        onRemove={togglePick}
+        onClear={clearPicks}
+      />
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -126,5 +126,40 @@ describe('RecTable', () => {
   it('빈 추천이면 빈 상태 메시지', () => {
     wrap(<RecTable recommendations={[]} />);
     expect(screen.getByTestId('rec-empty')).toBeInTheDocument();
+  });
+
+  it('onTogglePick 없으면 담기 버튼 미노출(기존 사용처 무영향)', () => {
+    wrap(<RecTable recommendations={recs} />);
+    expect(screen.queryByTestId('pick-toggle')).not.toBeInTheDocument();
+  });
+
+  it('담기 버튼 클릭 시 onTogglePick(ticker) 호출', async () => {
+    const onTogglePick = vi.fn();
+    wrap(
+      <RecTable
+        recommendations={recs}
+        pickedTickers={new Set()}
+        onTogglePick={onTogglePick}
+      />,
+    );
+    const buttons = screen.getAllByTestId('pick-toggle');
+    expect(buttons).toHaveLength(4);
+    await userEvent.click(buttons[0]);
+    // 정렬상 첫 행은 score 최상위(A, 000660)
+    expect(onTogglePick).toHaveBeenCalledWith('000660');
+  });
+
+  it('이미 담은 행은 담음 상태(aria-pressed)로 표시', () => {
+    wrap(
+      <RecTable
+        recommendations={recs}
+        pickedTickers={new Set(['000660'])}
+        onTogglePick={() => {}}
+      />,
+    );
+    const rowA = screen.getAllByTestId('rec-row')[0];
+    const btn = within(rowA).getByTestId('pick-toggle');
+    expect(btn).toHaveAttribute('aria-pressed', 'true');
+    expect(btn).toHaveTextContent('담음');
   });
 });
