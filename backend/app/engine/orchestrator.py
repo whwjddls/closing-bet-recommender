@@ -74,26 +74,22 @@ def compute_modeled_avg(trailing_values, min_sessions: int = 20):
 
 
 def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
-                    run_pipeline_fn=_run_pipeline, d1_top_n: int = 200, live_top: int = 30,
-                    rvol_min_sessions: int = 20, session_type: str = "정규", max_emit: int = 30) -> RunResult:
-    # ① 후보풀 = D-1 거래대금 top-N ∪ 라이브 top-30×2 (스펙 §3.3 ①)
-    pool = list(dict.fromkeys(
-        adapter.d1_value_top(run_date, d1_top_n)
-        + adapter.live_value_top("KOSPI", live_top) + adapter.live_value_top("KOSDAQ", live_top)))
+                    run_pipeline_fn=_run_pipeline, rvol_min_sessions: int = 20,
+                    session_type: str = "정규", max_emit: int = 30) -> RunResult:
+    # ① 후보풀 = 실 StaticCandidate 리스트 (어댑터가 prefetch/랭킹으로 구성)
+    candidates = list(adapter.build_candidates(run_date, snapshot_at))
+    tickers = [c.ticker for c in candidates]
 
-    # ② 정적 위생 → ③ 라이브 시세 → ④ 동적 위생(과열·거래정지)
-    quotes = {}
-    for t in (x for x in pool if adapter.static_ok(x)):
-        q = adapter.quote(t)
-        if q is None:
-            continue
-        if q.is_halted or q.is_limit_up or q.is_vi or q.change_pct >= 20.0:
-            continue
-        quotes[t] = q
-    candidates = list(quotes)
-    coverage = (len(quotes) / len(pool)) if pool else 0.0
+    # ② 라이브 시세 (벌크, 부분 실패 허용) → Mapping[str, LiveQuote]
+    quotes = dict(adapter.fetch_live(tickers))
 
-    # ⑤ 시장별 레짐 산출 + 영속화 (종목 소속시장 레짐)
+    # ③ MODELED RVOL 생산자: 당일 15:20 스냅샷 upsert + trailing≥20 평균 (cum_value 없음)
+    modeled_avg = {}
+    for t, q in quotes.items():
+        store.upsert_volume_snapshot(t, run_date, q.cum_volume_1520, None)
+        modeled_avg[t] = compute_modeled_avg(store.trailing_volume(t, run_date), rvol_min_sessions)
+
+    # ④ 시장별 레짐 산출 + 영속화 (종목 소속시장 레짐)
     regimes: dict[str, RegimeInfo] = {}
     for market in ("KOSPI", "KOSDAQ"):
         idx, prev5 = adapter.regime_inputs(market)
@@ -104,27 +100,25 @@ def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
         store.save_regime(run_date, market, info)
     regime_by_market = {m: r.regime_mult for m, r in regimes.items()}   # dict[str, float]
 
-    # ⑥ MODELED RVOL 생산자: 당일 15:20 스냅샷 upsert + trailing≥20 평균
-    modeled_avg = {}
-    for t, q in quotes.items():
-        store.upsert_volume_snapshot(t, run_date, q.cum_volume, q.cum_value)
-        modeled_avg[t] = compute_modeled_avg(store.trailing_volume(t, run_date), rvol_min_sessions)
+    # ⑤ veto 맵 (snapshot_at 을 그대로 전달)
+    veto_by_ticker = {t: adapter.dilution_veto(t, snapshot_at) for t in tickers}
 
-    # ⑦ veto 맵
-    veto_by_ticker = {t: adapter.veto(t, snapshot_at) for t in candidates}
-
-    # ⑧ 순수 엔진 호출 → EngineRow→RecRow, coverage×100
-    def fetch_live(t):
-        return quotes[t]
+    # ⑥ 순수 엔진 호출 (fetch_live: List[str] -> Mapping[str, LiveQuote]) → EngineRow→RecRow
+    def fetch_live(requested):
+        return {t: quotes[t] for t in requested if t in quotes}
 
     pr = run_pipeline_fn(candidates, fetch_live, regime_by_market, modeled_avg, veto_by_ticker, max_emit)
-    recs = [RecRow(rank=i + 1, ticker=e.ticker, name=e.name, market=e.market,
-                   price_provisional=e.price, buy_price_provisional=e.buy, buy_price_final=None,
-                   target_price=e.target, stop_price=e.stop, s_shin=e.s_shin, s_geo=e.s_geo,
-                   rvol_confirm=e.rvol_confirm, supply_tilt=e.supply_tilt, regime_mult=e.regime_mult,
-                   veto=e.veto, core=e.core, final=e.final, grade=e.grade, near_252=e.near_252,
-                   near_60=e.near_60, rvol=e.rvol, spark=e.spark, base_flag=e.base_flag)
-            for i, e in enumerate(pr.rows)]
+    recs = [RecRow(rank=e.rank, ticker=e.ticker, name=e.name, market=e.market,
+                   price_provisional=e.price_provisional,
+                   buy_price_provisional=e.buy_price_provisional, buy_price_final=None,
+                   target_price=e.target_price, stop_price=e.stop_price, s_shin=e.s_shin,
+                   s_geo=e.s_geo, rvol_confirm=e.rvol_confirm, supply_tilt=e.supply_tilt,
+                   regime_mult=e.regime_mult, veto=e.veto, core=e.core, final=e.final,
+                   grade=e.grade, near_252=e.near_252, near_60=e.near_60, rvol=e.rvol,
+                   spark=e.spark, base_flag=e.base_flag)
+            for e in pr.rows]
+    # ⑦ 커버리지는 파이프라인 자체 coverage_pct × 100 (계약 §3.6)
     return RunResult(run_date=run_date, session_type=session_type,
-                     data_available=bool(quotes), kis_coverage_pct=round(coverage * 100, 1),
+                     data_available=bool(quotes),
+                     kis_coverage_pct=round(pr.coverage_pct * 100, 1),
                      recommendations=recs, regimes=regimes, reason=pr.reason)
