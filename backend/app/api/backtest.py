@@ -9,9 +9,19 @@ router = APIRouter(tags=["backtest"])
 
 
 def get_backtest_runner() -> Callable:
-    """서브시스템 3의 백테스트 러너를 지연 임포트로 주입(테스트는 override)."""
+    """프로덕션 백테스트 러너 — run_backtest 에 pykrx 기반 패널 로더를 바인딩(계약 §4).
+
+    로더 무주입 시 run_backtest 가 fail-fast(ValueError→500) 하므로 기본 러너에서
+    ``load_price_panel``/``load_vwap_panel`` 을 반드시 바인딩한다. membership 소스는
+    프로덕션 미확보 → survivorship 파생 False → acceptance DOWNSCOPE(조용한 통과 금지)."""
     from app.backtest.engine import run_backtest
-    return run_backtest
+    from app.backtest.loaders import load_price_panel, load_vwap_panel
+
+    def _runner(start: date, end: date):
+        return run_backtest(start, end, load_price_panel=load_price_panel,
+                            load_vwap_panel=load_vwap_panel)
+
+    return _runner
 
 
 @router.get("/backtest", response_model=BacktestResponse)
