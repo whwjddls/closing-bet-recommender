@@ -79,6 +79,14 @@ export interface StockContributions {
   core: number;
 }
 
+// 종가→익일시가 오버나잇 갭 표본 통계(표본 <20 이면 백엔드가 null 반환).
+export interface OvernightGap {
+  mean: number; // 평균 갭(비율, +상승/−하락)
+  std: number; // 변동성 σ(비율)
+  worst5pct: number; // 하위 5% 최악 갭(비율, 하방 꼬리)
+  n: number; // 표본 일수
+}
+
 // §5 StockDetailResponse.
 export interface StockDetailResponse {
   ticker: string;
@@ -91,6 +99,26 @@ export interface StockDetailResponse {
   prior_high: number;
   base_box: BaseBox | null;
   contributions: StockContributions;
+  overnight_gap: OvernightGap | null;
+}
+
+// GET /market — 시장폭 + 업종 히트맵.
+export interface MarketBreadth {
+  advancers: number;
+  decliners: number;
+  unchanged: number;
+  new_highs: number;
+  limit_ups: number;
+}
+
+export interface MarketSector {
+  name: string;
+  change_pct: number; // 업종 등락률(%, +상승/−하락)
+}
+
+export interface MarketResponse {
+  breadth: MarketBreadth;
+  sectors: MarketSector[];
 }
 
 // §5 PickResult.
@@ -187,3 +215,4 @@ export const fetchPerformance = () =>
   getJson<PerformanceResponse>(`/performance`);
 export const fetchUniverse = () => getJson<UniverseResponse>(`/universe`);
 export const fetchHealth = () => getJson<HealthResponse>(`/health`);
+export const fetchMarket = () => getJson<MarketResponse>(`/market`);

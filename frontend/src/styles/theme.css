@@ -886,6 +886,183 @@ td.col-risk.has-risk {
   font-size: 12.5px;
 }
 
+/* ── 오버나잇 갭 통계(종가→익일시가) ─────────────────────── */
+.overnight-gap {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.overnight-gap .og-title {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.overnight-gap .og-scope {
+  color: var(--text-lo);
+  font-weight: 600;
+}
+
+.overnight-gap .og-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.overnight-gap .og-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+}
+
+.overnight-gap .og-cell dt {
+  color: var(--text-mid);
+  font-size: 11.5px;
+}
+
+.overnight-gap .og-val {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+.overnight-gap .og-neutral {
+  color: var(--text-hi);
+}
+
+/* 최악 5% 하방 꼬리: 리스크 적색 강조(방향색과 무관한 위험 신호) */
+.overnight-gap .og-worst,
+.og-summary .og-worst {
+  color: var(--risk);
+  font-weight: 700;
+}
+
+.overnight-gap .og-summary {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+.overnight-gap--empty .og-empty,
+.overnight-gap .og-empty {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   섹터 히트맵 + 시장폭(Board 상단 패널) — GET /market
+   ========================================================================== */
+
+.board-top {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 12px;
+}
+
+.sector-heatmap {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.sector-heatmap .sh-title {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.sector-heatmap .sh-breadth {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-mid);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.sector-heatmap .sh-breadth .dir-up,
+.sector-heatmap .sh-breadth .dir-down {
+  font-weight: 700;
+}
+
+.sector-heatmap .sh-breadth-item {
+  color: var(--text-mid);
+}
+
+.sector-heatmap .sh-limit {
+  color: var(--up);
+  font-weight: 700;
+}
+
+.sector-heatmap .sh-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.sector-heatmap .sh-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  min-height: 30px;
+}
+
+.sector-heatmap .sh-tile-name {
+  color: var(--text-hi);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sector-heatmap .sh-tile-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sector-heatmap .sh-empty,
+.sector-heatmap .sh-loading {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+@media (max-width: 640px) {
+  .board-top {
+    justify-content: stretch;
+  }
+  .sector-heatmap {
+    max-width: none;
+  }
+}
+
 /* ============================================================================
    스캐너
    ========================================================================== */

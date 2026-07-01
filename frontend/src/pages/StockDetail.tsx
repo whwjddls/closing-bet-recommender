@@ -4,6 +4,7 @@ import { createChart } from 'lightweight-charts';
 import { fetchStock, type StockDetailResponse } from '../api/client';
 import { formatPrice } from '../lib/format';
 import SignalContribution from '../components/SignalContribution';
+import OvernightGapStat from '../components/OvernightGapStat';
 
 export default function StockDetail() {
   const { code } = useParams<{ code: string }>();
@@ -90,6 +91,8 @@ export default function StockDetail() {
         contributions={detail.contributions}
         final={detail.final}
       />
+
+      <OvernightGapStat gap={detail.overnight_gap} />
     </main>
   );
 }

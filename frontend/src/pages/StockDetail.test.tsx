@@ -41,6 +41,7 @@ const detail: StockDetailResponse = {
     veto: 1,
     core: 1.12,
   },
+  overnight_gap: { mean: 0.003, std: 0.021, worst5pct: -0.032, n: 44 },
 };
 
 function renderAt(code: string) {
