@@ -52,7 +52,13 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
             if db.scalar(select(Performance).where(Performance.rec_id == rec.id)):
                 continue   # 멱등: 이미 채점됨
 
-            close_t = fetch_confirmed_close(rec.ticker, run_date)     # close[t] (확정)
+            try:
+                close_t = fetch_confirmed_close(rec.ticker, run_date)  # close[t] (확정)
+            except Exception as exc:                                   # noqa: BLE001
+                # 확정 종가 결측/조회 실패 → 해당 종목만 N/A(분모 제외), 배치는 계속 (스펙 §4.2)
+                logger.warning("confirmed close missing for %s on %s: %s; marking N/A",
+                               rec.ticker, run_date, exc)
+                close_t = None
             if close_t is not None:
                 rec.buy_price_final = close_t
             vwap = fetch_morning_vwap(rec.ticker, eval_date)          # VWAP[t+1] 09:00–10:00

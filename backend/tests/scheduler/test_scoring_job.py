@@ -75,6 +75,36 @@ def test_scoring_binds_real_module_collaborators_without_import_error(session_fa
     assert scored == 0
 
 
+def test_scoring_skips_missing_confirmed_close_and_continues(session_factory):
+    """확정 종가 결측(fetch_confirmed_close 예외) 한 종목이 배치 전체를 중단시키면 안 된다.
+    결측 종목=N/A(분모 제외), 나머지는 정상 채점된다(스펙 §4.2)."""
+    with session_factory() as db:
+        _rec(db, 1, "AAA"); _rec(db, 2, "BBB"); _rec(db, 3, "CCC")
+        db.commit()
+
+    def close_fn(t, d):
+        if t == "BBB":
+            raise ValueError(f"no confirmed close for {t} on {d}")   # 확정 종가 결측
+        return 10.0
+
+    vwaps = {"AAA": 10.6, "BBB": 10.5, "CCC": 9.9}
+    scored = scoring_job.run_scoring(
+        date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
+        fetch_confirmed_close=close_fn,
+        fetch_morning_vwap=lambda t, d: vwaps[t],
+        overnight_scan=lambda t, s, u: False,
+    )
+    assert scored == 3                                  # 배치 미중단: 3건 모두 처리
+    with session_factory() as db:
+        perfs = {p.rec_id: p for p in db.scalars(select(Performance)).all()}
+        assert set(perfs) == {1, 2, 3}
+        assert perfs[1].outcome == "SUCCESS"           # AAA 정상 채점
+        assert perfs[2].outcome == "NA"                # BBB 결측 → N/A(분모 제외)
+        assert perfs[2].morning_return is None
+        assert perfs[2].buy_price_final is None        # 결측이므로 확정가 미반영
+        assert perfs[3].outcome == "FAIL"              # CCC 정상 채점
+
+
 def test_scoring_is_idempotent(session_factory):
     with session_factory() as db:
         _rec(db, 1, "AAA"); db.commit()
