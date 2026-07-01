@@ -4,6 +4,8 @@ import pandas as pd
 import pytest
 
 from app.data.broker_adapter import HealthCheckResult
+import numpy as np
+
 from app.data.pykrx_client import (
     PykrxClient,
     PrefetchBundle,
@@ -14,6 +16,7 @@ from app.data.pykrx_client import (
     prefetch_final,
     fetch_confirmed_close,
     health_check,
+    overnight_gap_stats,
 )
 
 
@@ -190,6 +193,75 @@ def test_prefetch_final_net_purchases_two_market_calls():
     prefetch_final(dt.date(2026, 6, 30), px)
     net_calls = [c for c in px.calls if c[0] == "net"]
     assert len(net_calls) == 2
+
+
+# ── 오버나잇 갭 통계: gap[t]=open[t+1]/close[t]-1 ──────────
+class _FakeGapPx:
+    """overnight_gap_stats 전용 주입 fake — 시가/종가 프레임 반환."""
+
+    def __init__(self, opens, closes):
+        self.opens = opens
+        self.closes = closes
+        self.calls: list[tuple] = []
+
+    def get_market_ohlcv(self, fromdate, todate, ticker):
+        self.calls.append(("ohlcv", fromdate, todate, ticker))
+        if not self.opens:
+            return None
+        idx = pd.RangeIndex(len(self.opens))
+        return pd.DataFrame({"시가": self.opens, "종가": self.closes}, index=idx)
+
+
+def test_overnight_gap_stats_constant_gaps():
+    # 21행 → 20갭, 모든 갭 = 102/100-1 = 0.02 (손검증 가능)
+    closes = [100.0] * 21
+    opens = [0.0] + [102.0] * 20            # opens[0]은 갭 산출에 미사용
+    px = _FakeGapPx(opens, closes)
+    res = overnight_gap_stats("000660", dt.date(2026, 6, 30), pykrx_module=px)
+    assert res["n"] == 20
+    assert res["mean"] == pytest.approx(0.02)
+    assert res["std"] == pytest.approx(0.0)         # 동일 갭 → 모σ=0
+    assert res["worst5pct"] == pytest.approx(0.02)
+    # 룩어헤드 금지: todate=asof(20260630)
+    assert px.calls[-1][2] == "20260630"
+
+
+def test_overnight_gap_stats_matches_numpy_moments():
+    # 26행 → 25갭, 변동 있는 시가로 mean/모σ/5퍼센타일 numpy 대조
+    closes = [100.0 + i for i in range(26)]
+    opens = [0.0] + [closes[i] * (1.0 + (((i % 5) - 2) / 100.0)) for i in range(25)]
+    px = _FakeGapPx(opens, closes)
+    res = overnight_gap_stats("000660", dt.date(2026, 6, 30), pykrx_module=px)
+    o = np.array(opens, dtype=float)
+    c = np.array(closes, dtype=float)
+    gaps = o[1:] / c[:-1] - 1.0
+    assert res["n"] == 25
+    assert res["mean"] == pytest.approx(float(gaps.mean()))
+    assert res["std"] == pytest.approx(float(gaps.std()))            # 모표준편차
+    assert res["worst5pct"] == pytest.approx(float(np.percentile(gaps, 5)))
+
+
+def test_overnight_gap_stats_respects_lookback_window():
+    # 40갭이지만 lookback_days=20 → 최근 20갭만 사용 → n=20
+    closes = [100.0] * 41
+    opens = [0.0] + [101.0] * 40
+    px = _FakeGapPx(opens, closes)
+    res = overnight_gap_stats("000660", dt.date(2026, 6, 30), lookback_days=20, pykrx_module=px)
+    assert res["n"] == 20
+    assert res["mean"] == pytest.approx(0.01)
+
+
+def test_overnight_gap_stats_none_on_short_history():
+    # 10행 → 9갭 <20 → None
+    closes = [100.0] * 10
+    opens = [0.0] + [101.0] * 9
+    px = _FakeGapPx(opens, closes)
+    assert overnight_gap_stats("000660", dt.date(2026, 6, 30), pykrx_module=px) is None
+
+
+def test_overnight_gap_stats_none_on_empty():
+    px = _FakeGapPx([], [])
+    assert overnight_gap_stats("000660", dt.date(2026, 6, 30), pykrx_module=px) is None
 
 
 class _PxHealth:

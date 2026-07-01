@@ -51,6 +51,33 @@ def test_stock_serializes_candles_high_box_and_contributions(client, db_session)
     assert contrib["core"] == 1.12
 
 
+def _fake_chart_with_gap(code, run_date):
+    data = _fake_chart(code, run_date)
+    data["overnight_gap"] = {"mean": -0.003, "std": 0.021, "worst5pct": -0.045, "n": 240}
+    return data
+
+
+def test_stock_serializes_overnight_gap(client, db_session):
+    client.app.dependency_overrides[get_chart_provider] = lambda: _fake_chart_with_gap
+    db_session.add(_rec(date(2026, 6, 30)))
+    db_session.commit()
+    body = client.get("/stock/000660").json()
+    og = body["overnight_gap"]
+    assert og["mean"] == -0.003
+    assert og["std"] == 0.021
+    assert og["worst5pct"] == -0.045
+    assert og["n"] == 240
+
+
+def test_stock_overnight_gap_none_when_absent(client, db_session):
+    # 공급자가 overnight_gap 키를 주지 않으면(콜드스타트) None 직렬화
+    client.app.dependency_overrides[get_chart_provider] = lambda: _fake_chart
+    db_session.add(_rec(date(2026, 6, 30)))
+    db_session.commit()
+    body = client.get("/stock/000660").json()
+    assert body["overnight_gap"] is None
+
+
 def test_stock_specific_date_query(client, db_session):
     client.app.dependency_overrides[get_chart_provider] = lambda: _fake_chart
     db_session.add(_rec(date(2026, 6, 29), core=0.7, final=0.7, grade="A"))

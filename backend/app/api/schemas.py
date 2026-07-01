@@ -49,6 +49,13 @@ class RecommendationRow(BaseModel):
     provisional_flag: bool
 
 
+class OvernightGap(BaseModel):          # 종가베팅 핵심 리스크: 오버나잇 갭(open[t+1]/close[t]-1) 통계
+    mean: float
+    std: float                          # 모표준편차(population σ)
+    worst5pct: float                    # 갭 분포 5퍼센타일(하방 꼬리)
+    n: int
+
+
 class StockDetailResponse(BaseModel):
     ticker: str
     name: str
@@ -59,6 +66,7 @@ class StockDetailResponse(BaseModel):
     high_52w: float
     prior_high: float
     base_box: BaseBox | None = None
+    overnight_gap: OvernightGap | None = None   # <20 표본이면 None(콜드스타트)
     contributions: dict                 # {s_shin,rvol_confirm,supply_tilt,regime_mult,veto,core}
 
 

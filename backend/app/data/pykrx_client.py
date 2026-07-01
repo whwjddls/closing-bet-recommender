@@ -241,6 +241,40 @@ def get_stock_chart(code: str, run_date: dt.date,
             "prior_high": prior_high, "base_box": base_box}
 
 
+OVERNIGHT_GAP_MIN_SAMPLES = 20          # 표본 <20이면 통계 무의미 → None
+OVERNIGHT_GAP_WORST_PCTILE = 5          # worst5pct = 갭 분포 5퍼센타일(하방 꼬리)
+
+
+def overnight_gap_stats(ticker: str, asof: dt.date, lookback_days: int = 252,
+                        pykrx_module: Any | None = None) -> dict | None:
+    """오버나잇 갭 통계(종가베팅 핵심 리스크). gap[t]=open[t+1]/close[t]-1 를 최근
+    ``lookback_days`` 거래일 윈도우로 산출. 반환 ``{mean, std(모σ), worst5pct, n}``.
+
+    룩어헤드 금지 — todate=asof 까지만 조회. 표본 <20이면 None(콜드스타트)."""
+    import numpy as np
+
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    todate = _yyyymmdd(asof)
+    # lookback_days 거래일 갭 확보용 넉넉한 달력 룩백(주말·공휴일 감안 ×2)
+    frm = _yyyymmdd(asof - dt.timedelta(days=lookback_days * 2))
+    df = px.get_market_ohlcv(frm, todate, ticker)
+    if df is None or len(df) < 2:
+        return None
+    opens = df[COL_OPEN].astype(float).to_numpy()
+    closes = df[COL_CLOSE].astype(float).to_numpy()
+    gaps = opens[1:] / closes[:-1] - 1.0                # gap[t]=open[t+1]/close[t]-1
+    gaps = gaps[-lookback_days:]                         # 최근 lookback_days 갭만
+    n = int(len(gaps))
+    if n < OVERNIGHT_GAP_MIN_SAMPLES:
+        return None
+    return {
+        "mean": float(gaps.mean()),
+        "std": float(gaps.std()),                       # ddof=0 → 모표준편차
+        "worst5pct": float(np.percentile(gaps, OVERNIGHT_GAP_WORST_PCTILE)),
+        "n": n,
+    }
+
+
 def health_check(pykrx_module: Any | None = None, *,
                  today: dt.date | None = None, min_rows: int = 120) -> HealthResult:
     """무인자 장전 헬스체크(00 §2). 지수 OHLCV(todate=D-1) + D-1 외인/기관 수급·거래대금
