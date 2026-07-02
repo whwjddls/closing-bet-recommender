@@ -11,7 +11,16 @@ TR_VALUE_RANKING = "FHPST01710000"
 TR_QUOTE = "FHKST01010100"
 TR_INDEX = "FHPUP02100000"
 TR_MINUTE = "FHKST03010200"          # 분봉(09:00–10:00 VWAP)
+TR_NEAR_NEW_HIGH = "FHPST01870000"   # 신고가 근접(near-new-highlow)
+TR_VI_STATUS = "FHPST01390000"       # VI 발동 종목
+TR_LIMIT_UP = "FHKST130000C0"        # 상한가 포착(capture-uplowprice)
+TR_EXP_CLOSING = "FHKST117300C0"     # 예상 체결가(exp-closing-price)
+TR_PROVISIONAL_FLOW = "FHPTJ04400000"  # 외인·기관 당일 가집계(foreign-institution-total)
+TR_STOCK_INFO = "CTPF1002R"          # 종목 기본정보(search-stock-info)
 TOKEN_PATH = "/oauth2/tokenP"
+
+# 응답 목 기반 유연 파싱용 종목코드 후보 키(TR마다 mksc_/stck_ 혼재)
+_TICKER_KEYS = ("mksc_shrn_iscd", "stck_shrn_iscd")
 OVERHEAT_PCT = 20.0
 LIMIT_UP_PCT = 29.5                  # 상한가 best-effort 임계(±30% 근접)
 RANKING_TOP_N = 30
@@ -171,6 +180,167 @@ class KisClient:
         if den == 0:
             return None                                   # 거래 결측 → None
         return num / den
+
+    # ── 신규 TR 래퍼 5종(T3) — 모두 graceful(예외→빈 결과) ───────────────
+    def get_near_new_highs(self) -> list[dict]:
+        """신고가 근접 랭킹(near-new-highlow) → [{ticker, name}]. 실패 시 []."""
+        try:
+            resp = self._tr_request(
+                TR_NEAR_NEW_HIGH,
+                "/uapi/domestic-stock/v1/ranking/near-new-highlow",
+                {"FID_APLY_RANG_VOL": "100", "FID_COND_MRKT_DIV_CODE": "J",
+                 "FID_COND_SCR_DIV_CODE": "20187", "FID_DIV_CLS_CODE": "0",
+                 "FID_INPUT_CNT_1": "0", "FID_INPUT_CNT_2": "5",
+                 "FID_PRC_CLS_CODE": "0", "FID_INPUT_ISCD": "0000",
+                 "FID_TRGT_CLS_CODE": "", "FID_TRGT_EXLS_CLS_CODE": "",
+                 "FID_APLY_RANG_PRC_1": "", "FID_APLY_RANG_PRC_2": ""})
+        except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
+            return []
+        rows = []
+        for row in resp.get("output", []) or []:
+            ticker = _row_ticker(row)
+            if ticker is None:
+                continue
+            rows.append({"ticker": ticker,
+                         "name": _first(row, ("hts_kor_isnm", "prdt_name"), "")})
+        return rows
+
+    def get_vi_tickers(self) -> set[str]:
+        """VI 발동 종목코드 집합. 실패 시 빈 집합."""
+        try:
+            resp = self._tr_request(
+                TR_VI_STATUS,
+                "/uapi/domestic-stock/v1/quotations/inquire-vi-status",
+                {"FID_DIV_CLS_CODE": "0", "FID_COND_SCR_DIV_CODE": "20139",
+                 "FID_MRKT_CLS_CODE": "0", "FID_INPUT_ISCD": "",
+                 "FID_RANK_SORT_CLS_CODE": "0",
+                 "FID_INPUT_DATE_1": date.today().strftime("%Y%m%d"),
+                 "FID_TRGT_CLS_CODE": "", "FID_TRGT_EXLS_CLS_CODE": ""})
+        except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
+            return set()
+        return _tickers_of(resp.get("output", []) or [])
+
+    def get_limit_up_tickers(self) -> set[str]:
+        """상한가 종목코드 집합(capture-uplowprice, 상한가). 실패 시 빈 집합."""
+        try:
+            resp = self._tr_request(
+                TR_LIMIT_UP,
+                "/uapi/domestic-stock/v1/quotations/capture-uplowprice",
+                {"FID_COND_MRKT_DIV_CODE": "J", "FID_COND_SCR_DIV_CODE": "11300",
+                 "FID_PRC_CLS_CODE": "0", "FID_DIV_CLS_CODE": "0",
+                 "FID_INPUT_ISCD": "0000"})
+        except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
+            return set()
+        return _tickers_of(resp.get("output", []) or [])
+
+    def get_exp_closing_prices(self) -> dict[str, float]:
+        """예상 체결가 랭킹 → {ticker: 예상체결가}. 리스트 밖 종목은 없음. 실패 시 {}."""
+        try:
+            resp = self._tr_request(
+                TR_EXP_CLOSING,
+                "/uapi/domestic-stock/v1/quotations/exp-closing-price",
+                {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": "0000",
+                 "FID_RANK_SORT_CLS_CODE": "0", "FID_COND_SCR_DIV_CODE": "11173",
+                 "FID_BLNG_CLS_CODE": "0"})
+        except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
+            return {}
+        prices: dict[str, float] = {}
+        for row in resp.get("output", []) or []:
+            ticker = _row_ticker(row)
+            if ticker is None:
+                continue
+            raw = _first(row, ("antc_cnpr", "exp_cntg_prpr", "stck_prpr"), None)
+            if raw in (None, ""):
+                continue
+            try:
+                prices[ticker] = float(raw)
+            except (TypeError, ValueError):
+                continue
+        return prices
+
+    def get_provisional_flows(self) -> dict[str, str]:
+        """외인·기관 당일 가집계 → {ticker: "외인▲"/"기관▲"/"외인▲기관▲"}(잠정 라벨).
+
+        실 응답 필드가 불확실하므로 관대하게 파싱하고, 실패/미파악 시 {} 를 반환한다."""
+        try:
+            resp = self._tr_request(
+                TR_PROVISIONAL_FLOW,
+                "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
+                {"FID_COND_MRKT_DIV_CODE": "V", "FID_COND_SCR_DIV_CODE": "16449",
+                 "FID_INPUT_ISCD": "0000", "FID_DIV_CLS_CODE": "1",
+                 "FID_RANK_SORT_CLS_CODE": "0", "FID_ETC_CLS_CODE": "0"})
+        except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
+            return {}
+        flows: dict[str, str] = {}
+        for row in resp.get("output", []) or []:
+            ticker = _row_ticker(row)
+            if ticker is None:
+                continue
+            foreign = _to_float(_first(row, ("frgn_ntby_qty", "frgn_ntby_tr_pbmn"), 0))
+            inst = _to_float(_first(row, ("orgn_ntby_qty", "orgn_ntby_tr_pbmn"), 0))
+            label = ("외인▲" if foreign > 0 else "") + ("기관▲" if inst > 0 else "")
+            if label:
+                flows[ticker] = label
+        return flows
+
+    def get_stock_basic_info(self, ticker: str) -> dict:
+        """종목 기본정보(search-stock-info) → 관리/경고/우선주 등 부적격 플래그 파싱.
+
+        조회 실패 시 {} 를 반환한다(호출측은 '스킵하되 로그' — fail-open 아님)."""
+        ticker = normalize_ticker(ticker)
+        try:
+            resp = self._tr_request(
+                TR_STOCK_INFO,
+                "/uapi/domestic-stock/v1/quotations/search-stock-info",
+                {"PRDT_TYPE_CD": "300", "PDNO": ticker})
+        except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
+            return {}
+        out = resp.get("output", {}) or {}
+        name = _first(out, ("prdt_abrv_name", "prdt_name", "hts_kor_isnm"), "")
+        is_managed = str(_first(out, ("admn_item_yn",), "N")).upper() == "Y"
+        warn_code = str(_first(out, ("mrkt_warn_cls_code",), "00"))
+        is_warning = warn_code not in ("", "00", "0")
+        kind = str(_first(out, ("stck_kind_cd",), "0"))
+        is_preferred = kind not in ("", "0", "00") or "우" in str(name)
+        return {"ticker": ticker, "name": name, "is_managed": is_managed,
+                "is_warning": is_warning, "is_preferred": is_preferred,
+                "is_ineligible": bool(is_managed or is_warning or is_preferred)}
+
+
+# ── 응답 목 기반 유연 파싱 헬퍼 ───────────────────────────────────────────
+def _first(row: dict, keys: tuple, default=None):
+    """row 에서 keys 순서로 첫 존재값 반환(빈 문자열은 미존재로 취급)."""
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _row_ticker(row: dict) -> str | None:
+    raw = _first(row, _TICKER_KEYS, None)
+    if raw in (None, ""):
+        return None
+    try:
+        return normalize_ticker(raw)
+    except ValueError:
+        return None
+
+
+def _tickers_of(rows: list) -> set[str]:
+    out: set[str] = set()
+    for row in rows:
+        ticker = _row_ticker(row)
+        if ticker is not None:
+            out.add(ticker)
+    return out
+
+
+def _to_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 # ── 모듈 정본 인터페이스(00 §2) — 익일 채점 스케줄러 기본 바인딩 ──────────

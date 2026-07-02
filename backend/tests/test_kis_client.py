@@ -164,3 +164,120 @@ def test_index_level_tr_id_and_parsing(fake_clock):
     assert t.calls[-1]["headers"]["tr_id"] == "FHPUP02100000"
     assert lvl.market == Market.KOSDAQ
     assert lvl.level == 2650.50
+
+
+# ── 신규 TR 래퍼 5종 (T3) ─────────────────────────────────
+def test_get_near_new_highs_tr_id_and_flexible_ticker_keys(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPST01870000"] = [{"output": [
+        {"mksc_shrn_iscd": "000660", "hts_kor_isnm": "SK하이닉스"},
+        {"stck_shrn_iscd": "005930", "hts_kor_isnm": "삼성전자"}]}]
+    rows = _client(t, fake_clock).get_near_new_highs()
+    assert t.calls[-1]["headers"]["tr_id"] == "FHPST01870000"
+    assert rows == [{"ticker": "000660", "name": "SK하이닉스"},
+                    {"ticker": "005930", "name": "삼성전자"}]
+
+
+def test_get_near_new_highs_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPST01870000"] = []            # pop → IndexError → graceful []
+    assert _client(t, fake_clock).get_near_new_highs() == []
+
+
+def test_get_vi_tickers_returns_set(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPST01390000"] = [{"output": [
+        {"mksc_shrn_iscd": "000660"}, {"stck_shrn_iscd": "005930"}]}]
+    vi = _client(t, fake_clock).get_vi_tickers()
+    assert t.calls[-1]["headers"]["tr_id"] == "FHPST01390000"
+    assert vi == {"000660", "005930"}
+
+
+def test_get_vi_tickers_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPST01390000"] = []
+    assert _client(t, fake_clock).get_vi_tickers() == set()
+
+
+def test_get_limit_up_tickers_returns_set(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST130000C0"] = [{"output": [
+        {"mksc_shrn_iscd": "091990"}, {"stck_shrn_iscd": "247540"}]}]
+    lim = _client(t, fake_clock).get_limit_up_tickers()
+    assert t.calls[-1]["headers"]["tr_id"] == "FHKST130000C0"
+    assert lim == {"091990", "247540"}
+
+
+def test_get_exp_closing_prices_maps_ticker_to_price(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST117300C0"] = [{"output": [
+        {"mksc_shrn_iscd": "000660", "antc_cnpr": "24550"},
+        {"stck_shrn_iscd": "005930", "antc_cnpr": "71200"}]}]
+    prices = _client(t, fake_clock).get_exp_closing_prices()
+    assert t.calls[-1]["headers"]["tr_id"] == "FHKST117300C0"
+    assert prices == {"000660": 24550.0, "005930": 71200.0}
+
+
+def test_get_exp_closing_prices_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST117300C0"] = []
+    assert _client(t, fake_clock).get_exp_closing_prices() == {}
+
+
+def test_get_provisional_flows_labels_foreign_and_institution(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPTJ04400000"] = [{"output": [
+        {"mksc_shrn_iscd": "000660", "frgn_ntby_qty": "1000", "orgn_ntby_qty": "500"},
+        {"stck_shrn_iscd": "005930", "frgn_ntby_qty": "2000", "orgn_ntby_qty": "-100"},
+        {"mksc_shrn_iscd": "035720", "frgn_ntby_qty": "-1", "orgn_ntby_qty": "-1"}]}]
+    flows = _client(t, fake_clock).get_provisional_flows()
+    assert t.calls[-1]["headers"]["tr_id"] == "FHPTJ04400000"
+    assert flows["000660"] == "외인▲기관▲"
+    assert flows["005930"] == "외인▲"
+    assert "035720" not in flows          # 순매수 없음 → 라벨 없음
+
+
+def test_get_provisional_flows_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPTJ04400000"] = []
+    assert _client(t, fake_clock).get_provisional_flows() == {}
+
+
+def test_get_stock_basic_info_parses_flags(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTPF1002R"] = [{"output": {
+        "prdt_abrv_name": "SK하이닉스", "admn_item_yn": "N",
+        "mrkt_warn_cls_code": "00", "stck_kind_cd": "0"}}]
+    info = _client(t, fake_clock).get_stock_basic_info("000660")
+    assert t.calls[-1]["headers"]["tr_id"] == "CTPF1002R"
+    assert t.calls[-1]["params"]["PDNO"] == "000660"
+    assert info["name"] == "SK하이닉스"
+    assert info["is_managed"] is False
+    assert info["is_ineligible"] is False
+
+
+def test_get_stock_basic_info_flags_managed_ineligible(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTPF1002R"] = [{"output": {
+        "prdt_abrv_name": "관리주", "admn_item_yn": "Y"}}]
+    info = _client(t, fake_clock).get_stock_basic_info("123450")
+    assert info["is_managed"] is True
+    assert info["is_ineligible"] is True
+
+
+def test_get_stock_basic_info_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTPF1002R"] = []
+    assert _client(t, fake_clock).get_stock_basic_info("000660") == {}
