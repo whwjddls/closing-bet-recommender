@@ -9,8 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from app.api import (  # noqa: E402  (env 주입 후 임포트)
-    backtest, calendar, disclosures, health, market, performance, recommendations,
-    reminder, stock, universe,
+    backtest, calendar, disclosures, health, highs, market, performance,
+    recommendations, reminder, stock, universe,
 )
 from app.store.db import init_db  # noqa: E402
 
@@ -39,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(market.router)
     app.include_router(calendar.router)
     app.include_router(disclosures.router)
+    app.include_router(highs.router)
     return app
 
 

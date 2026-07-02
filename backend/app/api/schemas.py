@@ -252,6 +252,15 @@ class UniverseResponse(BaseModel):
     rows: list[UniverseRow] = []
 
 
+class HighItem(BaseModel):              # 신고가 근접 종목 1건 — /highs 위젯
+    ticker: str
+    name: str = ""
+
+
+class HighsResponse(BaseModel):
+    items: list[HighItem] = []
+
+
 class BacktestResponse(BaseModel):
     start: date
     end: date
