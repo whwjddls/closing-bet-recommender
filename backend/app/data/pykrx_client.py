@@ -55,7 +55,12 @@ def compute_atr20(df: Any, window: int = 20) -> float:
 
 
 def compute_avg_value_20d(df: Any, window: int = 20) -> float:
-    vals = df[COL_VALUE].tail(window)
+    # 실 pykrx 시계열 OHLCV 는 '거래대금' 컬럼이 없다(종가·거래량만). 없으면 종가×거래량으로 파생.
+    if COL_VALUE in getattr(df, "columns", []):
+        vals = df[COL_VALUE].tail(window)
+    else:
+        tail = df.tail(window)
+        vals = tail[COL_CLOSE].astype(float) * tail[COL_VOLUME].astype(float)
     if len(vals) == 0:
         raise ValueError("empty value series")
     return float(vals.mean())

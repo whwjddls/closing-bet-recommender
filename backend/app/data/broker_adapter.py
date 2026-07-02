@@ -174,10 +174,14 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         return live
 
     def regime_inputs(self, market: str) -> tuple[float, list[float]]:
-        """(15:20 잠정 지수레벨, [c_{t-1}..c_{t-5}] 최신순 FINAL) — compute_regime 입력."""
+        """(지수레벨, [c_{t-1}..c_{t-5}] 최신순 FINAL) — compute_regime 입력.
+
+        레짐 게이트는 하루 단위 coarse 신호라 지수 레벨·5일선을 pykrx 한 소스로 통일한다
+        (KIS 지수코드/스케일 불일치로 소스 혼합 시 게이트가 불안정 → prev5[0]=최근 종가를 레벨로).
+        """
         mkt = market if isinstance(market, Market) else Market(market)
-        level = self.get_index_level(mkt).level
         prev5 = self._prev5_index_closes(mkt)
+        level = prev5[0] if prev5 else 0.0
         return float(level), prev5
 
     def _prev5_index_closes(self, market: Market) -> list[float]:
