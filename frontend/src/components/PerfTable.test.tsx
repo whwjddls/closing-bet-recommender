@@ -13,6 +13,7 @@ const rows: PickResult[] = [
     morning_return: 0.0053,
     outcome: 'SUCCESS',
     dart_overnight_flag: false,
+    fail_reason: null,
   },
   {
     ticker: '035720',
@@ -23,6 +24,7 @@ const rows: PickResult[] = [
     morning_return: -0.0037,
     outcome: 'FAIL',
     dart_overnight_flag: true,
+    fail_reason: '갭하락',
   },
   {
     ticker: '068270',
@@ -33,6 +35,18 @@ const rows: PickResult[] = [
     morning_return: null,
     outcome: 'NA',
     dart_overnight_flag: false,
+    fail_reason: null,
+  },
+  {
+    ticker: '005930',
+    name: 'E',
+    grade: 'A',
+    buy_price_final: 71000,
+    vwap_0900_1000: 70800,
+    morning_return: -0.0028,
+    outcome: 'FAIL',
+    dart_overnight_flag: false,
+    fail_reason: '장중반전',
   },
 ];
 
@@ -65,6 +79,23 @@ describe('PerfTable', () => {
       within(screen.getAllByTestId('perf-row')[1]).getByTestId('perf-return'),
     ).toHaveTextContent('-0.37%');
   });
+  it('FAIL 행에 fail_reason 배지(갭하락=적색/장중반전=앰버)를 표시한다', () => {
+    render(<PerfTable rows={rows} />);
+    const gapRow = screen.getAllByTestId('perf-row')[1];
+    const gapBadge = within(gapRow).getByTestId('fail-reason');
+    expect(gapBadge).toHaveTextContent('갭하락');
+    expect(gapBadge.className).toContain('fail-reason--gap');
+
+    const reversalRow = screen.getAllByTestId('perf-row')[3];
+    const reversalBadge = within(reversalRow).getByTestId('fail-reason');
+    expect(reversalBadge).toHaveTextContent('장중반전');
+    expect(reversalBadge.className).toContain('fail-reason--reversal');
+
+    // SUCCESS 행에는 배지 없음
+    const okRow = screen.getAllByTestId('perf-row')[0];
+    expect(within(okRow).queryByTestId('fail-reason')).toBeNull();
+  });
+
   it('빈 픽이면 안내 메시지', () => {
     render(<PerfTable rows={[]} />);
     expect(screen.getByTestId('perf-empty')).toBeInTheDocument();

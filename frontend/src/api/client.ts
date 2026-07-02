@@ -173,18 +173,23 @@ export interface PickResult {
   morning_return: number | null;
   outcome: Outcome;
   dart_overnight_flag: boolean;
+  fail_reason: string | null; // FAIL 사유(예: '갭하락', '장중반전'). 그 외 null.
 }
 
 export interface GradeBucket {
   grade: Grade;
   hit_rate: number;
   n: number;
+  ci_low: number; // 적중률 신뢰구간 하한(비율)
+  ci_high: number; // 적중률 신뢰구간 상한(비율)
 }
 
 export interface RegimeBucket {
   regime: string;
   hit_rate: number;
   n: number;
+  ci_low: number; // 적중률 신뢰구간 하한(비율)
+  ci_high: number; // 적중률 신뢰구간 상한(비율)
 }
 
 export interface CurvePoint {
@@ -201,6 +206,10 @@ export interface PerformanceAggregate {
   by_grade: GradeBucket[];
   by_regime: RegimeBucket[];
   cold_start: boolean;
+  mdd: number; // 최대낙폭(Max Drawdown, 비율, 음수/0 이하)
+  payoff_ratio: number; // 손익비(평균이익/평균손실)
+  max_consec_losses: number; // 최대 연속 손실 횟수
+  benchmark_curve: CurvePoint[]; // 코스피 벤치마크 누적곡선(빈 배열이면 오버레이 생략)
 }
 
 // §5 PerformanceResponse.

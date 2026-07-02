@@ -1892,6 +1892,399 @@ td.col-risk.has-risk {
   background: rgba(74, 222, 128, 0.16);
 }
 
+/* ============================================================================
+   공용 막대 채움색(방향) — 히스토그램/승수/수급 막대 공유
+   상승=빨강 / 하락=파랑 / 보합=회색 (한국 관례).
+   ========================================================================== */
+
+.dir-bg-up {
+  background: var(--up);
+}
+.dir-bg-down {
+  background: var(--down);
+}
+.dir-bg-flat {
+  background: var(--flat);
+}
+
+/* ============================================================================
+   성과추적 강화 — 리스크 지표 줄 / 신뢰구간 / 벤치마크 오버레이 / FAIL 사유
+   ========================================================================== */
+
+.agg-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.agg-metrics .metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.agg-metrics .metric-label {
+  color: var(--text-mid);
+  font-size: 11px;
+  letter-spacing: -0.01em;
+}
+
+.agg-metrics .metric-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+/* MDD 는 낙폭 — 리스크 적색으로 강조(방향색과 무관) */
+.agg-metrics .metric--risk {
+  border-left: 3px solid var(--risk);
+}
+
+.agg-metrics .metric--risk .metric-val {
+  color: var(--risk);
+}
+
+/* 신뢰구간 배지 — 넓으면(신뢰도 낮음) 흐리게 */
+.ci {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.ci.ci-wide {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+/* 누적곡선(전략) + 코스피 벤치마크 오버레이 */
+.cum-curve-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.cum-legend {
+  font-size: 11px;
+  color: var(--text-lo);
+}
+
+.cum-legend-strategy {
+  color: var(--grade-s);
+}
+
+.cum-legend-bench {
+  color: var(--text-lo);
+}
+
+.cum-chart {
+  display: block;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.cum-chart .cum-strategy {
+  stroke: var(--grade-s);
+}
+
+.cum-chart.cum-down .cum-strategy {
+  stroke: var(--down);
+}
+
+.cum-chart .cum-benchmark {
+  stroke: var(--text-lo);
+  stroke-dasharray: 3 3;
+}
+
+.cum-chart .cum-zero {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+/* FAIL 사유 배지 — 갭하락=적색 / 장중반전=앰버 */
+.fail-reason {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.fail-reason--gap {
+  color: #fff;
+  background: var(--risk);
+  border-color: var(--risk);
+}
+
+.fail-reason--reversal {
+  color: var(--provisional);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--provisional);
+}
+
+.fail-reason--other {
+  color: var(--text-mid);
+  background: var(--bg-2);
+}
+
+/* ============================================================================
+   신호 패널 — 5승수 막대(1.0 기준 부스트/드래그)
+   ========================================================================== */
+
+.signal-panel {
+  margin: 12px 0;
+}
+
+.mult-bars {
+  display: grid;
+  gap: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.mult-bar-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 52px;
+  align-items: center;
+  gap: 10px;
+}
+
+.mult-bar-label {
+  color: var(--text-mid);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.mult-bar-track {
+  position: relative;
+  height: 12px;
+  background: var(--bg-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+/* 1.0 기준선(중앙) */
+.mult-bar-mid {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text-lo);
+  opacity: 0.6;
+  z-index: 1;
+}
+
+.mult-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mult-bar-val {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-hi);
+  text-align: right;
+}
+
+/* veto 게이트 차단(0)일 때 적색 표기 */
+.mult-bar-row[data-dir='down'][data-testid='mult-bar-veto'] .mult-bar-val {
+  color: var(--risk);
+}
+
+/* ============================================================================
+   거래대금 히스토그램(종목상세) — 일봉 하단 막대
+   ========================================================================== */
+
+.volume-histogram {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px 12px;
+  margin: 12px 0;
+}
+
+.volume-histogram .vh-title {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.volume-histogram .vh-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 56px;
+}
+
+.volume-histogram .vh-bar-cell {
+  flex: 1 1 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+  min-width: 2px;
+}
+
+.volume-histogram .vh-bar {
+  display: block;
+  width: 100%;
+  max-width: 14px;
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+
+.volume-histogram .vh-empty {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   종목별 5일 수급 막대(외인·기관) — 0선 기준 대칭
+   ========================================================================== */
+
+.supply-flow {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.supply-flow .sf-title {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.supply-flow .sf-scope {
+  color: var(--text-lo);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.supply-flow .sf-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.supply-flow .sf-row-label {
+  color: var(--text-mid);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.supply-flow .sf-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.supply-flow .sf-bar-cell {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.supply-flow .sf-bar-track {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 0선(중앙) */
+.supply-flow .sf-bar-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--border);
+}
+
+.supply-flow .sf-bar {
+  position: absolute;
+  width: 60%;
+  max-width: 18px;
+  border-radius: 2px;
+}
+
+/* +매수(상승빨강)은 0선 위쪽, −매도(하락파랑)은 아래쪽 */
+.supply-flow .sf-bar-up {
+  bottom: 50%;
+  background: var(--up);
+}
+
+.supply-flow .sf-bar-down {
+  top: 50%;
+  background: var(--down);
+}
+
+.supply-flow .sf-bar-flat {
+  top: calc(50% - 1px);
+  height: 2px !important;
+  background: var(--flat);
+}
+
+.supply-flow .sf-bar-date {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 9.5px;
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+
+.supply-flow .sf-legend {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-mid);
+}
+
+.supply-flow .sf-empty {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
 /* ── 반응형: 좁은 화면에서 컨트롤 래핑 ───────────────────── */
 @media (max-width: 640px) {
   .global-header {
@@ -1909,5 +2302,8 @@ td.col-risk.has-risk {
   .picks-meta {
     margin-left: 0;
     flex-wrap: wrap;
+  }
+  .agg-metrics .metric {
+    flex: 1 1 0;
   }
 }

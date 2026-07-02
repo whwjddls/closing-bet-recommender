@@ -7,6 +7,14 @@ const OUTCOME_LABEL: Record<PickResult['outcome'], string> = {
   NA: 'N/A',
 };
 
+// FAIL 사유별 색: 갭하락(하방 손실)=적색, 장중반전=앰버, 그 외=중립.
+function failReasonClass(reason: string): string {
+  if (reason.includes('갭하락')) return 'fail-reason--gap';
+  if (reason.includes('장중반전') || reason.includes('반전'))
+    return 'fail-reason--reversal';
+  return 'fail-reason--other';
+}
+
 export default function PerfTable({ rows }: { rows: PickResult[] }) {
   if (rows.length === 0) {
     return <p data-testid="perf-empty">채점할 어제 픽이 없습니다.</p>;
@@ -46,7 +54,17 @@ export default function PerfTable({ rows }: { rows: PickResult[] }) {
             >
               {formatPercent(r.morning_return)}
             </td>
-            <td>{OUTCOME_LABEL[r.outcome]}</td>
+            <td>
+              {OUTCOME_LABEL[r.outcome]}
+              {r.outcome === 'FAIL' && r.fail_reason && (
+                <span
+                  data-testid="fail-reason"
+                  className={`fail-reason ${failReasonClass(r.fail_reason)}`}
+                >
+                  {r.fail_reason}
+                </span>
+              )}
+            </td>
             <td>
               {r.dart_overnight_flag && (
                 <span data-testid="dart-flag" className="tag-dart">

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import Performance from './Performance';
 import * as api from '../api/client';
 import type { PerformanceResponse } from '../api/client';
@@ -16,6 +16,18 @@ const warm: PerformanceResponse = {
       morning_return: 0.0053,
       outcome: 'SUCCESS',
       dart_overnight_flag: false,
+      fail_reason: null,
+    },
+    {
+      ticker: '035720',
+      name: 'C',
+      grade: 'B',
+      buy_price_final: 8120,
+      vwap_0900_1000: 8090,
+      morning_return: -0.019,
+      outcome: 'FAIL',
+      dart_overnight_flag: false,
+      fail_reason: '갭하락',
     },
   ],
   aggregate: {
@@ -23,17 +35,24 @@ const warm: PerformanceResponse = {
     hit_rate: 0.58,
     avg_morning_return: 0.004,
     cold_start: false,
+    mdd: -0.087,
+    payoff_ratio: 1.73,
+    max_consec_losses: 4,
     cumulative_curve: [
       { date: '2026-06-27', cum: 0.01 },
       { date: '2026-06-29', cum: 0.018 },
     ],
+    benchmark_curve: [
+      { date: '2026-06-27', cum: 0.005 },
+      { date: '2026-06-29', cum: 0.009 },
+    ],
     by_grade: [
-      { grade: 'S', hit_rate: 0.64, n: 12 },
-      { grade: 'A', hit_rate: 0.55, n: 20 },
+      { grade: 'S', hit_rate: 0.64, n: 12, ci_low: 0.5, ci_high: 0.76 },
+      { grade: 'A', hit_rate: 0.55, n: 20, ci_low: 0.2, ci_high: 0.9 },
     ],
     by_regime: [
-      { regime: '1.0', hit_rate: 0.6, n: 30 },
-      { regime: '0.5', hit_rate: 0.48, n: 12 },
+      { regime: '1.0', hit_rate: 0.6, n: 30, ci_low: 0.48, ci_high: 0.71 },
+      { regime: '0.5', hit_rate: 0.48, n: 12, ci_low: 0.25, ci_high: 0.7 },
     ],
   },
 };
@@ -53,7 +72,67 @@ describe('Performance', () => {
     expect(screen.getByTestId('by-grade-S')).toHaveTextContent('64%');
     expect(screen.getByTestId('by-regime-1.0')).toHaveTextContent('60%');
     expect(screen.getByTestId('cum-curve')).toBeInTheDocument();
-    expect(screen.getAllByTestId('perf-row')).toHaveLength(1);
+    expect(screen.getAllByTestId('perf-row')).toHaveLength(2);
+  });
+
+  it('리스크 지표 줄(MDD·손익비·최대연속손실)을 보여준다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('metric-mdd')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('metric-mdd')).toHaveTextContent('-8.70%');
+    expect(screen.getByTestId('metric-payoff')).toHaveTextContent('1.73');
+    expect(screen.getByTestId('metric-consec-losses')).toHaveTextContent('4회');
+  });
+
+  it('등급 신뢰구간을 렌더하고, 넓은 구간은 흐리게(ci-wide) 표시한다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('by-grade-S')).toBeInTheDocument(),
+    );
+    // S: 50~76 (폭 26%p) → 좁음, A: 20~90 (폭 70%p) → 넓음
+    const sCi = within(screen.getByTestId('by-grade-S')).getByTestId('ci');
+    const aCi = within(screen.getByTestId('by-grade-A')).getByTestId('ci');
+    expect(sCi).toHaveTextContent('[50%~76%]');
+    expect(sCi).toHaveAttribute('data-wide', 'false');
+    expect(aCi).toHaveAttribute('data-wide', 'true');
+  });
+
+  it('benchmark_curve 가 있으면 코스피 오버레이(회색 라인)를 그린다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('benchmark-line')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('cum-chart')).toHaveAttribute(
+      'data-has-benchmark',
+      'true',
+    );
+  });
+
+  it('benchmark_curve 가 빈 배열이면 오버레이를 생략한다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue({
+      ...warm,
+      aggregate: { ...warm.aggregate, benchmark_curve: [] },
+    });
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('cum-chart')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('benchmark-line')).toBeNull();
+  });
+
+  it('FAIL 픽에 fail_reason 배지(갭하락)를 표시한다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('fail-reason')).toBeInTheDocument(),
+    );
+    const badge = screen.getByTestId('fail-reason');
+    expect(badge).toHaveTextContent('갭하락');
+    expect(badge.className).toContain('fail-reason--gap');
   });
 
   it('콜드스타트(표본<30)면 누적 중 캡션 + 게이팅(회색) 적용', async () => {
