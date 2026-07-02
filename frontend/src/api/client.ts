@@ -228,6 +228,23 @@ export interface PerformanceResponse {
   aggregate: PerformanceAggregate;
 }
 
+// GET /reminder — 어제(가장 최근) 픽들의 익일 오전 청산 관리 뷰.
+// morning_vwap 이 null 이면 KIS 분봉 미연동(추정 미가능) → 정직 표기.
+export interface ReminderPick {
+  ticker: string;
+  name: string;
+  grade: Grade;
+  buy_price: number | null;
+  target_price: number;
+  stop_price: number;
+  outcome: string | null; // 'SUCCESS' | 'FAIL' | 'NA' 등 백엔드 문자열(미연동이면 null)
+  morning_vwap: number | null; // 오전(09–10) VWAP 청산 기준가(미연동이면 null)
+}
+
+export interface ReminderResponse {
+  picks: ReminderPick[];
+}
+
 // §1 universe_cache 행 (스캐너).
 export interface UniverseRow {
   ticker: string;
@@ -279,3 +296,4 @@ export const fetchMarket = () => getJson<MarketResponse>(`/market`);
 export const fetchCalendar = () => getJson<CalendarResponse>(`/calendar`);
 export const fetchDisclosures = () =>
   getJson<DisclosuresResponse>(`/disclosures`);
+export const fetchReminder = () => getJson<ReminderResponse>(`/reminder`);

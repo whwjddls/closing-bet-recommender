@@ -1206,6 +1206,10 @@ td.col-risk.has-risk {
   margin: 0 0 16px;
 }
 
+.board-reminder {
+  margin: 16px 0 0;
+}
+
 .sector-heatmap {
   width: 100%;
   max-width: 420px;
@@ -2280,6 +2284,202 @@ td.col-risk.has-risk {
 }
 
 .supply-flow .sf-empty {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   익일 오전 청산 리마인더(ReminderWidget) — GET /reminder
+   매수만큼 청산도 규칙. 목표=상승빨강 / 손절=하락파랑.
+   morning_vwap 미연동이면 회색 "추정 미연동(KIS)" 정직 배지.
+   ========================================================================== */
+
+.reminder-widget {
+  background: linear-gradient(180deg, var(--bg-1), #10151d);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--provisional);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.reminder-widget .rmd-head {
+  margin-bottom: 12px;
+}
+
+.reminder-widget .rmd-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-hi);
+  letter-spacing: -0.01em;
+}
+
+.reminder-widget .rmd-title::before {
+  content: '⏰';
+  margin-right: 6px;
+}
+
+.reminder-widget .rmd-caption {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--provisional);
+  letter-spacing: -0.01em;
+}
+
+.reminder-widget .rmd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.reminder-widget .rmd-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* 등급 좌측 색바(테이블 카드와 동일 언어) */
+.reminder-widget .rmd-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--grade-c);
+}
+.reminder-widget .rmd-row.grade-S::before {
+  background: var(--grade-s);
+}
+.reminder-widget .rmd-row.grade-A::before {
+  background: var(--grade-a);
+}
+.reminder-widget .rmd-row.grade-B::before {
+  background: var(--grade-b);
+}
+
+.reminder-widget .rmd-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reminder-widget .rmd-name {
+  font-weight: 700;
+  color: var(--text-hi);
+  font-size: 13px;
+}
+
+.reminder-widget .rmd-code {
+  color: var(--text-lo);
+  font-size: 11px;
+}
+
+.reminder-widget .rmd-prices {
+  display: flex;
+  gap: 14px;
+}
+
+.reminder-widget .rmd-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.reminder-widget .rmd-cell-label {
+  color: var(--text-mid);
+  font-size: 10.5px;
+}
+
+.reminder-widget .rmd-cell-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-hi);
+}
+
+.reminder-widget .rmd-exit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.reminder-widget .rmd-exit-label {
+  color: var(--text-mid);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.reminder-widget .rmd-exit-known {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reminder-widget .rmd-vwap-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-hi);
+}
+
+/* 미연동: 값이 아니라 상태 — 회색 점선(정직 표기) */
+.reminder-widget .rmd-vwap-pending {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-lo);
+  background: transparent;
+  border: 1px dashed var(--text-lo);
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* outcome 배지 — 성공=녹 / 실패=적 / N·A=회색 */
+.reminder-widget .rmd-outcome {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.reminder-widget .rmd-outcome--success {
+  color: var(--regime-go);
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.reminder-widget .rmd-outcome--fail {
+  color: #fff;
+  background: var(--risk);
+  border-color: var(--risk);
+}
+
+.reminder-widget .rmd-outcome--na {
+  color: var(--text-mid);
+  background: var(--bg-1);
+  border-color: var(--border);
+}
+
+.reminder-widget .rmd-empty,
+.reminder-widget .rmd-loading {
   margin: 0;
   color: var(--text-lo);
   font-size: 12.5px;

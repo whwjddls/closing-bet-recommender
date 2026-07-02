@@ -18,6 +18,7 @@ import MarketInvestors from '../components/MarketInvestors';
 import CalendarWidget from '../components/CalendarWidget';
 import DisclosuresWidget from '../components/DisclosuresWidget';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
+import ReminderWidget from '../components/ReminderWidget';
 import Onboarding from '../components/Onboarding';
 
 function todayKst(): string {
@@ -145,6 +146,9 @@ export default function Board() {
           onTogglePick={togglePick}
         />
       )}
+        <section className="board-reminder" data-testid="board-reminder">
+          <ReminderWidget />
+        </section>
         <PicksTraySpacer />
       </main>
       <PicksTray
