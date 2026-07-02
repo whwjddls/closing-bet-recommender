@@ -1769,6 +1769,68 @@ td.exp-close-cell {
   color: var(--text-mid);
 }
 
+.scanner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+
+.scan-count {
+  font-size: 12.5px;
+  color: var(--text-mid);
+}
+
+.scan-count strong {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--text-hi);
+}
+
+.scan-count-eligible {
+  color: var(--text-lo);
+}
+
+.scanner-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scanner-controls select,
+.scanner-controls input {
+  accent-color: var(--grade-s);
+}
+
+.scanner-controls select {
+  background: var(--bg-2);
+  color: var(--text-hi);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.scanner-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-mid);
+  font-size: 12.5px;
+}
+
+.scan-value {
+  text-align: right;
+}
+
+.scan-empty {
+  color: var(--text-mid);
+  padding: 16px 0;
+}
+
 /* ============================================================================
    지수 스트립(IndexStrip) — GlobalHeader 바로 아래 상시 얇은 바 §3-1
    ========================================================================== */

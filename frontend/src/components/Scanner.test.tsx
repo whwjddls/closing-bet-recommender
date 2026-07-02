@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import Scanner from './Scanner';
 import type { UniverseRow } from '../api/client';
 
@@ -33,9 +34,70 @@ describe('Scanner', () => {
     expect(rows[1]).toHaveAttribute('data-eligible', 'false');
   });
 
-  it('빈 유니버스는 안내 메시지', () => {
+  it('빈 유니버스는 "장전 프리페치 전" 안내', () => {
     render(<Scanner rows={[]} />);
-    expect(screen.getByTestId('scan-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('scan-empty')).toHaveTextContent('장전 프리페치 전');
+  });
+
+  it('스캔 유니버스 종목 수(총/적격)를 카운트한다', () => {
+    render(
+      <Scanner
+        rows={[
+          row({ ticker: '1', eligible: true }),
+          row({ ticker: '2', eligible: true }),
+          row({ ticker: '3', eligible: false }),
+        ]}
+      />,
+    );
+    const count = screen.getByTestId('scan-count');
+    expect(count).toHaveTextContent('스캔 유니버스 3종목');
+    expect(count).toHaveTextContent('적격 2');
+  });
+
+  it('거래대금(억)순 내림차순 정렬이 기본', () => {
+    render(
+      <Scanner
+        rows={[
+          row({ ticker: 'SMALL', name: 'S', avg_value_20d: 1e9 }),
+          row({ ticker: 'BIG', name: 'B', avg_value_20d: 9e9 }),
+        ]}
+      />,
+    );
+    const rows = screen.getAllByTestId('scan-row');
+    expect(rows[0]).toHaveTextContent('B');
+    expect(rows[0]).toHaveTextContent('90억');
+    expect(rows[1]).toHaveTextContent('S');
+  });
+
+  it('시장순 정렬: KOSPI가 KOSDAQ보다 먼저', async () => {
+    render(
+      <Scanner
+        rows={[
+          row({ ticker: 'K1', name: 'KQ', market: 'KOSDAQ', avg_value_20d: 9e9 }),
+          row({ ticker: 'K2', name: 'KP', market: 'KOSPI', avg_value_20d: 1e9 }),
+        ]}
+      />,
+    );
+    await userEvent.selectOptions(screen.getByTestId('scan-sort'), 'market');
+    const rows = screen.getAllByTestId('scan-row');
+    expect(rows[0]).toHaveTextContent('KP');
+    expect(rows[1]).toHaveTextContent('KQ');
+  });
+
+  it('적격만 토글: 부적격 행을 숨긴다', async () => {
+    render(
+      <Scanner
+        rows={[
+          row({ ticker: 'OK', name: 'OK', eligible: true }),
+          row({ ticker: 'NG', name: 'NG', eligible: false }),
+        ]}
+      />,
+    );
+    expect(screen.getAllByTestId('scan-row')).toHaveLength(2);
+    await userEvent.click(screen.getByTestId('scan-eligible-only'));
+    const rows = screen.getAllByTestId('scan-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('OK');
   });
 
   it('as_of 를 스캔 기준일로 표기한다', () => {

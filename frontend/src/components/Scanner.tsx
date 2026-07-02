@@ -1,5 +1,22 @@
-import type { UniverseRow } from '../api/client';
-import { formatPrice } from '../lib/format';
+import { useMemo, useState } from 'react';
+import type { Market, UniverseRow } from '../api/client';
+
+type ScanSort = 'value' | 'market';
+const MARKET_ORDER: Record<string, number> = { KOSPI: 0, KOSDAQ: 1 };
+
+// 20일 평균 거래대금을 억 단위로 표기(정렬·가독). 결측이면 —.
+function formatValueEok(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  const eok = value / 1e8;
+  return `${eok.toLocaleString('ko-KR', {
+    maximumFractionDigits: eok >= 10 ? 0 : 1,
+  })}억`;
+}
+
+// null-safe 내림차순(결측은 항상 뒤로).
+function byValueDesc(a: UniverseRow, b: UniverseRow): number {
+  return (b.avg_value_20d ?? -Infinity) - (a.avg_value_20d ?? -Infinity);
+}
 
 export default function Scanner({
   rows,
@@ -8,42 +25,101 @@ export default function Scanner({
   rows: UniverseRow[];
   asOf?: string | null;
 }) {
-  if (rows.length === 0) {
-    return <p data-testid="scan-empty">후보 풀 데이터가 없습니다.</p>;
+  const [sortKey, setSortKey] = useState<ScanSort>('value');
+  const [eligibleOnly, setEligibleOnly] = useState(false);
+
+  const total = rows.length;
+  const eligibleCount = useMemo(
+    () => rows.filter((r) => r.eligible).length,
+    [rows],
+  );
+
+  const visible = useMemo(() => {
+    let r = eligibleOnly ? rows.filter((x) => x.eligible) : [...rows];
+    r = [...r].sort((a, b) => {
+      if (sortKey === 'market') {
+        const m =
+          (MARKET_ORDER[a.market as Market] ?? 9) -
+          (MARKET_ORDER[b.market as Market] ?? 9);
+        if (m !== 0) return m;
+        return byValueDesc(a, b);
+      }
+      return byValueDesc(a, b);
+    });
+    return r;
+  }, [rows, sortKey, eligibleOnly]);
+
+  // 장전 프리페치 전(유니버스 미적재)이면 정직한 안내.
+  if (total === 0) {
+    return (
+      <p data-testid="scan-empty" className="scan-empty">
+        스캔 풀 데이터가 없습니다 — 장전 프리페치 전입니다.
+      </p>
+    );
   }
+
   return (
-    <table className="scanner">
-      <caption data-testid="scan-as-of">스캔 기준일 {asOf ?? '-'}</caption>
-      <thead>
-        <tr>
-          <th>종목/코드</th>
-          <th>시장</th>
-          <th>20일평균거래대금</th>
-          <th>적격</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr
-            key={r.ticker}
-            data-testid="scan-row"
-            data-eligible={r.eligible}
-            className={r.eligible ? '' : 'scan-excluded'}
+    <section className="scanner-wrap" data-testid="scanner">
+      <div className="scanner-head">
+        <span className="scan-count" data-testid="scan-count">
+          스캔 유니버스 <strong>{total}</strong>종목
+          <span className="scan-count-eligible"> · 적격 {eligibleCount}</span>
+        </span>
+        <div className="scanner-controls">
+          <select
+            data-testid="scan-sort"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as ScanSort)}
+            aria-label="스캐너 정렬"
           >
-            <td>
-              {r.name} <small>{r.ticker}</small>
-            </td>
-            <td>{r.market}</td>
-            <td>{formatPrice(r.avg_value_20d)}</td>
-            <td>
-              {r.eligible ? '○' : '×'}
-              {r.is_managed && <span className="tag">관리</span>}
-              {r.is_warning && <span className="tag">경고</span>}
-              {r.is_caution && <span className="tag">주의</span>}
-            </td>
+            <option value="value">거래대금순</option>
+            <option value="market">시장순</option>
+          </select>
+          <label>
+            <input
+              data-testid="scan-eligible-only"
+              type="checkbox"
+              checked={eligibleOnly}
+              onChange={(e) => setEligibleOnly(e.target.checked)}
+            />
+            적격만
+          </label>
+        </div>
+      </div>
+
+      <table className="scanner">
+        <caption data-testid="scan-as-of">스캔 기준일 {asOf ?? '-'}</caption>
+        <thead>
+          <tr>
+            <th>종목/코드</th>
+            <th>시장</th>
+            <th>20일평균거래대금</th>
+            <th>적격</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {visible.map((r) => (
+            <tr
+              key={r.ticker}
+              data-testid="scan-row"
+              data-eligible={r.eligible}
+              className={r.eligible ? '' : 'scan-excluded'}
+            >
+              <td>
+                {r.name} <small>{r.ticker}</small>
+              </td>
+              <td>{r.market}</td>
+              <td className="num scan-value">{formatValueEok(r.avg_value_20d)}</td>
+              <td>
+                {r.eligible ? '○' : '×'}
+                {r.is_managed && <span className="tag">관리</span>}
+                {r.is_warning && <span className="tag">경고</span>}
+                {r.is_caution && <span className="tag">주의</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
