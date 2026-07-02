@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable, Protocol
 
 from app.data.broker_adapter import IndexLevel, ValueRankEntry
@@ -17,6 +17,9 @@ TR_LIMIT_UP = "FHKST130000C0"        # 상한가 포착(capture-uplowprice)
 TR_EXP_CLOSING = "FHKST117300C0"     # 예상 체결가(exp-closing-price)
 TR_PROVISIONAL_FLOW = "FHPTJ04400000"  # 외인·기관 당일 가집계(foreign-institution-total)
 TR_STOCK_INFO = "CTPF1002R"          # 종목 기본정보(search-stock-info)
+TR_HOLIDAY = "CTCA0903R"             # 국내휴장일조회(chk-holiday)
+TR_NEWS_TITLE = "FHKST01011800"      # 종합 시황/공시(제목)(news-title)
+NEWS_MAX_ITEMS = 10
 TOKEN_PATH = "/oauth2/tokenP"
 
 # 응답 목 기반 유연 파싱용 종목코드 후보 키(TR마다 mksc_/stck_ 혼재)
@@ -306,8 +309,40 @@ class KisClient:
                 "is_warning": is_warning, "is_preferred": is_preferred,
                 "is_ineligible": bool(is_managed or is_warning or is_preferred)}
 
+    def get_holidays(self, from_date: date) -> list[date]:
+        """국내휴장일조회(chk-holiday) → opnd_yn=='N' 인 날짜 list. 실패 시 [].
+
+        응답 output rows 는 bass_dt(YYYYMMDD) + opnd_yn('N'=휴장) 형태 —
+        관대 파싱하며, 파싱 불가/네트워크 실패는 빈 리스트로 흡수(fail-open)."""
+        try:
+            resp = self._tr_request(
+                TR_HOLIDAY,
+                "/uapi/domestic-stock/v1/quotations/chk-holiday",
+                {"BASS_DT": from_date.strftime("%Y%m%d"),
+                 "CTX_AREA_NK": "", "CTX_AREA_FK": ""})
+        except Exception:                              # noqa: BLE001  (외부 IO — graceful)
+            return []
+        holidays: list[date] = []
+        for row in resp.get("output", []) or []:
+            if str(_first(row, ("opnd_yn",), "Y")).upper() != "N":
+                continue                               # 영업일(opnd_yn!=N)은 제외
+            parsed = _parse_yyyymmdd(_first(row, ("bass_dt",), None))
+            if parsed is not None:
+                holidays.append(parsed)
+        return holidays
+
 
 # ── 응답 목 기반 유연 파싱 헬퍼 ───────────────────────────────────────────
+def _parse_yyyymmdd(raw) -> date | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return datetime.strptime(str(raw), "%Y%m%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+
 def _first(row: dict, keys: tuple, default=None):
     """row 에서 keys 순서로 첫 존재값 반환(빈 문자열은 미존재로 취급)."""
     for key in keys:

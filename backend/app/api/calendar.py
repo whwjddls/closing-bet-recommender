@@ -74,14 +74,36 @@ def _session_events(cal: TradingCalendar, today: date, end: date) -> list[dict]:
     return events
 
 
+def _kis_holiday_events(kis_holidays: list[date] | None,
+                        today: date, end: date) -> list[dict]:
+    events: list[dict] = []
+    for d in kis_holidays or []:
+        if today <= d <= end:
+            events.append({"date": d, "kind": KIND_HOLIDAY, "label": LABEL_HOLIDAY})
+    return events
+
+
 def build_calendar_response(today: date, cal: TradingCalendar,
-                            horizon_days: int = HORIZON_DAYS) -> CalendarResponse:
+                            horizon_days: int = HORIZON_DAYS,
+                            kis_holidays: list[date] | None = None) -> CalendarResponse:
     """오늘 세션 정보 + 향후 horizon_days 내 notable 이벤트(휴장/조기폐장/만기/배당락).
-    네트워크 불필요 — 주입된 TradingCalendar 와 date 산술만 사용."""
+    결정론 캘린더 이벤트에 KIS 휴장일(opnd_yn=N)을 best-effort 로 merge 한다.
+    네트워크 불필요 — 주입된 TradingCalendar/휴장일 목록과 date 산술만 사용."""
     end = today + timedelta(days=horizon_days)
     raw = (_session_events(cal, today, end)
            + _witching_events(today, end)
-           + _ex_dividend_events(cal, today, end))
+           + _ex_dividend_events(cal, today, end)
+           + _kis_holiday_events(kis_holidays, today, end))
+    # (date, kind) 중복 제거 — KIS 휴장일이 결정론 휴장과 겹칠 때 이중 표기 방지.
+    seen: set[tuple[date, str]] = set()
+    deduped: list[dict] = []
+    for e in raw:
+        key = (e["date"], e["kind"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(e)
+    raw = deduped
     raw.sort(key=lambda e: (e["date"], e["kind"]))
     upcoming = [
         CalEvent(date=e["date"].isoformat(), kind=e["kind"], label=e["label"],
@@ -105,7 +127,22 @@ def get_calendar_provider() -> Callable:
     return _provider
 
 
+def get_holidays_provider() -> Callable:
+    """KIS 휴장일 공급자(chk-holiday). 테스트는 dependency_overrides 로 주입.
+    실제 구현은 호출 시점 지연 임포트 — KIS 네트워크는 provider 호출 때만 발생."""
+    def _provider(from_date: date) -> list[date]:
+        from app.data.kis_client import build_default_client
+        return build_default_client().get_holidays(from_date)
+    return _provider
+
+
 @router.get("/calendar", response_model=CalendarResponse)
-def get_calendar(provider: Callable = Depends(get_calendar_provider)) -> CalendarResponse:
+def get_calendar(provider: Callable = Depends(get_calendar_provider),
+                 holidays_provider: Callable = Depends(get_holidays_provider),
+                 ) -> CalendarResponse:
     today, cal = provider()
-    return build_calendar_response(today, cal)
+    try:
+        kis_holidays = holidays_provider(today) or []
+    except Exception:                     # KIS 실패 → 기존 결정론 동작 그대로(best-effort)
+        kis_holidays = []
+    return build_calendar_response(today, cal, kis_holidays=kis_holidays)

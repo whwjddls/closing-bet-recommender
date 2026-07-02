@@ -3,6 +3,7 @@ from datetime import date, time
 from app.api.calendar import (
     build_calendar_response,
     get_calendar_provider,
+    get_holidays_provider,
     last_trading_day_of_year,
     second_thursday,
 )
@@ -83,7 +84,60 @@ def test_calendar_endpoint_serializes(client):
 
 
 def test_calendar_endpoint_default_provider_no_network(client):
-    # 미오버라이드 → load_default_calendar(빈 표). 네트워크 없이 200.
+    # 미오버라이드 → load_default_calendar(빈 표) + 빈 KIS 휴장일. 네트워크 없이 200.
+    client.app.dependency_overrides[get_holidays_provider] = lambda: (lambda d: [])
     resp = client.get("/calendar")
     assert resp.status_code == 200
     assert "today" in resp.json()
+
+
+# ── KIS 휴장일 merge(F2) ───────────────────────────────────
+def test_kis_holidays_merged_as_holiday_events():
+    cal = TradingCalendar()                                  # 결정론 표 비어있음
+    kis = [date(2026, 6, 15), date(2026, 6, 20)]            # 창 내 KIS 휴장일
+    resp = build_calendar_response(date(2026, 6, 1), cal, kis_holidays=kis)
+    holidays = {e.date for e in resp.upcoming if e.kind == "휴장"}
+    assert "2026-06-15" in holidays
+    assert "2026-06-20" in holidays
+
+
+def test_kis_holiday_deduped_with_calendar_holiday():
+    cal = TradingCalendar(holidays={date(2026, 7, 1)})       # 결정론 휴장(창 day30)
+    kis = [date(2026, 7, 1)]                                 # 동일일 KIS 휴장
+    resp = build_calendar_response(date(2026, 6, 1), cal, kis_holidays=kis)
+    dupes = [e for e in resp.upcoming if e.date == "2026-07-01" and e.kind == "휴장"]
+    assert len(dupes) == 1                                   # 중복 제거
+
+
+def test_kis_holidays_outside_horizon_ignored():
+    cal = TradingCalendar()
+    kis = [date(2026, 9, 1)]                                 # 30일 창 밖
+    resp = build_calendar_response(date(2026, 6, 1), cal, kis_holidays=kis)
+    assert all(e.date != "2026-09-01" for e in resp.upcoming)
+
+
+def test_calendar_endpoint_merges_kis_holidays(client):
+    cal = TradingCalendar()
+
+    client.app.dependency_overrides[get_calendar_provider] = (
+        lambda: (lambda: (date(2026, 6, 1), cal)))
+    client.app.dependency_overrides[get_holidays_provider] = (
+        lambda: (lambda d: [date(2026, 6, 15)]))
+    body = client.get("/calendar").json()
+    holidays = {e["date"] for e in body["upcoming"] if e["kind"] == "휴장"}
+    assert "2026-06-15" in holidays
+
+
+def test_calendar_endpoint_graceful_when_kis_holidays_fail(client):
+    cal = TradingCalendar(holidays={date(2026, 7, 1)})
+
+    def _boom(d):
+        raise ConnectionError("KIS outage")
+
+    client.app.dependency_overrides[get_calendar_provider] = (
+        lambda: (lambda: (date(2026, 6, 1), cal)))
+    client.app.dependency_overrides[get_holidays_provider] = lambda: _boom
+    resp = client.get("/calendar")
+    assert resp.status_code == 200                           # graceful — 500 아님
+    kinds = {e["kind"] for e in resp.json()["upcoming"]}
+    assert "휴장" in kinds                                   # 결정론 휴장은 유지

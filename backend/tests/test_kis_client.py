@@ -281,3 +281,36 @@ def test_get_stock_basic_info_graceful_on_error(fake_clock):
     t.token_responses = [_token()]
     t.tr_responses["CTPF1002R"] = []
     assert _client(t, fake_clock).get_stock_basic_info("000660") == {}
+
+
+# ── 휴장일 조회(chk-holiday) ───────────────────────────────
+def test_get_holidays_returns_opnd_n_dates(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTCA0903R"] = [{"output": [
+        {"bass_dt": "20260701", "opnd_yn": "Y"},          # 영업일 → 제외
+        {"bass_dt": "20260815", "opnd_yn": "N"},          # 휴장
+        {"bass_dt": "20260101", "opnd_yn": "N"}]}]        # 휴장
+    holidays = _client(t, fake_clock).get_holidays(dt.date(2026, 7, 1))
+    last = t.calls[-1]
+    assert last["headers"]["tr_id"] == "CTCA0903R"
+    assert last["params"]["BASS_DT"] == "20260701"
+    assert last["params"]["CTX_AREA_NK"] == "" and last["params"]["CTX_AREA_FK"] == ""
+    assert holidays == [dt.date(2026, 8, 15), dt.date(2026, 1, 1)]
+
+
+def test_get_holidays_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTCA0903R"] = []                      # pop → IndexError → []
+    assert _client(t, fake_clock).get_holidays(dt.date(2026, 7, 1)) == []
+
+
+def test_get_holidays_skips_unparseable_dates(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTCA0903R"] = [{"output": [
+        {"bass_dt": "", "opnd_yn": "N"},                  # 빈 날짜 → 스킵
+        {"bass_dt": "bad", "opnd_yn": "N"},               # 파싱불가 → 스킵
+        {"bass_dt": "20260815", "opnd_yn": "N"}]}]
+    assert _client(t, fake_clock).get_holidays(dt.date(2026, 7, 1)) == [dt.date(2026, 8, 15)]
