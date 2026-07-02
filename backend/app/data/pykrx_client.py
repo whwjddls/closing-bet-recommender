@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.data.broker_adapter import HealthCheckResult
@@ -148,16 +148,68 @@ class PrefetchBundle:
     avg_value_20d: dict[str, float]
     net_purchases: dict[str, float]
     index_ma5: dict[str, float]
+    market_of: dict[str, str] = field(default_factory=dict)   # 종목→시장(top200 선정 시 확보)
 
 
-def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None) -> PrefetchBundle:
+TOP_VALUE_UNIVERSE_N = 200          # D-1 거래대금 상위 유니버스 크기(KOSPI∪KOSDAQ)
+
+
+def select_top_value_universe(px: Any, d1_s: str,
+                              top_n: int = TOP_VALUE_UNIVERSE_N) -> tuple[list[str], dict[str, str]]:
+    """D-1 거래대금 상위 top_n 유니버스(KOSPI∪KOSDAQ). get_market_ohlcv_by_ticker 2회.
+
+    반환 (tickers, market_of). 조회 실패/컬럼 부재 시 방어적으로 건너뛴다."""
+    pairs: list[tuple[str, float]] = []
+    market_of: dict[str, str] = {}
+    for market in (Market.KOSPI, Market.KOSDAQ):
+        try:
+            df = px.get_market_ohlcv_by_ticker(d1_s, pykrx_market_name(market))
+        except Exception:                                   # noqa: BLE001  (외부 IO)
+            continue
+        if df is None or len(df) == 0 or COL_VALUE not in getattr(df, "columns", []):
+            continue
+        for ticker, row in df.iterrows():
+            t = str(ticker)
+            pairs.append((t, float(row[COL_VALUE])))
+            market_of.setdefault(t, market.value)
+    pairs.sort(key=lambda p: p[1], reverse=True)            # 거래대금 내림차순
+    out: list[str] = []
+    seen: set[str] = set()
+    for ticker, _value in pairs:
+        if ticker in seen:
+            continue
+        seen.add(ticker)
+        out.append(ticker)
+        if len(out) >= top_n:
+            break
+    return out, {t: market_of[t] for t in out}
+
+
+def prefetch_top_value(run_date: dt.date, pykrx_module: Any | None = None,
+                       top_n: int = TOP_VALUE_UNIVERSE_N) -> PrefetchBundle:
+    """장전 기본 prefetch — D-1 거래대금 상위 top_n 유니버스만 FINAL 번들로 산출.
+
+    전 종목 스캔(수천 콜) 대신 top200 만 OHLCV 조회해 15:20 풀 폭주를 막는다(00 §2/T1)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    d1 = run_date - dt.timedelta(days=1)
+    universe, market_of = select_top_value_universe(px, _yyyymmdd(d1), top_n)
+    return prefetch_final(run_date, px, universe=universe, market_of=market_of)
+
+
+def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None,
+                   universe: list[str] | None = None,
+                   market_of: dict[str, str] | None = None) -> PrefetchBundle:
     """H_ref(252/60)·ATR20·20일평균거래대금·D-1수급·지수5MA·정적위생 후보 번들.
-       룩어헤드 금지 — 모든 조회 todate=D-1. pykrx 모듈 주입(미주입 시 실모듈)."""
+       룩어헤드 금지 — 모든 조회 todate=D-1. pykrx 모듈 주입(미주입 시 실모듈).
+
+       universe 주입 시 그 목록만 순회(top200 등), 미주입 시 전 종목(하위호환)."""
     px = pykrx_module if pykrx_module is not None else _load_pykrx()
     d1 = run_date - dt.timedelta(days=1)
     frm = run_date - dt.timedelta(days=LOOKBACK_DAYS)
     d1_s, frm_s = _yyyymmdd(d1), _yyyymmdd(frm)
-    universe = [str(t) for t in px.get_market_ticker_list(d1_s, "ALL")]
+    if universe is None:
+        universe = [str(t) for t in px.get_market_ticker_list(d1_s, "ALL")]
+    market_of = dict(market_of or {})
     h252: dict[str, float] = {}
     h60: dict[str, float] = {}
     atr: dict[str, float] = {}
@@ -181,7 +233,8 @@ def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None) -> Prefet
         idx = px.get_index_ohlcv(frm_s, d1_s, pykrx_index_code(market))
         if idx is not None and len(idx) > 0:
             index_ma5[market.value] = float(idx[COL_CLOSE].tail(5).mean())
-    return PrefetchBundle(run_date, universe, h252, h60, atr, avgv, net, index_ma5)
+    return PrefetchBundle(run_date, universe, h252, h60, atr, avgv, net, index_ma5,
+                          market_of=market_of)
 
 
 def fetch_confirmed_close(ticker: str, d: dt.date,

@@ -77,6 +77,37 @@ class BrokerDataAdapter(ABC):
 
 
 DEFAULT_COVERAGE_THRESHOLD = 0.70
+# 캐시(top200) 종목의 상장일수 프록시 — 정적위생(≥120)을 통과시키는 보수적 기본값.
+PREFETCH_LISTING_DAYS = 250
+
+
+def _candidate_from_prefetch(ticker: str, row, live_market: str | None,
+                             live_d1_value: float | None,
+                             net: "Mapping[str, float]") -> "StaticCandidate":
+    """FINAL 캐시 행(FinalPrefetch)으로 StaticCandidate 구성(OHLCV 재조회 없음).
+
+    캐시에 없는 필드(recent_closes 등)는 안전한 기본값을 쓴다. market 은 라이브 랭킹 →
+    캐시 저장값 → 기본(KOSPI) 순으로 확정한다."""
+    from app.engine.pipeline import StaticCandidate
+
+    high_60 = getattr(row, "h_ref_60", None)
+    high_252 = getattr(row, "h_ref_252", None)
+    atr20 = getattr(row, "atr20", None) or 0.0
+    avg_value_20d = getattr(row, "avg_value_20d", None) or 0.0
+    d1_supply_value = getattr(row, "d1_supply_value", None)
+    if d1_supply_value is None:
+        d1_supply_value = float(net.get(ticker, 0.0))
+    market = live_market or getattr(row, "market", None) or Market.KOSPI.value
+    d1_value = live_d1_value if live_d1_value is not None else avg_value_20d
+    return StaticCandidate(
+        ticker=ticker, name=ticker, market=market, sec_type="COMMON",
+        avg_value_20d=float(avg_value_20d), is_managed=False, is_warning=False,
+        is_caution=False, listing_days=PREFETCH_LISTING_DAYS,
+        high_60=float(high_60) if high_60 is not None else 0.0,
+        high_252=float(high_252) if high_252 is not None else None,
+        prev_high=float(high_60) if high_60 is not None else 0.0,
+        atr20=float(atr20), d1_supply_value=float(d1_supply_value),
+        d1_value=float(d1_value), recent_closes=())
 
 
 def compute_coverage(requested: int, returned: int) -> float:
@@ -197,12 +228,16 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         return closes[::-1]                                     # 최신순 [t-1..t-5]
 
     def build_candidates(self, run_date: date, snapshot_at: datetime, *,
-                         live_top: int = 30) -> "list[StaticCandidate]":
-        """라이브 거래대금 상위 풀 × prefetch OHLCV 파생치로 실 StaticCandidate 구성.
+                         live_top: int = 30, prefetch: "Mapping[str, Any] | None" = None,
+                         ) -> "list[StaticCandidate]":
+        """풀 = prefetch(FINAL 캐시) ∪ KIS 라이브 톱30×2 로 StaticCandidate 구성.
+
+        prefetch 에 있는 종목은 캐시 데이터로 구성해 OHLCV 재조회를 생략한다(15:20 임계경로
+        보호). prefetch 에 없는 라이브-only 종목만 per-ticker OHLCV 폴백을 수행한다.
 
         참고: sec_type/관리·경고·주의 플래그는 현 클라이언트가 노출하지 않아 보수적
-        기본값(COMMON/False)을 쓰고, listing_days 는 OHLCV 행수(≈상장 거래일)를
-        프록시로 사용한다(신규상장 <120행은 정적위생에서 fail-closed 제외).
+        기본값(COMMON/False)을 쓰고, listing_days 는 라이브 종목은 OHLCV 행수를,
+        캐시 종목은 프록시(top200=충분 유동/이력)를 사용한다.
         """
         from app.engine.pipeline import StaticCandidate
         from app.data.pykrx_client import (
@@ -211,6 +246,7 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         )
         from datetime import timedelta as _td
 
+        prefetch = prefetch or {}
         d1 = run_date - _td(days=1)
         frm = run_date - _td(days=LOOKBACK_DAYS)
         d1_s, frm_s = _yyyymmdd(d1), _yyyymmdd(frm)
@@ -226,10 +262,18 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
                 market_of[entry.ticker] = market.value
                 d1_value_of[entry.ticker] = float(entry.value)
                 pool.append(entry.ticker)
+        for ticker in prefetch:                                  # 캐시 유니버스 union(라이브 밖 종목 포함)
+            if ticker not in market_of:
+                pool.append(ticker)
 
         candidates: list[StaticCandidate] = []
         for ticker in pool:
-            df = self.get_ohlcv(ticker, frm_s, d1_s)
+            row = prefetch.get(ticker)
+            if row is not None:                                 # 캐시 종목 — OHLCV 재조회 금지
+                candidates.append(_candidate_from_prefetch(
+                    ticker, row, market_of.get(ticker), d1_value_of.get(ticker), net))
+                continue
+            df = self.get_ohlcv(ticker, frm_s, d1_s)            # 라이브-only 폴백
             if df is None or len(df) == 0:
                 continue
             try:

@@ -141,6 +141,7 @@ class FinalPrefetch(Base):
     atr20: Mapped[float | None] = mapped_column(Float)
     avg_value_20d: Mapped[float | None] = mapped_column(Float)
     d1_supply_value: Mapped[float | None] = mapped_column(Float)
+    market: Mapped[str | None] = mapped_column(String)       # 종목 소속시장(top200 선정 시 확보)
 
 
 class Run(Base):

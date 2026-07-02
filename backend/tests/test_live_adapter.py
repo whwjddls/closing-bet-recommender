@@ -111,3 +111,42 @@ def test_live_adapter_is_concrete():
     assert adapter.get_quote("A").ticker == "A"
     assert adapter.get_value_ranking(Market.KOSPI)[0].ticker == "000660"
     assert adapter.get_index_level(Market.KOSPI).level == 2650.0
+
+
+# ── T1: build_candidates 캐시 union + OHLCV 재조회 금지 ────
+def test_build_candidates_prefetch_union_no_ohlcv_refetch():
+    from datetime import date, datetime
+    from types import SimpleNamespace
+
+    adapter = _adapter()
+    calls = []
+    adapter._pykrx.get_ohlcv = lambda t, f, td: calls.append(t)   # 호출되면 기록
+    prefetch = {
+        "000660": SimpleNamespace(h_ref_252=24000.0, h_ref_60=23500.0, atr20=300.0,
+                                  avg_value_20d=5e10, d1_supply_value=8e9, market="KOSPI"),
+        "035720": SimpleNamespace(h_ref_252=98000.0, h_ref_60=95000.0, atr20=1500.0,
+                                  avg_value_20d=3e10, d1_supply_value=1e9, market="KOSDAQ"),
+    }
+    cands = adapter.build_candidates(
+        date(2026, 6, 30), datetime(2026, 6, 30, 15, 20), prefetch=prefetch)
+    tickers = {c.ticker for c in cands}
+    assert tickers == {"000660", "035720"}    # 라이브(000660) ∪ 캐시(000660,035720)
+    assert calls == []                        # 캐시 종목 → OHLCV 재조회 0회
+    by = {c.ticker: c for c in cands}
+    assert by["035720"].market == "KOSDAQ"    # 캐시 저장 market 사용
+    assert by["035720"].high_60 == 95000.0
+    assert by["000660"].market == "KOSPI"     # 라이브 랭킹 market 우선
+
+
+def test_build_candidates_falls_back_to_ohlcv_without_prefetch():
+    import pandas as pd
+    from datetime import date, datetime
+
+    adapter = _adapter()
+    df = pd.DataFrame({"고가": [100.0] * 60, "저가": [90.0] * 60,
+                       "종가": [95.0] * 60, "거래대금": [1e10] * 60})
+    calls = []
+    adapter._pykrx.get_ohlcv = lambda t, f, td: (calls.append(t), df)[1]
+    cands = adapter.build_candidates(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20))
+    assert calls == ["000660"]                # prefetch 없음 → 라이브-only OHLCV 폴백
+    assert {c.ticker for c in cands} == {"000660"}

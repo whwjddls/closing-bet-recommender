@@ -14,6 +14,8 @@ from app.data.pykrx_client import (
     compute_atr20,
     compute_avg_value_20d,
     prefetch_final,
+    prefetch_top_value,
+    select_top_value_universe,
     fetch_confirmed_close,
     health_check,
     overnight_gap_stats,
@@ -215,6 +217,60 @@ def test_prefetch_final_net_purchases_two_market_calls():
     assert len(net_calls) == 4                       # 시장(2) × 투자자(외국인·기관합계)
     assert {c[3] for c in net_calls} == {"KOSPI", "KOSDAQ"}
     assert {c[4] for c in net_calls} == {"외국인", "기관합계"}
+
+
+# ── T1: D-1 거래대금 상위 200 유니버스 선정 ──────────────
+class _FakeByTickerPx:
+    """select_top_value_universe 전용 fake — 시장별 종목 거래대금 스냅샷 제공."""
+
+    def __init__(self, frames):
+        self.frames = frames                          # market_name → df
+        self.calls: list[tuple] = []
+
+    def get_market_ohlcv_by_ticker(self, date, market="ALL"):
+        self.calls.append((date, market))
+        return self.frames.get(market)
+
+
+def _by_ticker_df(pairs):
+    idx = [t for t, _ in pairs]
+    return pd.DataFrame({"거래대금": [v for _, v in pairs]}, index=idx)
+
+
+def test_select_top_value_universe_ranks_union_of_markets():
+    px = _FakeByTickerPx({
+        "KOSPI": _by_ticker_df([("000660", 900), ("005930", 500)]),
+        "KOSDAQ": _by_ticker_df([("035720", 800), ("247540", 100)]),
+    })
+    tickers, market_of = select_top_value_universe(px, "20260629", top_n=3)
+    # 거래대금 내림차순 union → 900, 800, 500 (247540=100 컷)
+    assert tickers == ["000660", "035720", "005930"]
+    assert market_of == {"000660": "KOSPI", "035720": "KOSDAQ", "005930": "KOSPI"}
+    assert {c[1] for c in px.calls} == {"KOSPI", "KOSDAQ"}   # 시장별 1회
+
+
+def test_select_top_value_universe_graceful_on_missing_market():
+    px = _FakeByTickerPx({"KOSPI": _by_ticker_df([("000660", 900)])})  # KOSDAQ None
+    tickers, market_of = select_top_value_universe(px, "20260629", top_n=200)
+    assert tickers == ["000660"]
+    assert market_of == {"000660": "KOSPI"}
+
+
+def test_prefetch_top_value_limits_universe_and_carries_market():
+    px = _FakeByTickerPx({
+        "KOSPI": _by_ticker_df([("000660", 900)]),
+        "KOSDAQ": _by_ticker_df([("035720", 800)]),
+    })
+    # OHLCV/수급/지수는 top_value 경로에서도 필요 — 같은 fake 에 메서드 확장
+    px.ohlcv = _ohlcv(["20260626", "20260629"], [100, 120], [90, 110], [95, 115], [10, 20])
+    px.get_market_ohlcv = lambda frm, to, ticker: px.ohlcv
+    px.get_market_net_purchases_of_equities = lambda frm, to, mkt, inv: _supply("000660", 8e9)
+    px.get_index_ohlcv = lambda frm, to, code: px.ohlcv
+    bundle = prefetch_top_value(dt.date(2026, 6, 30), px, top_n=200)
+    assert isinstance(bundle, PrefetchBundle)
+    assert set(bundle.universe) == {"000660", "035720"}     # top200 union (여기선 2종목)
+    assert bundle.market_of["000660"] == "KOSPI"
+    assert bundle.market_of["035720"] == "KOSDAQ"
 
 
 # ── 오버나잇 갭 통계: gap[t]=open[t+1]/close[t]-1 ──────────

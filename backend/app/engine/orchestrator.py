@@ -74,6 +74,21 @@ def compute_modeled_avg(trailing_values, min_sessions: int = 20):
     return sum(trailing_values) / len(trailing_values)
 
 
+def _build_candidates(adapter, run_date, snapshot_at, prefetch):
+    """어댑터가 prefetch 파라미터를 지원하면 캐시 유니버스를 넘겨 풀을 확장한다.
+
+    구형 어댑터(테스트 페이크 등)는 prefetch 시그니처가 없으므로 하위호환 호출한다."""
+    import inspect
+
+    try:
+        supports = "prefetch" in inspect.signature(adapter.build_candidates).parameters
+    except (TypeError, ValueError):
+        supports = False
+    if supports:
+        return adapter.build_candidates(run_date, snapshot_at, prefetch=prefetch)
+    return adapter.build_candidates(run_date, snapshot_at)
+
+
 def _apply_prefetch(candidate, row):
     """장전 FINAL 캐시 행(FinalPrefetch)의 FINAL 지표를 StaticCandidate 에 오버레이.
 
@@ -93,17 +108,19 @@ def _apply_prefetch(candidate, row):
 def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
                     run_pipeline_fn=_run_pipeline, rvol_min_sessions: int = 20,
                     session_type: str = "정규", max_emit: int = 30) -> RunResult:
-    # ① 후보풀 = 실 StaticCandidate 리스트 (어댑터가 prefetch/랭킹으로 구성)
-    candidates = list(adapter.build_candidates(run_date, snapshot_at))
-    # ①' 장전 영속화된 FINAL 번들(H_ref/ATR20/avg_value_20d/D-1 순매수)을 로드해 후보에 오버레이
+    # ①' 장전 영속화된 FINAL 캐시(H_ref/ATR20/avg_value_20d/D-1 순매수)를 먼저 로드
+    prefetch = {}
     load_prefetch = getattr(store, "load_prefetch", None)
     if load_prefetch is not None:
-        prefetch = load_prefetch(run_date)
-        if prefetch:
-            candidates = [
-                _apply_prefetch(c, prefetch[c.ticker]) if c.ticker in prefetch else c
-                for c in candidates
-            ]
+        prefetch = load_prefetch(run_date) or {}
+    # ① 후보풀 = 실 StaticCandidate 리스트 (캐시 유니버스 ∪ 라이브 톱30×2)
+    candidates = list(_build_candidates(adapter, run_date, snapshot_at, prefetch))
+    # ①'' 캐시값을 후보에 오버레이(라이브 폴백으로 구성된 종목의 FINAL 지표 대체·정합)
+    if prefetch:
+        candidates = [
+            _apply_prefetch(c, prefetch[c.ticker]) if c.ticker in prefetch else c
+            for c in candidates
+        ]
     tickers = [c.ticker for c in candidates]
 
     # ② 라이브 시세 (벌크, 부분 실패 허용) → Mapping[str, LiveQuote]

@@ -54,7 +54,8 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
         from app.data import pykrx_client
 
         health_check = health_check or pykrx_client.health_check
-        prefetch_final = prefetch_final or pykrx_client.prefetch_final
+        # 기본 prefetch = D-1 거래대금 상위 200 유니버스만 산출(15:20 풀 폭주 방지, T1)
+        prefetch_final = prefetch_final or pykrx_client.prefetch_top_value
     if session_factory is None:
         from app.store.db import SessionLocal as session_factory
     notify = notify or _desktop_notify

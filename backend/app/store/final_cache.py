@@ -30,6 +30,7 @@ def persist_prefetch_bundle(db: Session, bundle) -> int:
         row.atr20 = bundle.atr20.get(ticker)
         row.avg_value_20d = bundle.avg_value_20d.get(ticker)
         row.d1_supply_value = bundle.net_purchases.get(ticker, 0.0)
+        row.market = getattr(bundle, "market_of", {}).get(ticker)
     return len(tickers)
 
 
