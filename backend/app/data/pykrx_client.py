@@ -301,7 +301,7 @@ def kospi_index_curve(start: dt.date, end: dt.date,
 
 SUPPLY_5D_WINDOW = 5                     # 종목별 수급 노출 최근 거래일 수
 SUPPLY_5D_LOOKBACK_DAYS = 15            # 5거래일 확보용 달력 룩백(주말·공휴일 감안)
-SUPPLY_FOREIGN_COL = "외국인"
+SUPPLY_FOREIGN_COL = "외국인합계"     # pykrx get_market_trading_value_by_date 실제 컬럼명
 SUPPLY_INSTITUTION_COL = "기관합계"
 
 
@@ -319,6 +319,8 @@ def supply_5d(ticker: str, asof: dt.date,
         return None
     if df is None or len(df) == 0:
         return None
+    if SUPPLY_FOREIGN_COL not in df.columns or SUPPLY_INSTITUTION_COL not in df.columns:
+        return None                                     # 컬럼 스키마 변동 시 500 대신 미가용
     tail = df.tail(SUPPLY_5D_WINDOW)
     foreign = tail[SUPPLY_FOREIGN_COL].astype(float).to_numpy() / EOK
     institution = tail[SUPPLY_INSTITUTION_COL].astype(float).to_numpy() / EOK

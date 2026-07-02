@@ -520,7 +520,7 @@ def _supply5d_df(rows=5):
     idx = pd.to_datetime(dates[:rows])
     # 원 단위(÷1e8 억). 외인/기관 순매수 거래대금.
     return pd.DataFrame(
-        {"외국인": [1e8, -2e8, 3e8, 0.0, 5e8][:rows],
+        {"외국인합계": [1e8, -2e8, 3e8, 0.0, 5e8][:rows],
          "기관합계": [-1e8, 2e8, -3e8, 4e8, -5e8][:rows]},
         index=idx,
     )
@@ -538,7 +538,7 @@ def test_supply_5d_returns_last_5_days_in_eok():
 def test_supply_5d_takes_only_last_5_when_more_rows():
     idx = pd.to_datetime(["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25",
                           "2026-06-26", "2026-06-29", "2026-06-30"])
-    df = pd.DataFrame({"외국인": [9e8] * 7, "기관합계": [-9e8] * 7}, index=idx)
+    df = pd.DataFrame({"외국인합계": [9e8] * 7, "기관합계": [-9e8] * 7}, index=idx)
     res = supply_5d("000660", dt.date(2026, 6, 30), _FakeSupplyPx(df=df))
     assert len(res["dates"]) == 5
     assert res["dates"][0] == "2026-06-24"                      # 최근 5거래일만

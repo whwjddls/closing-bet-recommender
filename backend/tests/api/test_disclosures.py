@@ -41,7 +41,8 @@ def test_disclosures_graceful_empty_on_provider_error(client):
 
 
 def test_disclosures_default_provider_no_network(client):
-    # 미오버라이드 → recent_disclosures 가 크리덴셜 미설정 시 [](graceful). 200 유지.
+    # 미오버라이드(실 provider) → 200 + items 는 list. 크래시 없음.
+    # (크리덴셜 미설정이면 [], .env 에 DART 키 있으면 실제 공시 목록 — 둘 다 정상.)
     resp = client.get("/disclosures")
     assert resp.status_code == 200
-    assert resp.json()["items"] == []
+    assert isinstance(resp.json()["items"], list)
