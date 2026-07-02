@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   fetchRecommendations,
   fetchUniverse,
@@ -8,6 +8,7 @@ import {
   type HealthResponse,
 } from '../api/client';
 import { notifyTop3 } from '../lib/notify';
+import { REFETCH_EVENT } from '../lib/events';
 import RecTable from '../components/RecTable';
 import RegimeGauge from '../components/RegimeGauge';
 import Scanner from '../components/Scanner';
@@ -45,14 +46,13 @@ export default function Board() {
     });
   const clearPicks = () => setPickedTickers(new Set());
 
-  useEffect(() => {
-    if (
-      typeof Notification !== 'undefined' &&
-      Notification.permission === 'default'
-    ) {
-      Notification.requestPermission?.();
-    }
-    Promise.all([fetchRecommendations(todayKst()), fetchUniverse(), fetchHealth()])
+  const loadBoard = useCallback(() => {
+    setError(null);
+    Promise.all([
+      fetchRecommendations(todayKst()),
+      fetchUniverse(),
+      fetchHealth(),
+    ])
       .then(([b, u, h]) => {
         setBoard(b);
         setUniverse(u);
@@ -61,6 +61,23 @@ export default function Board() {
       })
       .catch((e) => setError(String(e)));
   }, []);
+
+  useEffect(() => {
+    if (
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'default'
+    ) {
+      Notification.requestPermission?.();
+    }
+    loadBoard();
+  }, [loadBoard]);
+
+  // 스캔 실행 완료(RunScanButton) → 보드 데이터 재조회.
+  useEffect(() => {
+    const handler = () => loadBoard();
+    window.addEventListener(REFETCH_EVENT, handler);
+    return () => window.removeEventListener(REFETCH_EVENT, handler);
+  }, [loadBoard]);
 
   if (error)
     return (

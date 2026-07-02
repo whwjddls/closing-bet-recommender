@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchRecommendations, type RegimeInfo } from '../api/client';
+import RunScanButton from './RunScanButton';
 
 type Verdict = 'GO' | 'CAUTION' | 'RISK_OFF';
 
@@ -130,8 +131,11 @@ export default function GlobalHeader() {
         )}
       </div>
 
-      <div className="gh-right" data-testid="honesty-banner">
-        ⚠ 15:20 잠정 · 수급 D-1 · 체결 미연동
+      <div className="gh-right">
+        <span className="gh-honesty" data-testid="honesty-banner">
+          ⚠ 15:20 잠정 · 수급 D-1 · 체결 미연동
+        </span>
+        <RunScanButton />
       </div>
     </div>
   );

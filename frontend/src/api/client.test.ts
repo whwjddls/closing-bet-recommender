@@ -6,6 +6,9 @@ import {
   fetchUniverse,
   fetchHealth,
   fetchHighs,
+  triggerRun,
+  fetchRunStatus,
+  fetchNews,
 } from './client';
 
 function mockFetchOnce(body: unknown, ok = true, status = 200) {
@@ -111,5 +114,50 @@ describe('api client', () => {
   it('비정상 응답(ok=false)은 throw 하여 UI가 fail-closed 할 수 있게 한다', async () => {
     mockFetchOnce({}, false, 503);
     await expect(fetchHealth()).rejects.toThrow(/503/);
+  });
+
+  it('POST /run — 스캔 실행을 트리거하고 status를 반환한다', async () => {
+    const fn = mockFetchOnce({ status: 'started' });
+    const res = await triggerRun();
+    expect(fn).toHaveBeenCalledWith(
+      expect.stringContaining('/run'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(res.status).toBe('started');
+  });
+
+  it('POST /run — 이미 실행 중이면 already_running', async () => {
+    mockFetchOnce({ status: 'already_running' });
+    const res = await triggerRun();
+    expect(res.status).toBe('already_running');
+  });
+
+  it('GET /run/status — 실행 상태(running·last_result·last_error)를 반환한다', async () => {
+    const fn = mockFetchOnce({
+      running: false,
+      last_result: 'OK',
+      last_error: null,
+      finished_at: '2026-07-02T06:20:00+09:00',
+    });
+    const res = await fetchRunStatus();
+    expect(fn).toHaveBeenCalledWith(expect.stringContaining('/run/status'));
+    expect(res.running).toBe(false);
+    expect(res.last_result).toBe('OK');
+  });
+
+  it('GET /news/{ticker} — 종목 뉴스 items를 반환한다', async () => {
+    const fn = mockFetchOnce({
+      items: [{ datetime: '2026-07-02 14:05', title: '3분기 수주 공시' }],
+    });
+    const res = await fetchNews('000660');
+    expect(fn).toHaveBeenCalledWith(expect.stringContaining('/news/000660'));
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0].title).toBe('3분기 수주 공시');
+  });
+
+  it('GET /news/{ticker} — 빈 items도 그대로 통과시킨다', async () => {
+    mockFetchOnce({ items: [] });
+    const res = await fetchNews('000660');
+    expect(res.items).toEqual([]);
   });
 });

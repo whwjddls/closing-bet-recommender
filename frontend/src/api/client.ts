@@ -286,12 +286,44 @@ export interface HealthResponse {
   last_run_date: string | null;
 }
 
+// POST /run — 오늘 스캔을 지금 실행(트리거). 이미 돌고 있으면 already_running.
+export type RunTriggerStatus = 'started' | 'already_running';
+export interface RunTriggerResponse {
+  status: RunTriggerStatus;
+}
+
+// GET /run/status — 실행 상태 폴링(3초 주기). running=false 로 떨어지면 종료.
+// last_result: 'OK'(추천 발행) | 'UNPUBLISHED'(오늘은 못 만듦) 등 백엔드 문자열.
+export interface RunStatusResponse {
+  running: boolean;
+  last_result: string | null;
+  last_error: string | null;
+  finished_at: string | null;
+}
+
+// GET /news/{ticker} — 종목 최근 뉴스(재료 확인). 빈/실패는 정직한 placeholder.
+export interface NewsItem {
+  datetime: string;
+  title: string;
+}
+export interface NewsResponse {
+  items: NewsItem[];
+}
+
 const BASE_URL =
   (import.meta.env?.VITE_API_BASE as string | undefined) ??
   'http://localhost:8000';
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`);
+  if (!res.ok) {
+    throw new Error(`API ${path} failed: ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function postJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'POST' });
   if (!res.ok) {
     throw new Error(`API ${path} failed: ${res.status}`);
   }
@@ -312,3 +344,7 @@ export const fetchDisclosures = () =>
   getJson<DisclosuresResponse>(`/disclosures`);
 export const fetchReminder = () => getJson<ReminderResponse>(`/reminder`);
 export const fetchHighs = () => getJson<HighsResponse>(`/highs`);
+export const triggerRun = () => postJson<RunTriggerResponse>(`/run`);
+export const fetchRunStatus = () => getJson<RunStatusResponse>(`/run/status`);
+export const fetchNews = (ticker: string) =>
+  getJson<NewsResponse>(`/news/${ticker}`);
