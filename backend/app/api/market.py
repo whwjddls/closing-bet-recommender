@@ -18,7 +18,10 @@ def get_market_provider() -> Callable:
 
 @router.get("/market", response_model=MarketResponse)
 def get_market(provider: Callable = Depends(get_market_provider)) -> MarketResponse:
-    data = provider()
+    try:
+        data = provider()
+    except Exception:                     # pykrx 네트워크 장애 등 → graceful 빈 응답(0집계·[])
+        data = {}
     b = data.get("breadth") or {}
     breadth = Breadth(
         advancers=b.get("advancers", 0), decliners=b.get("decliners", 0),
