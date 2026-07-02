@@ -10,7 +10,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from app.api import (  # noqa: E402  (env 주입 후 임포트)
     backtest, calendar, disclosures, health, highs, market, performance,
-    recommendations, reminder, stock, universe,
+    recommendations, reminder, run, stock, universe,
 )
 from app.store.db import init_db  # noqa: E402
 
@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
     app.include_router(health.router)
@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar.router)
     app.include_router(disclosures.router)
     app.include_router(highs.router)
+    app.include_router(run.router)
     return app
 
 
