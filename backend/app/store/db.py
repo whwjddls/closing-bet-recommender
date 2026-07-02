@@ -6,7 +6,12 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-ENGINE_URL = "sqlite:///state/closing_bet.db"
+from app.config import get_settings
+
+# 절대경로(_BACKEND_ROOT/state 기반)로 고정 — 실행 cwd(서버 vs 스크립트)에 따라
+# 다른 .db 파일을 보던 문제 방지. CBR_DB_PATH 로 override 가능.
+_DB_PATH = get_settings().db_path
+ENGINE_URL = f"sqlite:///{_DB_PATH.as_posix()}"
 engine = create_engine(ENGINE_URL, future=True)
 SessionLocal = sessionmaker(
     bind=engine, autoflush=False, expire_on_commit=False, future=True)
