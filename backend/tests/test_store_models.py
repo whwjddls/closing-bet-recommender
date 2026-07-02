@@ -170,3 +170,23 @@ def test_universe_cache_pk_ticker_as_of(session):
     got = session.get(UniverseCache, ("000660", dt.date(2026, 6, 29)))
     assert got.eligible is True
     assert got.avg_value_20d == 8.0e10
+
+
+# ── 경량 자동 마이그레이션: 모델에 추가된 nullable 컬럼을 기존 테이블에 보강 ──
+def test_ensure_columns_adds_missing_nullable_columns(tmp_path):
+    import sqlite3
+    from sqlalchemy import create_engine, inspect
+    from app.store.db import _ensure_columns
+
+    db = tmp_path / "old.sqlite"
+    raw = sqlite3.connect(db)
+    # 구스키마 시뮬레이션: exp_close/supply_today 없는 recommendations
+    raw.execute("CREATE TABLE recommendations (id INTEGER PRIMARY KEY, run_date DATE, ticker VARCHAR)")
+    raw.commit(); raw.close()
+
+    eng = create_engine(f"sqlite:///{db.as_posix()}", future=True)
+    _ensure_columns(eng)
+    cols = {c["name"] for c in inspect(eng).get_columns("recommendations")}
+    assert "exp_close" in cols and "supply_today" in cols     # 누락 컬럼 자동 추가
+    assert "spark" in cols and "base_flag" in cols            # 과거 추가분도 커버
+    _ensure_columns(eng)                                      # 멱등(재실행 무해)
