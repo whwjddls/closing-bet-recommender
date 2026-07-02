@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import StockDetail from './StockDetail';
 import * as api from '../api/client';
@@ -42,6 +42,11 @@ const detail: StockDetailResponse = {
     core: 1.12,
   },
   overnight_gap: { mean: 0.003, std: 0.021, worst5pct: -0.032, n: 44 },
+  supply_5d: {
+    dates: ['2026-06-23', '2026-06-24', '2026-06-25', '2026-06-26', '2026-06-29'],
+    foreign: [120, -45, 80, 210, -30],
+    institution: [-60, 30, -15, 90, 40],
+  },
 };
 
 function renderAt(code: string) {
@@ -83,6 +88,64 @@ describe('StockDetail', () => {
     renderAt('000660');
     await waitFor(() =>
       expect(screen.getByTestId('base-box')).toBeInTheDocument(),
+    );
+  });
+
+  it('거래대금 히스토그램을 캔들 수만큼 렌더한다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
+    renderAt('000660');
+    await waitFor(() =>
+      expect(screen.getByTestId('volume-histogram')).toBeInTheDocument(),
+    );
+    expect(screen.getAllByTestId('volume-bar')).toHaveLength(detail.candles.length);
+  });
+
+  it('5승수 막대(신·거·시황·수급·재)를 렌더한다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
+    renderAt('000660');
+    await waitFor(() =>
+      expect(screen.getByTestId('mult-bars')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('mult-bar-s_shin')).toHaveAttribute(
+      'data-dir',
+      'up',
+    );
+    expect(screen.getByTestId('mult-bar-rvol_confirm')).toHaveAttribute(
+      'data-dir',
+      'down',
+    );
+    expect(screen.getByTestId('mult-bar-regime_mult')).toHaveAttribute(
+      'data-dir',
+      'flat',
+    );
+  });
+
+  it('종목별 5일 수급 막대를 외인·기관 두 줄로 렌더한다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
+    renderAt('000660');
+    await waitFor(() =>
+      expect(screen.getByTestId('supply-5d')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('supply-foreign')).toBeInTheDocument();
+    expect(screen.getByTestId('supply-institution')).toBeInTheDocument();
+    // 외인 5일 + 기관 5일 = 10개 막대
+    expect(screen.getAllByTestId('supply-bar')).toHaveLength(10);
+    // 첫 외인값 +120 → 매수(up), 둘째 -45 → 매도(down)
+    const bars = within(screen.getByTestId('supply-foreign')).getAllByTestId(
+      'supply-bar',
+    );
+    expect(bars[0]).toHaveAttribute('data-dir', 'up');
+    expect(bars[1]).toHaveAttribute('data-dir', 'down');
+  });
+
+  it('supply_5d 가 null 이면 "수급 데이터 없음"', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue({ ...detail, supply_5d: null });
+    renderAt('000660');
+    await waitFor(() =>
+      expect(screen.getByTestId('supply-5d-empty')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('supply-5d-empty')).toHaveTextContent(
+      '수급 데이터 없음',
     );
   });
 });

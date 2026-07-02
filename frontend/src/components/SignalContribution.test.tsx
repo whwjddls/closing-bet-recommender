@@ -23,4 +23,21 @@ describe('SignalContribution', () => {
     expect(screen.getByTestId('contrib-core')).toHaveTextContent('1.12');
     expect(screen.getByTestId('contrib-final')).toHaveTextContent('1.12');
   });
+
+  it('5승수 막대(신·거·시황·수급·재)를 1.0 기준 방향색으로 렌더한다', () => {
+    render(<SignalContribution contributions={contributions} final={1.12} />);
+    expect(screen.getByTestId('mult-bars')).toBeInTheDocument();
+    // s_shin 1.16 > 1 → up(부스트), rvol 0.93 < 1 → down(드래그), regime 1.0 → flat
+    expect(screen.getByTestId('mult-bar-s_shin')).toHaveAttribute('data-dir', 'up');
+    expect(screen.getByTestId('mult-bar-rvol_confirm')).toHaveAttribute(
+      'data-dir',
+      'down',
+    );
+    expect(screen.getByTestId('mult-bar-regime_mult')).toHaveAttribute(
+      'data-dir',
+      'flat',
+    );
+    expect(screen.getByTestId('mult-bar-supply_tilt')).toBeInTheDocument();
+    expect(screen.getByTestId('mult-bar-veto')).toBeInTheDocument();
+  });
 });

@@ -5,6 +5,8 @@ import { fetchStock, type StockDetailResponse } from '../api/client';
 import { formatPrice } from '../lib/format';
 import SignalContribution from '../components/SignalContribution';
 import OvernightGapStat from '../components/OvernightGapStat';
+import VolumeHistogram from '../components/VolumeHistogram';
+import SupplyFlow5d from '../components/SupplyFlow5d';
 
 export default function StockDetail() {
   const { code } = useParams<{ code: string }>();
@@ -79,6 +81,8 @@ export default function StockDetail() {
 
       <div ref={chartRef} data-testid="daily-chart" />
 
+      <VolumeHistogram candles={detail.candles} />
+
       {detail.base_box && (
         <p data-testid="base-box">
           베이스 박스 {formatPrice(detail.base_box.low)}~
@@ -91,6 +95,8 @@ export default function StockDetail() {
         contributions={detail.contributions}
         final={detail.final}
       />
+
+      <SupplyFlow5d supply={detail.supply_5d} />
 
       <OvernightGapStat gap={detail.overnight_gap} />
     </main>

@@ -79,6 +79,14 @@ export interface StockContributions {
   core: number;
 }
 
+// 종목별 최근 5거래일 투자자 순매수(외인/기관). +상승빨강 매수 / −하락파랑 매도.
+// 표본 부족(신규상장 등)이면 백엔드가 null 반환 → placeholder.
+export interface Supply5d {
+  dates: string[]; // 최근 5거래일(오름차순)
+  foreign: number[]; // 외국인 순매수(dates 와 동일 길이)
+  institution: number[]; // 기관 순매수(dates 와 동일 길이)
+}
+
 // 종가→익일시가 오버나잇 갭 표본 통계(표본 <20 이면 백엔드가 null 반환).
 export interface OvernightGap {
   mean: number; // 평균 갭(비율, +상승/−하락)
@@ -100,6 +108,7 @@ export interface StockDetailResponse {
   base_box: BaseBox | null;
   contributions: StockContributions;
   overnight_gap: OvernightGap | null;
+  supply_5d: Supply5d | null; // 최근 5일 수급(표본 부족이면 null)
 }
 
 // GET /market — 시장폭 + 업종 히트맵.
