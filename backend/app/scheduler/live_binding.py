@@ -68,7 +68,7 @@ def build_live_adapter():
 
     from app.data.broker_adapter import LiveBrokerDataAdapter
     from app.data.dart_client import DartClient
-    from app.data.kis_client import KisClient, KisConfig
+    from app.data.kis_client import KisClient, KisConfig, default_token_cache_path
     from app.data.pykrx_client import PykrxClient
     from app.store.db import SessionLocal
 
@@ -79,7 +79,8 @@ def build_live_adapter():
             app_key=_require_env("KIS_APP_KEY"),
             app_secret=_require_env("KIS_APP_SECRET"),
             base_url=os.environ.get("KIS_BASE_URL", KIS_DEFAULT_BASE_URL),
-            account=_require_env("KIS_ACCOUNT")))
+            account=_require_env("KIS_ACCOUNT")),
+        token_cache=default_token_cache_path())      # 파일 공유(발급 1분 1회 제한 대응)
     dart = DartClient(
         _dart_transport, _load_corp_code_map(SessionLocal),
         api_key=_require_env("DART_API_KEY"))

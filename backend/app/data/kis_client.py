@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from app.data.broker_adapter import IndexLevel, ValueRankEntry
@@ -61,7 +63,7 @@ class KisClient:
 
     def __init__(self, transport: Transport, clock: Clock, config: KisConfig,
                  *, rate_per_sec: int = 20, expiry_skew: float = 60.0,
-                 issue_throttle: float = 60.0):
+                 issue_throttle: float = 60.0, token_cache: Path | None = None):
         self._transport = transport
         self._clock = clock
         self._cfg = config
@@ -72,24 +74,67 @@ class KisClient:
         self._token_expiry: float = 0.0
         self._last_issue_ts: float | None = None
         self._last_call_ts: float | None = None
+        # 파일 공유 토큰 캐시 — KIS 접근토큰 발급은 1분 1회 제한. 요청/프로세스마다 새
+        # 인스턴스가 각자 발급하면 403 → 토큰(24h)을 파일로 공유해 발급을 하루 ~1회로.
+        self._token_cache = token_cache
+
+    # ── 토큰 파일 캐시 ────────────────────────────────────
+    def _cache_key(self) -> str:
+        return f"{self._cfg.app_key}:{self._cfg.base_url}"
+
+    def _read_token_cache(self) -> tuple[str, float] | None:
+        if self._token_cache is None or not self._token_cache.exists():
+            return None
+        try:
+            data = json.loads(self._token_cache.read_text(encoding="utf-8"))
+            if data.get("key") != self._cache_key():
+                return None                          # 다른 계정/서버 토큰 오용 방지
+            return str(data["access_token"]), float(data["expiry_ts"])
+        except Exception:                            # noqa: BLE001  (손상 파일 → 무시)
+            return None
+
+    def _write_token_cache(self, token: str, expiry_ts: float) -> None:
+        if self._token_cache is None:
+            return
+        try:
+            self._token_cache.parent.mkdir(parents=True, exist_ok=True)
+            self._token_cache.write_text(json.dumps(
+                {"access_token": token, "expiry_ts": expiry_ts,
+                 "key": self._cache_key()}), encoding="utf-8")
+        except Exception:                            # noqa: BLE001  (캐시 실패는 비치명)
+            pass
 
     # ── 토큰 ──────────────────────────────────────────────
     def _ensure_token(self) -> str:
         now = self._clock.now()
         if self._token and now < self._token_expiry - self._expiry_skew:
             return self._token
+        cached = self._read_token_cache()            # 파일 공유 토큰(타 인스턴스 발급분)
+        if cached and now < cached[1] - self._expiry_skew:
+            self._token, self._token_expiry = cached
+            return self._token
         if (self._token and self._last_issue_ts is not None
                 and (now - self._last_issue_ts) < self._issue_throttle):
             return self._token  # 재발급 throttle: stale 재사용
-        resp = self._transport(
-            "POST", f"{self._cfg.base_url}{TOKEN_PATH}",
-            headers={"content-type": "application/json"},
-            json={"grant_type": "client_credentials",
-                  "appkey": self._cfg.app_key,
-                  "appsecret": self._cfg.app_secret})
+        try:
+            resp = self._transport(
+                "POST", f"{self._cfg.base_url}{TOKEN_PATH}",
+                headers={"content-type": "application/json"},
+                json={"grant_type": "client_credentials",
+                      "appkey": self._cfg.app_key,
+                      "appsecret": self._cfg.app_secret})
+        except Exception:
+            # 발급 실패(예: 1분 1회 403) — 만료 전 캐시가 있으면 그걸로 동작(fail-soft)
+            if cached and now < cached[1]:
+                self._token, self._token_expiry = cached
+                return self._token
+            if self._token and now < self._token_expiry:
+                return self._token
+            raise
         self._token = resp["access_token"]
         self._token_expiry = now + float(resp["expires_in"])
         self._last_issue_ts = now
+        self._write_token_cache(self._token, self._token_expiry)
         return self._token
 
     # ── 레이트버짓 ────────────────────────────────────────
@@ -472,9 +517,16 @@ def _config_from_env() -> KisConfig:
     )
 
 
+def default_token_cache_path() -> Path:
+    """토큰 파일 캐시 정본 경로 — 모든 KisClient 인스턴스(라우터/파이프라인/채점)가 공유."""
+    from app.config import get_settings
+    return get_settings().state_dir / "kis_token.json"
+
+
 def build_default_client() -> KisClient:
     """운영 기본 KisClient — env 크리덴셜 + 실 transport/clock 조립(fail-closed)."""
-    return KisClient(_default_transport, _RealClock(), _config_from_env())
+    return KisClient(_default_transport, _RealClock(), _config_from_env(),
+                     token_cache=default_token_cache_path())
 
 
 def fetch_morning_vwap(ticker: str, d: date,

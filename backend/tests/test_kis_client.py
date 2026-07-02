@@ -357,3 +357,63 @@ def test_get_news_titles_graceful_on_error(fake_clock):
     t.token_responses = [_token()]
     t.tr_responses["FHKST01011800"] = []                  # pop → IndexError → []
     assert _client(t, fake_clock).get_news_titles("000660") == []
+
+
+# ── 파일 공유 토큰 캐시: 인스턴스/프로세스 간 재사용(1분 1회 발급 제한 대응) ──
+def _cache_client(transport, clock, cache_path):
+    from app.data.kis_client import KisClient, KisConfig
+    cfg = KisConfig(app_key="AK", app_secret="SK", base_url="https://x", account="1-1")
+    return KisClient(transport, clock, cfg, token_cache=cache_path)
+
+
+class _CountClock:
+    def __init__(self): self.t = 1_000.0
+    def now(self): return self.t
+    def sleep(self, s): self.t += s
+
+
+def test_token_cache_file_shared_across_instances(tmp_path):
+    cache = tmp_path / "kis_token.json"
+    issues = []
+    def t1(method, url, **kw):
+        if url.endswith("/oauth2/tokenP"):
+            issues.append(1); return {"access_token": "TOK1", "expires_in": 86400}
+        return {"output": {}}
+    c1 = _cache_client(t1, _CountClock(), cache)
+    c1._ensure_token()
+    assert len(issues) == 1 and cache.exists()          # 발급 1회 + 파일 기록
+
+    def t2(method, url, **kw):                          # 두 번째 인스턴스: 발급 시도하면 실패
+        if url.endswith("/oauth2/tokenP"):
+            raise AssertionError("should reuse cached token, not reissue")
+        return {"output": {}}
+    c2 = _cache_client(t2, _CountClock(), cache)
+    assert c2._ensure_token() == "TOK1"                 # 파일 재사용, 재발급 없음
+
+
+def test_token_issue_failure_falls_back_to_cached_file(tmp_path):
+    import json
+    cache = tmp_path / "kis_token.json"
+    cache.write_text(json.dumps({"access_token": "CACHED", "expiry_ts": 1_000.0 + 3600,
+                                 "key": "AK:https://x"}), encoding="utf-8")
+    def boom(method, url, **kw):
+        if url.endswith("/oauth2/tokenP"):
+            import requests
+            raise requests.exceptions.HTTPError("403 Forbidden")   # 발급 제한
+        return {"output": {}}
+    c = _cache_client(boom, _CountClock(), cache)
+    assert c._ensure_token() == "CACHED"                # 403 이어도 캐시로 동작
+
+
+def test_token_cache_expired_reissues(tmp_path):
+    import json
+    cache = tmp_path / "kis_token.json"
+    cache.write_text(json.dumps({"access_token": "OLD", "expiry_ts": 10.0,
+                                 "key": "AK:https://x"}), encoding="utf-8")
+    def t(method, url, **kw):
+        if url.endswith("/oauth2/tokenP"):
+            return {"access_token": "NEW", "expires_in": 86400}
+        return {"output": {}}
+    c = _cache_client(t, _CountClock(), cache)
+    assert c._ensure_token() == "NEW"                   # 만료 → 재발급 + 파일 갱신
+    assert "NEW" in cache.read_text(encoding="utf-8")
