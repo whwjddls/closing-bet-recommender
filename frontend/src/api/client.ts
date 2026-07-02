@@ -45,6 +45,10 @@ export interface Recommendation {
   supply_tilt: number;
   regime_mult: number;
   veto: number;
+  // 15:20~15:30 KIS 예상 체결가(잠정 — 확정 종가 아님). 매수가 추정 개선용. 결측 None.
+  exp_close?: number | null;
+  // 당일 외인/기관 가집계 라벨(잠정 — D-1 확정 수급 아님). 예: '외인▲'. 결측 None.
+  supply_today?: string | null;
   spark: number[];
   base_flag: boolean;
   provisional_flag: boolean;
@@ -263,6 +267,16 @@ export interface UniverseResponse {
   rows: UniverseRow[];
 }
 
+// GET /highs — 신고가(52주) 근접 종목. 장중 KIS 조회 기반(빈 배열 가능).
+export interface HighItem {
+  ticker: string;
+  name: string; // 백엔드 기본값 '' — 미상이면 빈 문자열
+}
+
+export interface HighsResponse {
+  items: HighItem[];
+}
+
 // §5 HealthResponse: status 대문자, reason 필드(필수).
 export interface HealthResponse {
   status: HealthStatus;
@@ -297,3 +311,4 @@ export const fetchCalendar = () => getJson<CalendarResponse>(`/calendar`);
 export const fetchDisclosures = () =>
   getJson<DisclosuresResponse>(`/disclosures`);
 export const fetchReminder = () => getJson<ReminderResponse>(`/reminder`);
+export const fetchHighs = () => getJson<HighsResponse>(`/highs`);

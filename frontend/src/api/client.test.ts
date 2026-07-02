@@ -5,6 +5,7 @@ import {
   fetchPerformance,
   fetchUniverse,
   fetchHealth,
+  fetchHighs,
 } from './client';
 
 function mockFetchOnce(body: unknown, ok = true, status = 200) {
@@ -89,6 +90,22 @@ describe('api client', () => {
     mockFetchOnce({ as_of: null, rows: [] });
     const uni = await fetchUniverse();
     expect(uni.as_of).toBeNull();
+  });
+
+  it('GET /highs — 신고가 근접 종목 items를 반환한다', async () => {
+    const fn = mockFetchOnce({
+      items: [{ ticker: '000660', name: 'SK하이닉스' }],
+    });
+    const res = await fetchHighs();
+    expect(fn).toHaveBeenCalledWith(expect.stringContaining('/highs'));
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0].ticker).toBe('000660');
+  });
+
+  it('GET /highs — 빈 items(장중 미조회)도 그대로 통과시킨다', async () => {
+    mockFetchOnce({ items: [] });
+    const res = await fetchHighs();
+    expect(res.items).toEqual([]);
   });
 
   it('비정상 응답(ok=false)은 throw 하여 UI가 fail-closed 할 수 있게 한다', async () => {
