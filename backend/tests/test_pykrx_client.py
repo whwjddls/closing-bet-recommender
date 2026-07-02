@@ -23,6 +23,7 @@ from app.data.pykrx_client import (
     market_investors,
     market_overview,
     kospi_index_curve,
+    supply_5d,
 )
 
 
@@ -496,3 +497,56 @@ def test_kospi_index_curve_empty_when_no_data():
 def test_kospi_index_curve_empty_on_outage():
     assert kospi_index_curve(dt.date(2026, 6, 29), dt.date(2026, 7, 1),
                              _FakeIndexPx(raises=True)) == []
+
+
+# ── S2: 종목별 5일 수급(외인·기관 순매수 거래대금, 억) ──────
+class _FakeSupplyPx:
+    """supply_5d 전용 fake — 종목별 투자자 순매수 거래대금 프레임 제공."""
+
+    def __init__(self, df=None, raises=False):
+        self.df = df
+        self.raises = raises
+        self.calls: list[tuple] = []
+
+    def get_market_trading_value_by_date(self, fromdate, todate, ticker):
+        self.calls.append((fromdate, todate, ticker))
+        if self.raises:
+            raise ConnectionError("supply outage")
+        return self.df
+
+
+def _supply5d_df(rows=5):
+    dates = ["2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30"]
+    idx = pd.to_datetime(dates[:rows])
+    # 원 단위(÷1e8 억). 외인/기관 순매수 거래대금.
+    return pd.DataFrame(
+        {"외국인": [1e8, -2e8, 3e8, 0.0, 5e8][:rows],
+         "기관합계": [-1e8, 2e8, -3e8, 4e8, -5e8][:rows]},
+        index=idx,
+    )
+
+
+def test_supply_5d_returns_last_5_days_in_eok():
+    px = _FakeSupplyPx(df=_supply5d_df())
+    res = supply_5d("000660", dt.date(2026, 6, 30), px)
+    assert res["dates"] == ["2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30"]
+    assert res["foreign"] == pytest.approx([1.0, -2.0, 3.0, 0.0, 5.0])
+    assert res["institution"] == pytest.approx([-1.0, 2.0, -3.0, 4.0, -5.0])
+    assert px.calls[-1][1] == "20260630"                        # todate=asof(룩어헤드 금지)
+
+
+def test_supply_5d_takes_only_last_5_when_more_rows():
+    idx = pd.to_datetime(["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25",
+                          "2026-06-26", "2026-06-29", "2026-06-30"])
+    df = pd.DataFrame({"외국인": [9e8] * 7, "기관합계": [-9e8] * 7}, index=idx)
+    res = supply_5d("000660", dt.date(2026, 6, 30), _FakeSupplyPx(df=df))
+    assert len(res["dates"]) == 5
+    assert res["dates"][0] == "2026-06-24"                      # 최근 5거래일만
+
+
+def test_supply_5d_none_on_empty():
+    assert supply_5d("000660", dt.date(2026, 6, 30), _FakeSupplyPx(None)) is None
+
+
+def test_supply_5d_none_on_outage():
+    assert supply_5d("000660", dt.date(2026, 6, 30), _FakeSupplyPx(raises=True)) is None

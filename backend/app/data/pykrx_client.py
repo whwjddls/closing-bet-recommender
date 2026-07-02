@@ -299,6 +299,36 @@ def kospi_index_curve(start: dt.date, end: dt.date,
     ]
 
 
+SUPPLY_5D_WINDOW = 5                     # 종목별 수급 노출 최근 거래일 수
+SUPPLY_5D_LOOKBACK_DAYS = 15            # 5거래일 확보용 달력 룩백(주말·공휴일 감안)
+SUPPLY_FOREIGN_COL = "외국인"
+SUPPLY_INSTITUTION_COL = "기관합계"
+
+
+def supply_5d(ticker: str, asof: dt.date,
+              pykrx_module: Any | None = None) -> dict | None:
+    """종목별 최근 5거래일 외인·기관 순매수 거래대금(억). 룩어헤드 금지 —
+    todate=asof 까지만 조회. 반환 ``{dates, foreign, institution}``(억 단위 float).
+    조회 실패/행 없음 → None(미가용)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    to_s = _yyyymmdd(asof)
+    frm_s = _yyyymmdd(asof - dt.timedelta(days=SUPPLY_5D_LOOKBACK_DAYS))
+    try:
+        df = px.get_market_trading_value_by_date(frm_s, to_s, ticker)
+    except Exception:                                   # noqa: BLE001  (외부 IO)
+        return None
+    if df is None or len(df) == 0:
+        return None
+    tail = df.tail(SUPPLY_5D_WINDOW)
+    foreign = tail[SUPPLY_FOREIGN_COL].astype(float).to_numpy() / EOK
+    institution = tail[SUPPLY_INSTITUTION_COL].astype(float).to_numpy() / EOK
+    return {
+        "dates": [_index_date_str(idx) for idx in tail.index],
+        "foreign": [float(v) for v in foreign],
+        "institution": [float(v) for v in institution],
+    }
+
+
 def health_check(pykrx_module: Any | None = None, *,
                  today: dt.date | None = None, min_rows: int = 120) -> HealthResult:
     """무인자 장전 헬스체크(00 §2). 지수 OHLCV(todate=D-1) + D-1 외인/기관 수급·거래대금
