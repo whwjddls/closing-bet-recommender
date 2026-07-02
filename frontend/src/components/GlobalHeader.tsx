@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchRecommendations, type RegimeInfo } from '../api/client';
+import { kstToday } from '../lib/date';
 import RunScanButton from './RunScanButton';
 
 type Verdict = 'GO' | 'CAUTION' | 'RISK_OFF';
@@ -9,11 +10,6 @@ const VERDICT_LABEL: Record<Verdict, string> = {
   CAUTION: '보수 (사이즈 절반)',
   RISK_OFF: 'RISK-OFF (스킵)',
 };
-
-function todayKst(): string {
-  const kst = new Date(Date.now() + 9 * 3600 * 1000);
-  return kst.toISOString().slice(0, 10);
-}
 
 // 마감 15:30 KST(= 06:30 UTC 당일)까지 남은 ms. 지나면 음수.
 function msUntilClose(now: Date): number {
@@ -29,11 +25,14 @@ function msUntilClose(now: Date): number {
   return target - now.getTime();
 }
 
+// 60분 미만은 MM:SS, 그 이상은 "N시간 M분"으로 사람이 읽기 쉽게.
+// (기존 "894:57" 처럼 분이 3자리로 폭주하던 문제 해결)
 function formatCountdown(ms: number): string {
-  if (ms <= 0) return '마감';
-  const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
+  const total = Math.floor(Math.max(0, ms) / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
+  if (total >= 3600) return `${h}시간 ${m}분`;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
@@ -84,7 +83,7 @@ export default function GlobalHeader() {
 
   useEffect(() => {
     let alive = true;
-    fetchRecommendations(todayKst())
+    fetchRecommendations(kstToday())
       .then((board) => {
         if (!alive) return;
         setVerdict(deriveVerdict(Object.values(board.regimes)));
@@ -105,9 +104,11 @@ export default function GlobalHeader() {
         <span
           className={`gh-countdown ${urgencyClass(remaining)}`}
           data-testid="close-countdown"
-          title="15:30 KST 마감까지"
+          title="15:30 KST 마감까지 · 지나면 다음 거래일 15:20"
         >
-          ⏱ 마감까지 {formatCountdown(remaining)}
+          {remaining <= 0
+            ? '⏱ 장 마감 · 다음 거래일 15:20'
+            : `⏱ 마감까지 ${formatCountdown(remaining)}`}
         </span>
         {dataAt && (
           <span
