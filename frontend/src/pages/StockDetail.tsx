@@ -7,6 +7,8 @@ import SignalContribution from '../components/SignalContribution';
 import OvernightGapStat from '../components/OvernightGapStat';
 import VolumeHistogram from '../components/VolumeHistogram';
 import SupplyFlow5d from '../components/SupplyFlow5d';
+import DisclosuresWidget from '../components/DisclosuresWidget';
+import NewsPanel from '../components/NewsPanel';
 
 export default function StockDetail() {
   const { code } = useParams<{ code: string }>();
@@ -37,7 +39,7 @@ export default function StockDetail() {
     series.createPriceLine({
       price: detail.high_52w,
       color: '#c00',
-      title: '52주 고가',
+      title: '1년 최고가',
     });
     series.createPriceLine({
       price: detail.prior_high,
@@ -48,12 +50,12 @@ export default function StockDetail() {
       series.createPriceLine({
         price: detail.base_box.high,
         color: '#999',
-        title: '베이스 상단',
+        title: '눌림 상단',
       });
       series.createPriceLine({
         price: detail.base_box.low,
         color: '#999',
-        title: '베이스 하단',
+        title: '눌림 하단',
       });
     }
     chart.timeScale().fitContent();
@@ -61,44 +63,91 @@ export default function StockDetail() {
   }, [detail]);
 
   if (error) return <p data-testid="detail-error">불러오기 실패: {error}</p>;
-  if (!detail) return <p>로딩 중…</p>;
+  if (!detail) return <p className="board-loading">로딩 중…</p>;
 
   return (
-    <main>
-      <header>
-        <h1>
-          {detail.name} {detail.ticker} · 현재가{' '}
-          {formatPrice(detail.price_provisional)}
-          <sup data-testid="provisional-watermark" title="종가 확정 전 잠정값">
-            {' '}
-            [잠정]
-          </sup>
-        </h1>
-        <p>
-          등급 {detail.grade} · final {detail.final.toFixed(2)}
-        </p>
+    <main className="stock-detail">
+      {/* ── 상단 요약 바 ─────────────────────────────────────── */}
+      <header className="sd-summary card">
+        <div className="sd-summary-id">
+          <span className={`grade-badge grade-${detail.grade}`}>
+            {detail.grade}
+          </span>
+          <h1 className="sd-name">
+            {detail.name}
+            <span className="sd-code mono">{detail.ticker}</span>
+          </h1>
+        </div>
+        <div className="sd-summary-metrics">
+          <div className="sd-metric">
+            <span className="sd-metric-label">현재가</span>
+            <span className="sd-metric-val mono">
+              {formatPrice(detail.price_provisional)}
+              <sup
+                data-testid="provisional-watermark"
+                className="sd-prov"
+                title="15:20 기준 값 — 마감(15:30) 때 바뀔 수 있어요"
+              >
+                15:20 기준
+              </sup>
+            </span>
+          </div>
+          <div className="sd-metric">
+            <span className="sd-metric-label">종합 점수</span>
+            <span className="sd-metric-val mono">{detail.final.toFixed(2)}</span>
+          </div>
+        </div>
       </header>
 
-      <div ref={chartRef} data-testid="daily-chart" />
+      {/* ── 2컬럼: 왜 추천? / 뭘 조심? ─────────────────────────── */}
+      <div className="sd-cols">
+        <section className="sd-col sd-why" aria-label="왜 추천?">
+          <h2 className="sd-col-title sd-col-title--why">
+            왜 추천? <small>이 종목을 고른 이유</small>
+          </h2>
 
-      <VolumeHistogram candles={detail.candles} />
+          <div ref={chartRef} data-testid="daily-chart" className="sd-chart" />
 
-      {detail.base_box && (
-        <p data-testid="base-box">
-          베이스 박스 {formatPrice(detail.base_box.low)}~
-          {formatPrice(detail.base_box.high)} ({detail.base_box.start}~
-          {detail.base_box.end})
-        </p>
-      )}
+          <VolumeHistogram candles={detail.candles} />
 
-      <SignalContribution
-        contributions={detail.contributions}
-        final={detail.final}
-      />
+          <SignalContribution
+            contributions={detail.contributions}
+            final={detail.final}
+          />
 
-      <SupplyFlow5d supply={detail.supply_5d} />
+          <SupplyFlow5d supply={detail.supply_5d} />
+        </section>
 
-      <OvernightGapStat gap={detail.overnight_gap} />
+        <section className="sd-col sd-watch" aria-label="뭘 조심?">
+          <h2 className="sd-col-title sd-col-title--watch">
+            뭘 조심? <small>사기 전에 확인</small>
+          </h2>
+
+          <OvernightGapStat gap={detail.overnight_gap} />
+
+          <div className="sd-stop card" data-testid="sd-stop">
+            <h3 className="sd-stop-title">참고 손절(계속 들고 갈 때)</h3>
+            <p className="sd-stop-body">
+              단타 기본은 <strong>다음날 아침 9~10시 매도</strong>예요. 그래도
+              계속 들고 간다면, 아래 <strong>하룻밤 가격 변동</strong> 통계의
+              최악 5% 하락폭을 손절 기준으로 참고하세요.
+            </p>
+          </div>
+
+          {detail.base_box && (
+            <p data-testid="base-box" className="sd-basebox card">
+              눌림 구간 {formatPrice(detail.base_box.low)}~
+              {formatPrice(detail.base_box.high)} ({detail.base_box.start}~
+              {detail.base_box.end})
+            </p>
+          )}
+
+          <DisclosuresWidget />
+        </section>
+      </div>
+
+      {/* ── 최근 뉴스(재료 확인) ─────────────────────────────── */}
+      {code && <NewsPanel ticker={code} />}
     </main>
   );
 }

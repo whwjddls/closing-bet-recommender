@@ -1588,6 +1588,261 @@ td.exp-close-cell {
 }
 
 /* ============================================================================
+   종목상세 레이아웃 §E — 요약 바 + 2컬럼(왜 추천? / 뭘 조심?) + 뉴스
+   ========================================================================== */
+
+.stock-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.sd-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.sd-summary-id {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.sd-summary-id .grade-badge {
+  min-width: 32px;
+  height: 32px;
+  font-size: 16px;
+  border-radius: var(--radius);
+}
+
+.sd-summary-id.grade-S .grade-badge,
+.sd-summary .grade-S {
+  background: var(--grade-s-bg);
+}
+
+.sd-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-hi);
+}
+
+.sd-code {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-lo);
+}
+
+.sd-summary-metrics {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.sd-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  min-width: 120px;
+}
+
+.sd-metric-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-mid);
+}
+
+.sd-metric-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-hi);
+}
+
+.sd-prov {
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--provisional);
+  border: 1px dashed var(--provisional);
+  cursor: help;
+  vertical-align: middle;
+}
+
+.sd-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-4);
+}
+
+@media (max-width: 900px) {
+  .sd-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sd-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.sd-col-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-bottom: var(--sp-2);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  border-bottom: 2px solid var(--border);
+}
+
+.sd-col-title small {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-lo);
+}
+
+.sd-col-title--why {
+  color: var(--up);
+  border-bottom-color: rgba(255, 77, 79, 0.35);
+}
+
+.sd-col-title--watch {
+  color: var(--provisional);
+  border-bottom-color: rgba(245, 158, 11, 0.35);
+}
+
+/* 종목상세 안의 위젯 여백 통일(각 컴포넌트 자체 margin 무력화) */
+.sd-col > .signal-panel,
+.sd-col > .volume-histogram,
+.sd-col > .supply-flow,
+.sd-col > .overnight-gap {
+  margin: 0;
+}
+
+.sd-chart {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-2);
+  overflow: hidden;
+}
+
+.sd-stop {
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 3px solid var(--provisional);
+}
+
+.sd-stop-title {
+  margin: 0 0 var(--sp-1);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-hi);
+}
+
+.sd-stop-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-mid);
+}
+
+.sd-stop-body strong {
+  color: var(--text-hi);
+}
+
+.sd-basebox {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 12.5px;
+  color: var(--text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 최근 뉴스(재료 확인) 패널 ───────────────────────────── */
+.news-panel {
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.news-title {
+  margin: 0 0 var(--sp-3);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-hi);
+  letter-spacing: -0.01em;
+}
+
+.news-title::before {
+  content: '📰';
+  margin-right: 6px;
+}
+
+.news-scope {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-lo);
+}
+
+.news-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.news-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid rgba(42, 52, 65, 0.5);
+}
+
+.news-item:last-child {
+  border-bottom: none;
+}
+
+.news-time {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-lo);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.news-headline {
+  color: var(--text-hi);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.news-empty,
+.news-loading {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
    종목상세 / 신호 기여도
    ========================================================================== */
 
