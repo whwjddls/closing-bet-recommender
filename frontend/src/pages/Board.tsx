@@ -23,10 +23,7 @@ import DisclosuresWidget from '../components/DisclosuresWidget';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
 import ReminderWidget from '../components/ReminderWidget';
 import Onboarding from '../components/Onboarding';
-
-function todayKst(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { kstToday } from '../lib/date';
 
 type Mood = 'on' | 'half' | 'off';
 
@@ -64,7 +61,7 @@ export default function Board() {
   const loadBoard = useCallback(() => {
     setError(null);
     Promise.all([
-      fetchRecommendations(todayKst()),
+      fetchRecommendations(kstToday()),
       fetchUniverse(),
       fetchHealth(),
     ])
@@ -158,7 +155,7 @@ export default function Board() {
 
             {universe && (
               <div
-                className="hero-tile scan-pool-badge"
+                className="hero-tile"
                 data-testid="scan-pool-badge"
                 title="장전 스캔 유니버스(후보 풀) 규모"
               >
@@ -192,8 +189,10 @@ export default function Board() {
           </p>
         )}
 
-        {/* ── 메인 그리드: 좌 2/3 추천 · 우 1/3 위젯 스택 ───────── */}
-        <div className="board-grid">
+        {/* ── 메인 그리드: 좌 2/3 추천 · 우 1/3 위젯 스택 ─────────
+            추천이 없으면 1컬럼으로 접어 좌측 거대 공백을 없애고
+            우측 위젯들이 전폭 카드 그리드로 흐르게 한다. */}
+        <div className={`board-grid${recCount === 0 ? ' board-grid--empty' : ''}`}>
           <div className="board-main">
             {recCount === 0 ? (
               isRiskOff ? (
