@@ -24,7 +24,7 @@ function ConfidenceInterval({
       className={`ci${wide ? ' ci-wide' : ''}`}
       data-testid="ci"
       data-wide={wide}
-      title="적중률 신뢰구간(하한~상한)"
+      title="성공률 신뢰구간(하한~상한). 넓을수록 표본이 얇아 신뢰도 낮음"
     >
       [{pct(low)}~{pct(high)}]
     </span>
@@ -50,7 +50,7 @@ export default function Performance() {
 
   return (
     <main>
-      <h1>성과 추적 ({data.eval_date})</h1>
+      <h1>성과 리포트 ({data.eval_date})</h1>
 
       <section
         data-testid="agg-panel"
@@ -59,38 +59,39 @@ export default function Performance() {
       >
         {a.cold_start && (
           <p data-testid="cold-start-caption" className="cold-start-caption">
-            데이터 누적 중 (표본 {a.sample_size} &lt; 30) — 적중률은 참고용입니다.
+            아직 기록이 쌓이는 중 (표본 {a.sample_size} &lt; 30) — 성공률은
+            참고용이에요.
           </p>
         )}
         <div className="agg-grid">
           <span data-testid="agg-hit-rate">
-            적중률 {pct(a.hit_rate)} (n={a.sample_size})
+            성공률(다음날 아침 기준) {pct(a.hit_rate)} (n={a.sample_size})
           </span>
-          <span>평균 오전수익률 {formatPercent(a.avg_morning_return)}</span>
+          <span>평균 아침 수익률 {formatPercent(a.avg_morning_return)}</span>
         </div>
 
-        {/* 리스크 지표 줄: MDD(적색) · 손익비 · 최대연속손실 */}
+        {/* 리스크 지표 줄: 최대 하락폭(적색) · 손익비 · 최대연속손실 */}
         <div className="agg-metrics" data-testid="agg-metrics">
           <div className="metric metric--risk" data-testid="metric-mdd">
-            <span className="metric-label">MDD</span>
+            <span className="metric-label">최대 하락폭</span>
             <span className="metric-val mono">{formatPercent(a.mdd)}</span>
           </div>
           <div className="metric" data-testid="metric-payoff">
-            <span className="metric-label">손익비</span>
+            <span className="metric-label">손익비(이익÷손실)</span>
             <span className="metric-val mono">{a.payoff_ratio.toFixed(2)}</span>
           </div>
           <div className="metric" data-testid="metric-consec-losses">
-            <span className="metric-label">최대 연속손실</span>
+            <span className="metric-label">최대 연속 실패</span>
             <span className="metric-val mono">{a.max_consec_losses}회</span>
           </div>
         </div>
 
         <div data-testid="cum-curve" className="cum-curve">
           <div className="cum-curve-head">
-            <span>누적곡선</span>
+            <span>수익곡선 vs 코스피</span>
             {hasBenchmark && (
               <span className="cum-legend" data-testid="benchmark-legend">
-                <span className="cum-legend-strategy">■</span> 전략{' '}
+                <span className="cum-legend-strategy">■</span> 이 전략{' '}
                 <span className="cum-legend-bench">■</span> 코스피
               </span>
             )}
@@ -115,14 +116,14 @@ export default function Performance() {
         <div className="by-regime">
           {a.by_regime.map((r) => (
             <span key={r.regime} data-testid={`by-regime-${r.regime}`}>
-              레짐 {r.regime} {pct(r.hit_rate)} (n={r.n}){' '}
+              장분위기 {r.regime} {pct(r.hit_rate)} (n={r.n}){' '}
               <ConfidenceInterval low={r.ci_low} high={r.ci_high} />
             </span>
           ))}
         </div>
       </section>
 
-      <h2>어제 픽 (확정 채점)</h2>
+      <h2>어제 추천 성적표 (확정 채점)</h2>
       <PerfTable rows={data.picks} />
     </main>
   );

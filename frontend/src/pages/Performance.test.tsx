@@ -141,7 +141,7 @@ describe('Performance', () => {
     await waitFor(() =>
       expect(screen.getByTestId('cold-start-caption')).toBeInTheDocument(),
     );
-    expect(screen.getByText(/데이터 누적 중/)).toBeInTheDocument();
+    expect(screen.getByText(/아직 기록이 쌓이는 중/)).toBeInTheDocument();
     expect(screen.getByTestId('agg-panel')).toHaveAttribute(
       'data-cold-start',
       'true',
