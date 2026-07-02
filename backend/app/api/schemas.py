@@ -270,6 +270,8 @@ class RunStatusResponse(BaseModel):     # GET /run/status — 백그라운드 �
     last_result: str | None = None      # "OK"/"UNPUBLISHED"/"SKIPPED" 등; 미실행 None
     last_error: str | None = None       # 예외 발생 시 메시지; 정상 None
     finished_at: str | None = None      # 마지막 완료 시각(ISO); 미완료 None
+    started_at: str | None = None       # 실행 시작 시각(ISO); 미실행 None
+    elapsed_sec: float | None = None    # 실행 중 경과 초(UI '스캔 중 · N분' 표시용)
 
 
 class NewsItem(BaseModel):              # 종목 뉴스 1건 — /news/{ticker}
