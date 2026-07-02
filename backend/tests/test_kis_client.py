@@ -314,3 +314,46 @@ def test_get_holidays_skips_unparseable_dates(fake_clock):
         {"bass_dt": "bad", "opnd_yn": "N"},               # 파싱불가 → 스킵
         {"bass_dt": "20260815", "opnd_yn": "N"}]}]
     assert _client(t, fake_clock).get_holidays(dt.date(2026, 7, 1)) == [dt.date(2026, 8, 15)]
+
+
+# ── 종목 뉴스 제목(news-title) ─────────────────────────────
+def test_get_news_titles_tr_id_and_parsing(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST01011800"] = [{"output": [
+        {"hts_pbnt_titl_cntt": "SK하이닉스 신고가", "data_dt": "20260701",
+         "data_tm": "093015"},
+        {"titl": "삼성전자 실적 발표", "data_dt": "20260701", "data_tm": "1430"}]}]
+    items = _client(t, fake_clock).get_news_titles("000660")
+    last = t.calls[-1]
+    assert last["headers"]["tr_id"] == "FHKST01011800"
+    assert last["params"]["FID_INPUT_ISCD"] == "000660"
+    assert items[0] == {"datetime": "2026-07-01 09:30", "title": "SK하이닉스 신고가"}
+    assert items[1] == {"datetime": "2026-07-01 14:30", "title": "삼성전자 실적 발표"}
+
+
+def test_get_news_titles_caps_at_10(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST01011800"] = [{"output": [
+        {"titl": f"뉴스{i}", "data_dt": "20260701", "data_tm": "0900"}
+        for i in range(15)]}]
+    items = _client(t, fake_clock).get_news_titles("000660")
+    assert len(items) == 10                               # 최대 10건
+
+
+def test_get_news_titles_skips_titleless_and_tolerates_missing_datetime(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST01011800"] = [{"output": [
+        {"data_dt": "20260701"},                          # 제목 없음 → 스킵
+        {"titl": "제목만 있음"}]}]                          # 날짜/시간 결측 → datetime ""
+    items = _client(t, fake_clock).get_news_titles("000660")
+    assert items == [{"datetime": "", "title": "제목만 있음"}]
+
+
+def test_get_news_titles_graceful_on_error(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST01011800"] = []                  # pop → IndexError → []
+    assert _client(t, fake_clock).get_news_titles("000660") == []

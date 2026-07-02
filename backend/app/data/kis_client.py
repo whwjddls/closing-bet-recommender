@@ -331,6 +331,38 @@ class KisClient:
                 holidays.append(parsed)
         return holidays
 
+    def get_news_titles(self, ticker: str) -> list[dict]:
+        """종합 시황/공시(제목)(news-title, FHKST01011800) → [{datetime, title}].
+
+        응답 output rows 에서 제목/날짜/시간을 관대 파싱(키 이름 후보 순회),
+        최대 NEWS_MAX_ITEMS(10)건. 네트워크/파싱 실패는 빈 리스트로 흡수."""
+        ticker = normalize_ticker(ticker)
+        try:
+            resp = self._tr_request(
+                TR_NEWS_TITLE,
+                "/uapi/domestic-stock/v1/quotations/news-title",
+                {"FID_NEWS_OFER_ENTP_CODE": "", "FID_COND_MRKT_CLS_CODE": "",
+                 "FID_INPUT_ISCD": ticker, "FID_TITL_CNTT": "",
+                 "FID_INPUT_DATE_1": "", "FID_INPUT_HOUR_1": "",
+                 "FID_RANK_SORT_CLS_CODE": "", "FID_INPUT_SRNO": ""})
+        except Exception:                              # noqa: BLE001  (외부 IO — graceful)
+            return []
+        items: list[dict] = []
+        for row in resp.get("output", []) or []:
+            title = _first(row, ("hts_pbnt_titl_cntt", "titl", "news_titl",
+                                 "titl_cntt", "cntt"), "")
+            if not title:
+                continue                               # 제목 없는 행은 스킵
+            raw_date = _first(row, ("data_dt", "bass_dt", "stck_bsop_date",
+                                    "hts_pbnt_date", "news_date"), "")
+            raw_time = _first(row, ("data_tm", "hts_pbnt_hour", "news_hour",
+                                    "input_hour_1"), "")
+            items.append({"datetime": _format_news_datetime(raw_date, raw_time),
+                          "title": str(title)})
+            if len(items) >= NEWS_MAX_ITEMS:
+                break
+        return items
+
 
 # ── 응답 목 기반 유연 파싱 헬퍼 ───────────────────────────────────────────
 def _parse_yyyymmdd(raw) -> date | None:
@@ -340,6 +372,22 @@ def _parse_yyyymmdd(raw) -> date | None:
         return datetime.strptime(str(raw), "%Y%m%d").date()
     except (TypeError, ValueError):
         return None
+
+
+def _format_news_datetime(raw_date, raw_time) -> str:
+    """YYYYMMDD/HHMMSS 후보를 'YYYY-MM-DD HH:MM' 로 관대 포맷(결측/이형은 원문 유지)."""
+    d = str(raw_date or "").strip()
+    tm = str(raw_time or "").strip()
+    parts: list[str] = []
+    if len(d) == 8 and d.isdigit():
+        parts.append(f"{d[:4]}-{d[4:6]}-{d[6:]}")
+    elif d:
+        parts.append(d)
+    if len(tm) >= 4 and tm.isdigit():
+        parts.append(f"{tm[:2]}:{tm[2:4]}")
+    elif tm:
+        parts.append(tm)
+    return " ".join(parts)
 
 
 
