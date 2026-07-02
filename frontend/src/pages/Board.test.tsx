@@ -89,6 +89,7 @@ function setup(recRes: RecommendationsResponse) {
       { name: '2차전지', change_pct: -1.4 },
     ],
   });
+  vi.spyOn(api, 'fetchHighs').mockResolvedValue({ items: [] });
 }
 
 const wrap = () =>

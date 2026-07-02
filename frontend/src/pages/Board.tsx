@@ -15,6 +15,7 @@ import HealthBadge from '../components/HealthBadge';
 import IndexStrip from '../components/IndexStrip';
 import SectorHeatmap from '../components/SectorHeatmap';
 import MarketInvestors from '../components/MarketInvestors';
+import NearHighsWidget from '../components/NearHighsWidget';
 import CalendarWidget from '../components/CalendarWidget';
 import DisclosuresWidget from '../components/DisclosuresWidget';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
@@ -116,7 +117,10 @@ export default function Board() {
         <CalendarWidget />
         <div className="board-market-panel">
           <SectorHeatmap />
-          <MarketInvestors />
+          <div className="board-side-stack">
+            <MarketInvestors />
+            <NearHighsWidget />
+          </div>
         </div>
       </div>
 

@@ -1240,6 +1240,14 @@ td.exp-close-cell {
   max-width: none;
 }
 
+/* 우측 컬럼: 투자자 수급 + 신고가 근접 위젯 세로 스택 */
+.board-side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .board-widgets {
   margin: 0 0 16px;
 }
@@ -1405,6 +1413,84 @@ td.exp-close-cell {
 
 .market-investors .mi-empty,
 .market-investors .mi-loading {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
+/* ============================================================================
+   신고가 근접 위젯(NearHighsWidget) — GET /highs
+   신고가 근접=강세 → 상승빨강 톤 칩. 빈/실패는 정직한 placeholder.
+   ========================================================================== */
+
+.near-highs {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.near-highs .nh-title {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.near-highs .nh-title::before {
+  content: '▲';
+  margin-right: 5px;
+  color: var(--up);
+  font-size: 10px;
+}
+
+.near-highs .nh-scope {
+  color: var(--text-lo);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.near-highs .nh-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.near-highs .nh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--up-bg);
+  border: 1px solid rgba(255, 77, 79, 0.35);
+  font-size: 12px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.near-highs .nh-chip:hover {
+  border-color: var(--up);
+  background: rgba(255, 77, 79, 0.16);
+}
+
+.near-highs .nh-chip-name {
+  color: var(--text-hi);
+  font-weight: 600;
+}
+
+.near-highs .nh-chip-code {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+
+.near-highs .nh-empty,
+.near-highs .nh-loading {
   margin: 0;
   color: var(--text-lo);
   font-size: 12.5px;
