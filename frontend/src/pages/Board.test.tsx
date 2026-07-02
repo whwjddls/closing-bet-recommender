@@ -143,6 +143,20 @@ describe('Board', () => {
     expect(screen.getAllByTestId('scan-row').length).toBeGreaterThan(0);
   });
 
+  it('헤더에 스캔 풀 종목 수(universe 규모) 배지를 표기한다', async () => {
+    setup({
+      run_date: '2026-06-30',
+      session_type: '정규',
+      data_available: true,
+      kis_coverage_pct: 92,
+      regimes: { KOSDAQ: regime({ market: 'KOSDAQ', regime_mult: 1 }) },
+      recommendations: [baseRec({})],
+    });
+    wrap();
+    const badge = await screen.findByTestId('scan-pool-badge');
+    expect(badge).toHaveTextContent('스캔 풀 1종목');
+  });
+
   it('저레짐(0.5)이면 반-리스크 캡션', async () => {
     setup({
       run_date: '2026-06-30',

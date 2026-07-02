@@ -987,6 +987,28 @@ td.exp-close-cell {
   color: var(--risk);
 }
 
+/* 스캔 풀 배지(헤더 커버리지 옆) — 후보 풀 규모 표기 */
+.scan-pool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-pool-badge::before {
+  content: '⛃';
+  color: var(--grade-b);
+  font-size: 11px;
+}
+
 .caption-reduced-risk {
   color: var(--regime-hold);
   background: rgba(245, 158, 11, 0.08);

@@ -102,6 +102,15 @@ export default function Board() {
           {' '}
           세션 {board.session_type ?? '-'} · 커버리지 {board.kis_coverage_pct}%
         </span>
+        {universe && (
+          <span
+            className="scan-pool-badge"
+            data-testid="scan-pool-badge"
+            title="장전 스캔 유니버스(후보 풀) 규모"
+          >
+            스캔 풀 {universe.rows.length}종목
+          </span>
+        )}
       </header>
 
       {hasReducedRisk && (
