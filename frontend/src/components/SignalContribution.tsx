@@ -10,7 +10,7 @@ interface Props {
 const MULT_BARS: { key: string; label: string; full: string }[] = [
   { key: 's_shin', label: '신고가', full: 's_shin' },
   { key: 'rvol_confirm', label: '거래량', full: 'rvol_confirm' },
-  { key: 'regime_mult', label: '장분위기', full: 'regime_mult' },
+  { key: 'regime_mult', label: '장 분위기', full: 'regime_mult' },
   { key: 'supply_tilt', label: '수급', full: 'supply_tilt' },
   { key: 'veto', label: '재료', full: 'veto' },
 ];
@@ -46,7 +46,7 @@ export default function SignalContribution({ contributions, final }: Props) {
     <div className="signal-panel">
       {/* 신호 5가지 막대 — 1.0 기준 부스트/드래그 시각화 */}
       <p className="signal-legend">
-        신호 5가지: 신고가 · 거래량 · 장분위기 · 수급 · 재료
+        신호 5가지: 신고가 · 거래량 · 장 분위기 · 수급 · 재료
       </p>
       <div
         className="mult-bars"
@@ -81,18 +81,25 @@ export default function SignalContribution({ contributions, final }: Props) {
         })}
       </div>
 
-      <dl className="signal-contribution">
-        {items.map(([key, label, value]) => (
-          <div
-            key={key}
-            data-testid={`contrib-${key}`}
-            className="contrib-row"
-          >
-            <dt>{label}</dt>
-            <dd>{key === 'veto' ? value : value.toFixed(2)}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* 원어 지표(s_신·rvol_confirm·supply_tilt…)는 기본 접힘 —
+          초보자 화면을 어지럽히지 않도록 전문가용으로 격리한다. */}
+      <details className="signal-raw" data-testid="signal-raw">
+        <summary className="signal-raw-summary">
+          전문가 보기(원시 지표)
+        </summary>
+        <dl className="signal-contribution">
+          {items.map(([key, label, value]) => (
+            <div
+              key={key}
+              data-testid={`contrib-${key}`}
+              className="contrib-row"
+            >
+              <dt>{label}</dt>
+              <dd>{key === 'veto' ? value : value.toFixed(2)}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </div>
   );
 }

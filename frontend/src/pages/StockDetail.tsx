@@ -10,6 +10,36 @@ import SupplyFlow5d from '../components/SupplyFlow5d';
 import DisclosuresWidget from '../components/DisclosuresWidget';
 import NewsPanel from '../components/NewsPanel';
 
+interface PriceLineSpec {
+  price: number;
+  color: string;
+  title: string;
+}
+
+// 같은/근접(±0.5%) 가격의 라벨이 차트에서 겹쳐 쌓이는 문제 해결.
+// 근접한 라인들을 하나로 병합해 라벨을 "1년 최고가·전고점"처럼 합친다.
+// 가격이 큰 순으로 정렬 후 그룹 대표가 대비 0.5% 이내면 같은 그룹으로 묶는다.
+const PRICE_MERGE_TOLERANCE = 0.005;
+
+function mergePriceLines(specs: PriceLineSpec[]): PriceLineSpec[] {
+  const sorted = [...specs].sort((a, b) => b.price - a.price);
+  const groups: PriceLineSpec[][] = [];
+  for (const spec of sorted) {
+    const group = groups[groups.length - 1];
+    const ref = group?.[0].price;
+    if (group && ref && Math.abs(spec.price - ref) / ref <= PRICE_MERGE_TOLERANCE) {
+      group.push(spec);
+    } else {
+      groups.push([spec]);
+    }
+  }
+  return groups.map((group) => ({
+    price: group[0].price,
+    color: group[0].color,
+    title: group.map((s) => s.title).join('·'),
+  }));
+}
+
 export default function StockDetail() {
   const { code } = useParams<{ code: string }>();
   const [detail, setDetail] = useState<StockDetailResponse | null>(null);
@@ -36,27 +66,16 @@ export default function StockDetail() {
         close: c.close,
       })),
     );
-    series.createPriceLine({
-      price: detail.high_52w,
-      color: '#c00',
-      title: '1년 최고가',
-    });
-    series.createPriceLine({
-      price: detail.prior_high,
-      color: '#08c',
-      title: '전고점',
-    });
+    const priceLines: PriceLineSpec[] = [
+      { price: detail.high_52w, color: '#c00', title: '1년 최고가' },
+      { price: detail.prior_high, color: '#08c', title: '전고점' },
+    ];
     if (detail.base_box) {
-      series.createPriceLine({
-        price: detail.base_box.high,
-        color: '#999',
-        title: '눌림 상단',
-      });
-      series.createPriceLine({
-        price: detail.base_box.low,
-        color: '#999',
-        title: '눌림 하단',
-      });
+      priceLines.push({ price: detail.base_box.high, color: '#999', title: '눌림 상단' });
+      priceLines.push({ price: detail.base_box.low, color: '#999', title: '눌림 하단' });
+    }
+    for (const line of mergePriceLines(priceLines)) {
+      series.createPriceLine(line);
     }
     chart.timeScale().fitContent();
     return () => chart.remove();
