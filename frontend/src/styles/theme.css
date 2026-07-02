@@ -681,6 +681,44 @@ td.col-risk.has-risk {
   white-space: nowrap;
 }
 
+/* ── 예상체결가 컬럼(15:20 KIS 예상 — 잠정 앰버 강조) ──────── */
+.col-exp-close {
+  text-align: right;
+  white-space: nowrap;
+}
+
+td.exp-close-cell {
+  text-align: right;
+}
+
+.exp-close-val {
+  color: var(--provisional);
+  font-weight: 700;
+  cursor: help;
+  border-bottom: 1px dashed rgba(245, 158, 11, 0.55);
+}
+
+.exp-close-dash {
+  color: var(--text-lo);
+}
+
+/* ── 당일 잠정 수급 배지(외인/기관 가집계 — 앰버, D-1 확정과 구분) ── */
+.badge-supply-today {
+  color: var(--provisional);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px dashed var(--provisional);
+  gap: 4px;
+}
+
+.badge-supply-today .badge-prov-tag {
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 /* ── 잠정 마커(앰버 점선) §2-1 신선도 ─────────────────────── */
 .prov-mark {
   color: var(--provisional);

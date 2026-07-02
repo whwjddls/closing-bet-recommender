@@ -149,6 +149,13 @@ export default function RecTable({
                 />
               </th>
               <th>매수가</th>
+              <th className="col-exp-close">
+                예상체결
+                <InfoDot
+                  label="예상"
+                  text="15:20 예상 체결가 — 마감 15:30에 확정. 잠정값"
+                />
+              </th>
               <th>
                 청산
                 <InfoDot
@@ -226,6 +233,26 @@ export default function RecTable({
                       </>
                     )}
                   </td>
+                  <td
+                    data-testid="exp-close"
+                    className="num col-exp-close exp-close-cell"
+                  >
+                    {r.exp_close != null ? (
+                      <span
+                        className="exp-close-val"
+                        title="15:20 예상 체결가"
+                      >
+                        {formatPrice(r.exp_close)}
+                      </span>
+                    ) : (
+                      <span
+                        className="exp-close-dash"
+                        aria-label="예상 체결가 없음"
+                      >
+                        —
+                      </span>
+                    )}
+                  </td>
                   <td data-testid="exit-cta" className="exit-cta">
                     <strong className="exit-primary">{r.exit_label}</strong>
                     <div className="ref-stop">
@@ -246,6 +273,16 @@ export default function RecTable({
                     <span>{r.grade}</span>
                   </td>
                   <td>
+                    {r.supply_today && (
+                      <span
+                        data-testid="supply-today-badge"
+                        className="badge badge-supply-today"
+                        title="당일 외인/기관 가집계(잠정 — D-1 확정 수급 아님)"
+                      >
+                        {r.supply_today}
+                        <span className="badge-prov-tag">잠정</span>
+                      </span>
+                    )}
                     {deriveBadges(r).map((b) => (
                       <span key={b.key} className={`badge badge-${b.key}`}>
                         {b.label}

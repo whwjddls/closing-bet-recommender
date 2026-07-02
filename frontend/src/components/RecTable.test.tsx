@@ -149,6 +149,41 @@ describe('RecTable', () => {
     expect(onTogglePick).toHaveBeenCalledWith('000660');
   });
 
+  it('예상체결가: 값이 있으면 강조 표기 + 툴팁, null이면 —', () => {
+    wrap(
+      <RecTable
+        recommendations={[
+          rec({ ticker: '111', name: 'HasExp', exp_close: 24680 }),
+          rec({ ticker: '222', name: 'NoExp', exp_close: null }),
+        ]}
+      />,
+    );
+    const rows = screen.getAllByTestId('rec-row');
+    const withExp = within(rows[0]).getByTestId('exp-close');
+    expect(withExp).toHaveTextContent('24,680');
+    expect(within(withExp).getByTitle('15:20 예상 체결가')).toBeInTheDocument();
+    const noExp = within(rows[1]).getByTestId('exp-close');
+    expect(noExp).toHaveTextContent('—');
+  });
+
+  it('당일 잠정수급 배지: supply_today 있으면 앰버 배지(잠정 표기), 없으면 미노출', () => {
+    wrap(
+      <RecTable
+        recommendations={[
+          rec({ ticker: '111', name: 'HasSup', supply_today: '외인▲' }),
+          rec({ ticker: '222', name: 'NoSup', supply_today: null }),
+        ]}
+      />,
+    );
+    const rows = screen.getAllByTestId('rec-row');
+    const badge = within(rows[0]).getByTestId('supply-today-badge');
+    expect(badge).toHaveTextContent('외인▲');
+    expect(badge).toHaveTextContent('잠정');
+    expect(
+      within(rows[1]).queryByTestId('supply-today-badge'),
+    ).not.toBeInTheDocument();
+  });
+
   it('이미 담은 행은 담음 상태(aria-pressed)로 표시', () => {
     wrap(
       <RecTable
