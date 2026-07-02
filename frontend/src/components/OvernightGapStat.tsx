@@ -20,7 +20,7 @@ export default function OvernightGapStat({
         data-testid="overnight-gap"
         aria-label="오버나잇 갭 통계"
       >
-        <h3 className="og-title">오버나잇 갭(종가→익일시가)</h3>
+        <h3 className="og-title">하룻밤 가격 변동(과거 통계)</h3>
         <p className="og-empty" data-testid="overnight-gap-empty">
           표본 부족(&lt;20일)
         </p>
@@ -38,13 +38,13 @@ export default function OvernightGapStat({
       aria-label="오버나잇 갭 통계"
     >
       <h3 className="og-title">
-        오버나잇 갭(종가→익일시가) ·{' '}
+        하룻밤 가격 변동(과거 통계) ·{' '}
         <span className="og-scope">이 종목 과거 {n}일</span>
       </h3>
 
       <dl className="og-grid">
         <div className="og-cell">
-          <dt>평균 갭</dt>
+          <dt>평균 변동</dt>
           <dd
             className={`og-val mono dir-${meanDir}`}
             data-testid="overnight-gap-mean"
@@ -53,13 +53,13 @@ export default function OvernightGapStat({
           </dd>
         </div>
         <div className="og-cell">
-          <dt>변동성 σ</dt>
+          <dt>출렁임 σ</dt>
           <dd className="og-val mono og-neutral" data-testid="overnight-gap-std">
             {formatMagnitude(std)}
           </dd>
         </div>
         <div className="og-cell">
-          <dt>최악 5%</dt>
+          <dt>최악 5%(하락)</dt>
           <dd
             className="og-val mono og-worst"
             data-testid="overnight-gap-worst"
@@ -69,7 +69,7 @@ export default function OvernightGapStat({
           </dd>
         </div>
         <div className="og-cell">
-          <dt>표본 n</dt>
+          <dt>표본</dt>
           <dd className="og-val mono og-neutral" data-testid="overnight-gap-n">
             {n}
           </dd>
@@ -77,9 +77,9 @@ export default function OvernightGapStat({
       </dl>
 
       <p className="og-summary" data-testid="overnight-gap-summary">
-        익일 시가 평균 <span className={`dir-${meanDir}`}>{formatPercent(mean)}</span>{' '}
-        · 최악5% <span className="og-worst">{formatPercent(worst5pct)}</span> · n=
-        {n}
+        다음날 아침 평균{' '}
+        <span className={`dir-${meanDir}`}>{formatPercent(mean)}</span> · 최악 5%{' '}
+        <span className="og-worst">{formatPercent(worst5pct)}</span> · n={n}
       </p>
     </section>
   );

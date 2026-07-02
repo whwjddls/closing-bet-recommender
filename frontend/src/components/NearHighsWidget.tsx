@@ -30,9 +30,9 @@ export default function NearHighsWidget() {
       <aside
         className="near-highs near-highs--empty"
         data-testid="near-highs"
-        aria-label="신고가 근접"
+        aria-label="1년 최고가 근접"
       >
-        <h3 className="nh-title">신고가 근접</h3>
+        <h3 className="nh-title">1년 최고가 근접</h3>
         <p className="nh-empty" data-testid="near-highs-empty">
           데이터 없음(장중 조회)
         </p>
@@ -45,10 +45,10 @@ export default function NearHighsWidget() {
       <aside
         className="near-highs"
         data-testid="near-highs"
-        aria-label="신고가 근접"
+        aria-label="1년 최고가 근접"
         aria-busy="true"
       >
-        <h3 className="nh-title">신고가 근접</h3>
+        <h3 className="nh-title">1년 최고가 근접</h3>
         <p className="nh-loading">로딩 중…</p>
       </aside>
     );
@@ -58,10 +58,10 @@ export default function NearHighsWidget() {
     <aside
       className="near-highs"
       data-testid="near-highs"
-      aria-label="신고가 근접"
+      aria-label="1년 최고가 근접"
     >
       <h3 className="nh-title">
-        신고가 근접 <span className="nh-scope">· 52주</span>
+        1년 최고가 근접 <span className="nh-scope">· 최근 1년</span>
       </h3>
       <ul className="nh-chips" data-testid="near-highs-chips">
         {items.map((it) => (

@@ -48,10 +48,10 @@ describe('IndexStrip', () => {
     );
   });
 
-  it('regime_mult 0.0은 off(RISK-OFF) 배지', () => {
+  it('regime_mult 0.0은 off(쉬어가기) 배지', () => {
     render(<IndexStrip regimes={[mk('KOSPI', 2500, 2600, 0.0)]} />);
     const badge = screen.getByTestId('index-regime-KOSPI');
-    expect(badge).toHaveTextContent('RISK-OFF');
+    expect(badge).toHaveTextContent('쉬어가기');
     expect(badge).toHaveAttribute('data-level', 'off');
   });
 

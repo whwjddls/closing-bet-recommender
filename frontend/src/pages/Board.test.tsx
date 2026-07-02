@@ -139,7 +139,9 @@ describe('Board', () => {
     await waitFor(() =>
       expect(screen.getByTestId('risk-off-banner')).toBeInTheDocument(),
     );
-    expect(screen.getByText('오늘은 시황 레짐상 추천 없음')).toBeInTheDocument();
+    expect(
+      screen.getByText('오늘은 쉬어가는 날 — 추천 없음'),
+    ).toBeInTheDocument();
     expect(screen.getAllByTestId('scan-row').length).toBeGreaterThan(0);
   });
 

@@ -6,13 +6,13 @@ interface Props {
 }
 
 // 5개 승수(곱셈 사슬 입력)를 1.0 기준으로 시각화. >1 부스트(상승빨강)/<1 드래그(하락파랑).
-// 라벨은 도메인 약어: 신(s_shin)·거(rvol)·시황(regime)·수급(supply)·재(veto 게이트).
+// 초보자용 라벨: 신호 5가지 = 신고가·거래량·장분위기·수급·재료(veto 게이트).
 const MULT_BARS: { key: string; label: string; full: string }[] = [
-  { key: 's_shin', label: '신', full: 's_shin' },
-  { key: 'rvol_confirm', label: '거', full: 'rvol_confirm' },
-  { key: 'regime_mult', label: '시황', full: 'regime_mult' },
+  { key: 's_shin', label: '신고가', full: 's_shin' },
+  { key: 'rvol_confirm', label: '거래량', full: 'rvol_confirm' },
+  { key: 'regime_mult', label: '장분위기', full: 'regime_mult' },
   { key: 'supply_tilt', label: '수급', full: 'supply_tilt' },
-  { key: 'veto', label: '재', full: 'veto' },
+  { key: 'veto', label: '재료', full: 'veto' },
 ];
 
 // 승수(0~2 가정)를 막대 폭 %로. 1.0=중앙. clamp 로 벗어난 값 방어.
@@ -44,8 +44,15 @@ export default function SignalContribution({ contributions, final }: Props) {
 
   return (
     <div className="signal-panel">
-      {/* 5승수 막대 — 1.0 기준 부스트/드래그 시각화 */}
-      <div className="mult-bars" data-testid="mult-bars" aria-label="5승수">
+      {/* 신호 5가지 막대 — 1.0 기준 부스트/드래그 시각화 */}
+      <p className="signal-legend">
+        신호 5가지: 신고가 · 거래량 · 장분위기 · 수급 · 재료
+      </p>
+      <div
+        className="mult-bars"
+        data-testid="mult-bars"
+        aria-label="신호 5가지"
+      >
         {MULT_BARS.map(({ key, label, full }) => {
           const value = byKey[key];
           const dir = value > 1 ? 'up' : value < 1 ? 'down' : 'flat';

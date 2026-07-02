@@ -51,9 +51,9 @@ export default function ReminderWidget() {
 
   const header = (
     <div className="rmd-head">
-      <h3 className="rmd-title">익일 오전 청산 리마인더</h3>
+      <h3 className="rmd-title">다음날 아침 팔기 알림</h3>
       <p className="rmd-caption" data-testid="reminder-caption">
-        익일 오전 VWAP 청산 — 전략의 나머지 절반
+        다음날 아침 9~10시에 파는 게 전략의 나머지 절반이에요
       </p>
     </div>
   );
@@ -116,19 +116,19 @@ export default function ReminderWidget() {
 
               <div className="rmd-prices">
                 <span className="rmd-cell">
-                  <span className="rmd-cell-label">매수가</span>
+                  <span className="rmd-cell-label">매수 참고가</span>
                   <span className="rmd-cell-val mono">
                     {priceOrDash(pick.buy_price)}
                   </span>
                 </span>
                 <span className="rmd-cell">
-                  <span className="rmd-cell-label">목표가</span>
+                  <span className="rmd-cell-label">참고 목표</span>
                   <span className="rmd-cell-val mono dir-up">
                     {won(pick.target_price)}
                   </span>
                 </span>
                 <span className="rmd-cell">
-                  <span className="rmd-cell-label">손절가</span>
+                  <span className="rmd-cell-label">참고 손절</span>
                   <span className="rmd-cell-val mono dir-down">
                     {won(pick.stop_price)}
                   </span>
@@ -136,7 +136,7 @@ export default function ReminderWidget() {
               </div>
 
               <div className="rmd-exit">
-                <span className="rmd-exit-label">청산 기준 · 오전 VWAP</span>
+                <span className="rmd-exit-label">팔 때 기준 · 아침 평균가</span>
                 {pending ? (
                   <span
                     className="rmd-vwap-pending"

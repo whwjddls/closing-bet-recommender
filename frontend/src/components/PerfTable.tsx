@@ -17,7 +17,9 @@ function failReasonClass(reason: string): string {
 
 export default function PerfTable({ rows }: { rows: PickResult[] }) {
   if (rows.length === 0) {
-    return <p data-testid="perf-empty">채점할 어제 픽이 없습니다.</p>;
+    return (
+      <p data-testid="perf-empty">아직 채점할 어제 추천이 없어요.</p>
+    );
   }
   return (
     <table className="perf-table">
@@ -26,10 +28,10 @@ export default function PerfTable({ rows }: { rows: PickResult[] }) {
           <th>종목</th>
           <th>등급</th>
           <th>매수가(확정)</th>
-          <th>오전VWAP</th>
-          <th>오전수익률</th>
-          <th>결과</th>
-          <th>DART재스캔</th>
+          <th>다음날 아침 평균가</th>
+          <th>아침 수익률</th>
+          <th>성공?</th>
+          <th>밤사이 공시</th>
         </tr>
       </thead>
       <tbody>

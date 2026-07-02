@@ -3,11 +3,12 @@ import { formatPrice } from '../lib/format';
 
 type Level = 'on' | 'half' | 'off';
 
-// regime_mult → 신호등(GO/보수/RISK-OFF). 게이지·헤더 판정과 동일 규칙.
+// regime_mult → 초보자용 장 분위기 신호등. 게이지·헤더 판정과 동일 규칙.
+// 1.0=🟢 좋음 / 0.5=🟡 보통(절반만) / 0.0=🔴 쉬어가기
 function regimeBadge(mult: number): { level: Level; label: string } {
-  if (mult >= 1.0) return { level: 'on', label: 'GO' };
-  if (mult > 0) return { level: 'half', label: '보수' };
-  return { level: 'off', label: 'RISK-OFF' };
+  if (mult >= 1.0) return { level: 'on', label: '🟢 좋음' };
+  if (mult > 0) return { level: 'half', label: '🟡 보통' };
+  return { level: 'off', label: '🔴 쉬어가기' };
 }
 
 // GlobalHeader 바로 아래 상시 노출되는 얇은 지수 바.

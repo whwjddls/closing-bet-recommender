@@ -60,9 +60,9 @@ export default function RecTable({
           value={sortKey}
           onChange={(e) => setSortKey(e.target.value as SortKey)}
         >
-          <option value="score">점수</option>
-          <option value="grade">등급</option>
-          <option value="supply">수급</option>
+          <option value="score">종합 점수순</option>
+          <option value="grade">등급순</option>
+          <option value="supply">수급 세기순</option>
         </select>
         <select
           data-testid="filter-market"
@@ -80,7 +80,7 @@ export default function RecTable({
             checked={supplyUpOnly}
             onChange={(e) => setSupplyUpOnly(e.target.checked)}
           />
-          수급+
+          수급 좋은 것만
         </label>
       </div>
 
@@ -105,27 +105,27 @@ export default function RecTable({
                   <span className="t3-rank">#{r.rank}</span>
                 </div>
                 <div className="t3-row">
-                  <span>매수</span>
+                  <span>매수 참고가</span>
                   <span className="t3-val">
                     {formatPrice(r.buy_price_final ?? r.buy_price_provisional)}
                     {r.provisional_flag && (
-                      <span className="prov-mark" title="잠정 15:20">
+                      <span className="prov-mark" title="15:20 기준(확정 전)">
                         *
                       </span>
                     )}
                   </span>
                 </div>
                 <div className="t3-row">
-                  <span>청산</span>
+                  <span>아침 팔기</span>
                   <span className="t3-val">{r.exit_label}</span>
                 </div>
                 <div className="t3-row t3-exp">
-                  <span>기대</span>
+                  <span>기대 수익</span>
                   <span className={`t3-val dir-${directionClass(exp)}`}>
                     {formatPercent(exp)}
                   </span>
                 </div>
-                {hasRisk(r) && <div className="t3-risk">⚠ 리스크 플래그</div>}
+                {hasRisk(r) && <div className="t3-risk">⚠ 조심 신호</div>}
               </article>
             );
           })}
@@ -133,50 +133,58 @@ export default function RecTable({
       )}
 
       {rows.length === 0 ? (
-        <p data-testid="rec-empty">표시할 추천 종목이 없습니다.</p>
+        <p data-testid="rec-empty">
+          조건에 맞는 종목이 없어요. 필터를 풀어보세요.
+        </p>
       ) : (
         <table>
           <thead>
             <tr>
               <th className="col-risk">⚑</th>
               <th className="col-star">★</th>
-              <th>종목/코드</th>
+              <th>종목</th>
               <th>
-                현재가(잠정)
+                현재가
                 <InfoDot
-                  label="잠정"
-                  text="15:20 값, 마감15:30에 바뀔 수 있음. 확정 아님"
+                  label="15:20 기준"
+                  text="15:20 기준 값이에요. 마감(15:30) 때 조금 바뀔 수 있어요 — 아직 확정 아님"
                 />
               </th>
-              <th>매수가</th>
+              <th>
+                매수 참고가
+                <InfoDot
+                  label="매수 참고가"
+                  text="15:20 기준 매수 참고가. 실제 체결가는 다를 수 있어요"
+                />
+              </th>
               <th className="col-exp-close">
-                예상체결
+                예상 마감가
                 <InfoDot
-                  label="예상"
-                  text="15:20 예상 체결가 — 마감 15:30에 확정. 잠정값"
+                  label="예상 마감가"
+                  text="15:20에 계산한 예상 마감가예요. 마감(15:30)에 확정 — 아직 잠정값"
                 />
               </th>
               <th>
-                청산
+                다음날 아침 팔기
                 <InfoDot
-                  label="오전VWAP"
-                  text="익일 09:00~10:00 거래량가중평균가 — 청산 기준"
+                  label="아침 팔기"
+                  text="기본 전략은 다음날 아침 9~10시에 파는 거예요(그 시간대 평균가 기준)"
                 />
               </th>
               <th>기대</th>
               <th>
-                등급
+                종합 점수
                 <InfoDot
                   label="등급"
-                  text="S=신·거·시황·수급 모두 강함. 확신 최상"
+                  text="S=다섯 신호(신고가·거래량·장분위기·수급·재료)가 모두 강함. 확신 최상"
                 />
               </th>
               <th>
                 신호
                 <InfoDot
                   align="right"
-                  label="RVOL"
-                  text="평소 대비 오늘 거래량 배수. 3배↑ 관심몰림"
+                  label="평소보다 거래"
+                  text="평소보다 오늘 거래가 몇 배인지. 3배↑면 관심이 몰린 거예요"
                 />
               </th>
               <th>차트</th>
@@ -204,7 +212,11 @@ export default function RecTable({
                 >
                   <td
                     className={`col-risk${risk ? ' has-risk' : ''}`}
-                    title={risk ? '리스크: 희석 veto' : '리스크 없음'}
+                    title={
+                      risk
+                        ? '조심 신호: 증자·CB 등 물량이 늘 수 있는 공시'
+                        : '특이사항 없음'
+                    }
                   >
                     {risk ? '⚠' : '─'}
                   </td>
@@ -218,7 +230,7 @@ export default function RecTable({
                   <td className="num">
                     {formatPrice(r.price_provisional)}
                     {r.provisional_flag && (
-                      <sup className="prov-mark" title="잠정 15:20">
+                      <sup className="prov-mark" title="15:20 기준(확정 전)">
                         *
                       </sup>
                     )}
@@ -256,8 +268,8 @@ export default function RecTable({
                   <td data-testid="exit-cta" className="exit-cta">
                     <strong className="exit-primary">{r.exit_label}</strong>
                     <div className="ref-stop">
-                      목 {formatPrice(r.target_price)} / 손{' '}
-                      {formatPrice(r.stop_price)} (보유 시)
+                      참고 목표 {formatPrice(r.target_price)} / 참고 손절{' '}
+                      {formatPrice(r.stop_price)} (계속 들고 갈 때)
                     </div>
                   </td>
                   <td
@@ -277,7 +289,7 @@ export default function RecTable({
                       <span
                         data-testid="supply-today-badge"
                         className="badge badge-supply-today"
-                        title="당일 외인/기관 가집계(잠정 — D-1 확정 수급 아님)"
+                        title="오늘 잠정 외국인·기관 흐름 (확정 전 — 어제 확정 수급과 다름)"
                       >
                         {r.supply_today}
                         <span className="badge-prov-tag">잠정</span>

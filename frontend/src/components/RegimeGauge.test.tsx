@@ -22,14 +22,11 @@ describe('RegimeGauge', () => {
     expect(kosdaq).toHaveAttribute('data-level', 'half');
   });
 
-  it('regime 0.0은 off 레벨', () => {
+  it('regime 0.0은 off 레벨 + 쉬어가기 라벨', () => {
     render(<RegimeGauge regimes={[mk('KOSPI', 0.0)]} />);
-    expect(
-      within(screen.getByTestId('regime-KOSPI')).getByText('0.0'),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('regime-KOSPI')).toHaveAttribute(
-      'data-level',
-      'off',
-    );
+    const pill = screen.getByTestId('regime-KOSPI');
+    expect(within(pill).getByText('0.0x')).toBeInTheDocument();
+    expect(pill).toHaveTextContent('쉬어가기');
+    expect(pill).toHaveAttribute('data-level', 'off');
   });
 });

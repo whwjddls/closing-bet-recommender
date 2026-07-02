@@ -10,7 +10,11 @@ describe('App 라우팅 셸', () => {
         <App />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: '추천보드' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '성과추적' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: '오늘의 추천' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: '성과 리포트' }),
+    ).toBeInTheDocument();
   });
 });

@@ -135,7 +135,8 @@ export default function Board() {
           data-testid="reduced-risk-caption"
           className="caption-reduced-risk"
         >
-          반-리스크 레짐(0.5x): 일부 시장이 약화/눌림 상태입니다.
+          오늘 장 분위기 <strong>🟡 보통</strong> — 절반만: 일부 시장이 눌림
+          상태라 베팅 비중을 줄였어요.
         </p>
       )}
 
@@ -157,17 +158,28 @@ export default function Board() {
       {board.recommendations.length === 0 ? (
         isRiskOff ? (
           <section data-testid="risk-off-banner" className="banner-risk-off">
-            <strong>오늘은 시황 레짐상 추천 없음</strong>
+            <strong>오늘은 쉬어가는 날 — 추천 없음</strong>
             <p>
-              RISK_OFF (모든 시장 5MA 아래). 시스템 정상 — 스캐너/최근 레짐
-              컨텍스트를 유지합니다.
+              장 분위기 <b>🔴 쉬어가기</b> (모든 시장이 5일선 아래). 시스템은
+              정상이에요 — 아래 후보 목록은 참고용으로 남겨둡니다.
             </p>
             {universe && (
               <Scanner rows={universe.rows} asOf={universe.as_of} />
             )}
           </section>
         ) : (
-          <p data-testid="board-empty">발행된 추천 종목이 없습니다.</p>
+          <div data-testid="board-empty" className="board-empty">
+            <p className="board-empty-title">추천 없음</p>
+            <p className="board-empty-hint">
+              상단 <strong>[▶ 지금 스캔 실행]</strong>을 눌러보세요.
+            </p>
+            {!board.data_available && (
+              <p className="board-empty-reason" data-testid="board-empty-reason">
+                오늘은 추천을 만들지 못했어요
+                {health?.reason ? ` — ${health.reason}` : ''}
+              </p>
+            )}
+          </div>
         )
       ) : (
         <RecTable

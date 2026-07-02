@@ -10,9 +10,9 @@ export default function App() {
       <GlobalHeader />
       <nav className="app-nav">
         <NavLink to="/" end>
-          추천보드
+          오늘의 추천
         </NavLink>
-        <NavLink to="/performance">성과추적</NavLink>
+        <NavLink to="/performance">성과 리포트</NavLink>
       </nav>
       <Routes>
         <Route path="/" element={<Board />} />
