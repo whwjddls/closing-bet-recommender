@@ -130,6 +130,21 @@ class PerformanceResponse(BaseModel):
     aggregate: PerformanceAggregate
 
 
+class ReminderPick(BaseModel):          # S7 익일 오전 청산 리마인더 — 픽별 청산 가이드
+    ticker: str
+    name: str
+    grade: str
+    buy_price: float | None = None      # buy_price_final ?? buy_price_provisional
+    target_price: float
+    stop_price: float
+    outcome: str | None = None          # Performance 있으면 SUCCESS/FAIL/NA, 없으면 None
+    morning_vwap: float | None = None   # vwap_0900_1000; 미채점/미연동 시 None(UI "추정 미연동")
+
+
+class ReminderResponse(BaseModel):
+    picks: list[ReminderPick] = []
+
+
 class HealthResponse(BaseModel):
     status: str                         # 'OK' | 'DEGRADED' | 'DOWN' (대문자)
     reason: str                         # 사유 (필드명 reason, detail 아님)

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     backtest, calendar, disclosures, health, market, performance, recommendations,
-    stock, universe,
+    reminder, stock, universe,
 )
 from app.store.db import init_db
 
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
     app.include_router(recommendations.router)
     app.include_router(stock.router)
     app.include_router(performance.router)
+    app.include_router(reminder.router)
     app.include_router(universe.router)
     app.include_router(backtest.router)
     app.include_router(market.router)
