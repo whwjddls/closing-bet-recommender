@@ -1,13 +1,18 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import (
+# backend/.env 를 os.environ 에 주입(파일 없으면 조용히 무시) — KIS/DART 키 등. 임포트보다 먼저.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from app.api import (  # noqa: E402  (env 주입 후 임포트)
     backtest, calendar, disclosures, health, market, performance, recommendations,
     reminder, stock, universe,
 )
-from app.store.db import init_db
+from app.store.db import init_db  # noqa: E402
 
 
 @asynccontextmanager
