@@ -120,10 +120,16 @@ class KisClient:
                      is_halted=is_halted, is_limit_up=is_limit_up, is_vi=is_vi)
 
     def get_value_ranking(self, market: Market) -> list[ValueRankEntry]:
+        # 거래대금 순위 = volume-rank(FHPST01710000) FID_BLNG_CLS_CODE="3"(거래금액순).
         resp = self._tr_request(
             TR_VALUE_RANKING,
-            "/uapi/domestic-stock/v1/ranking/value",
-            {"fid_input_iscd": kis_index_code(market)})
+            "/uapi/domestic-stock/v1/quotations/volume-rank",
+            {"FID_COND_MRKT_DIV_CODE": "J", "FID_COND_SCR_DIV_CODE": "20171",
+             "FID_INPUT_ISCD": kis_index_code(market),
+             "FID_DIV_CLS_CODE": "0", "FID_BLNG_CLS_CODE": "3",
+             "FID_TRGT_CLS_CODE": "111111111", "FID_TRGT_EXLS_CLS_CODE": "000000",
+             "FID_INPUT_PRICE_1": "", "FID_INPUT_PRICE_2": "",
+             "FID_VOL_CNT": "", "FID_INPUT_DATE_1": ""})
         rows = resp.get("output", []) or []
         entries = []
         for row in rows[:RANKING_TOP_N]:

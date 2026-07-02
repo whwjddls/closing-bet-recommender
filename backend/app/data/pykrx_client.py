@@ -15,9 +15,9 @@ COL_VOLUME = "거래량"
 COL_VALUE = "거래대금"
 COL_CHANGE_PCT = "등락률"
 NET_VALUE_COL = "순매수거래대금"
-# 아키텍처 §1/§3.2-D: 시장별 1회로 외인+기관 결합 value 조회.
-# 정확한 investor 인자 문자열은 KIS/pykrx 스파이크 항목(설계 §10.3) — 여기선 상수화.
-NET_INVESTOR = "순매수"
+# pykrx get_market_net_purchases_of_equities 의 investor 인자는 '투자자 유형'.
+# 외인+기관 순매수액 = '외국인' + '기관합계' 를 종목별 합산(아키텍처 §3.2-D).
+NET_INVESTORS = ("외국인", "기관합계")
 LOOKBACK_DAYS = 400  # ≥252 거래일 확보용 달력 룩백
 
 
@@ -119,15 +119,16 @@ def _parse_day(value: Any) -> dt.date | None:
 
 
 def _net_by_market(px: Any, fromdate: str, todate: str) -> dict[str, float]:
-    """외인+기관 순매수거래대금 — 시장별 1회(총 2회), value 컬럼. per-ticker 금지."""
+    """외인+기관 순매수거래대금 — 시장×투자자유형(외국인/기관합계) 조회 후 종목별 합산."""
     result: dict[str, float] = {}
     for market in (Market.KOSPI, Market.KOSDAQ):
-        df = px.get_market_net_purchases_of_equities(
-            fromdate, todate, pykrx_market_name(market), NET_INVESTOR)
-        if df is None:
-            continue
-        for ticker, row in df.iterrows():
-            result[str(ticker)] = float(row[NET_VALUE_COL])
+        for investor in NET_INVESTORS:
+            df = px.get_market_net_purchases_of_equities(
+                fromdate, todate, pykrx_market_name(market), investor)
+            if df is None or NET_VALUE_COL not in getattr(df, "columns", []):
+                continue
+            for ticker, row in df.iterrows():
+                result[str(ticker)] = result.get(str(ticker), 0.0) + float(row[NET_VALUE_COL])
     return result
 
 

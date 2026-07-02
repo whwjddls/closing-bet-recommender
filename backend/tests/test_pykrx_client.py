@@ -33,7 +33,8 @@ class FakePykrx:
     def __init__(self):
         self.calls: list[tuple] = []
         self.ohlcv_df: pd.DataFrame | None = None
-        self.net_frames: dict[str, pd.DataFrame] = {}
+        # (market, investor) → 순매수거래대금 프레임. 외인/기관 유형별로 분리.
+        self.net_frames: dict[tuple[str, str], pd.DataFrame] = {}
         self.ticker_list: list[str] = []
 
     def get_market_ticker_list(self, date, market="ALL"):
@@ -46,7 +47,7 @@ class FakePykrx:
 
     def get_market_net_purchases_of_equities(self, fromdate, todate, market, investor):
         self.calls.append(("net", fromdate, todate, market, investor))
-        return self.net_frames[market]
+        return self.net_frames.get((market, investor))
 
     def get_index_ohlcv(self, fromdate, todate, index_code):
         self.calls.append(("index", fromdate, todate, index_code))
@@ -102,22 +103,31 @@ def test_get_ohlcv_forwards_exact_todate_no_lookahead():
     assert px.calls[-1] == ("ohlcv", "20250629", "20260629", "000660")
 
 
-# ── 수급: 시장별 1회=총 2회, value 컬럼, per-ticker 금지 ──
-def test_net_purchases_two_calls_value_column_no_per_ticker():
+# ── 수급: 시장×투자자유형별 1회=총 4회, value 컬럼 합산, per-ticker 금지 ──
+def test_net_purchases_four_calls_value_column_sums_investors():
     px = FakePykrx()
-    px.net_frames["KOSPI"] = pd.DataFrame(
-        {"순매수거래대금": [8_000_000_000], "순매수거래량": [1]},
+    # 외인/기관 유형별로 분리 — 종목별로 두 유형을 합산해야 한다.
+    px.net_frames[("KOSPI", "외국인")] = pd.DataFrame(
+        {"순매수거래대금": [5_000_000_000], "순매수거래량": [1]},
         index=["000660"])
-    px.net_frames["KOSDAQ"] = pd.DataFrame(
-        {"순매수거래대금": [-2_000_000_000], "순매수거래량": [1]},
+    px.net_frames[("KOSPI", "기관합계")] = pd.DataFrame(
+        {"순매수거래대금": [3_000_000_000], "순매수거래량": [1]},
+        index=["000660"])
+    px.net_frames[("KOSDAQ", "외국인")] = pd.DataFrame(
+        {"순매수거래대금": [-3_000_000_000], "순매수거래량": [1]},
+        index=["035720"])
+    px.net_frames[("KOSDAQ", "기관합계")] = pd.DataFrame(
+        {"순매수거래대금": [1_000_000_000], "순매수거래량": [1]},
         index=["035720"])
     client = PykrxClient(px)
     result = client.get_net_purchases("20260629", "20260629")
     net_calls = [c for c in px.calls if c[0] == "net"]
-    assert len(net_calls) == 2                      # 시장별 1회 = 총 2회
-    assert {c[3] for c in net_calls} == {"KOSPI", "KOSDAQ"}
-    assert result["000660"] == 8_000_000_000.0      # value(거래대금) 컬럼
-    assert result["035720"] == -2_000_000_000.0     # 양방향
+    assert len(net_calls) == 4                      # 2시장 × 2투자자유형 = 4회
+    assert {c[3] for c in net_calls} == {"KOSPI", "KOSDAQ"}      # 두 시장 모두
+    assert {c[4] for c in net_calls} == {"외국인", "기관합계"}  # 두 투자자유형
+    # 외인+기관 순매수거래대금(value) 종목별 합산
+    assert result["000660"] == 8_000_000_000.0      # 5e9 + 3e9
+    assert result["035720"] == -2_000_000_000.0     # -3e9 + 1e9 (양방향)
 
 
 # ── 헬스체크: stale / 행수 부족 → fail-closed ─────────────
@@ -177,8 +187,11 @@ def test_prefetch_final_no_lookahead_todate_is_d_minus_1():
     px.ticker_list = ["000660"]
     px.ohlcv_df = _ohlcv(["20260626", "20260629"], [100, 120], [90, 110],
                          [95, 115], [10, 20])
-    px.net_frames["KOSPI"] = _supply("000660", 8_000_000_000)
-    px.net_frames["KOSDAQ"] = _supply("035720", -2_000_000_000)
+    # 외인+기관 순매수거래대금 합산: 000660 = 5e9 + 3e9 = 8e9
+    px.net_frames[("KOSPI", "외국인")] = _supply("000660", 5_000_000_000)
+    px.net_frames[("KOSPI", "기관합계")] = _supply("000660", 3_000_000_000)
+    px.net_frames[("KOSDAQ", "외국인")] = _supply("035720", -1_000_000_000)
+    px.net_frames[("KOSDAQ", "기관합계")] = _supply("035720", -1_000_000_000)
     bundle = prefetch_final(dt.date(2026, 6, 30), px)
     assert isinstance(bundle, PrefetchBundle)
     # 룩어헤드 금지: 종목 ohlcv todate=D-1(20260629), 당일(20260630) 미요청
@@ -199,7 +212,9 @@ def test_prefetch_final_net_purchases_two_market_calls():
     px.net_frames["KOSDAQ"] = _supply("035720", -2e9)
     prefetch_final(dt.date(2026, 6, 30), px)
     net_calls = [c for c in px.calls if c[0] == "net"]
-    assert len(net_calls) == 2
+    assert len(net_calls) == 4                       # 시장(2) × 투자자(외국인·기관합계)
+    assert {c[3] for c in net_calls} == {"KOSPI", "KOSDAQ"}
+    assert {c[4] for c in net_calls} == {"외국인", "기관합계"}
 
 
 # ── 오버나잇 갭 통계: gap[t]=open[t+1]/close[t]-1 ──────────
