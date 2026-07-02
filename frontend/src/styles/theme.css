@@ -48,6 +48,23 @@
 
   --radius: 8px;
   --radius-sm: 5px;
+  --radius-lg: 12px;
+
+  /* ── 간격 스케일(4px 리듬) ─────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* ── 카드 통일 토큰 ──────────────────────────────────────── */
+  --card-bg: #141922;
+  --card-border: #2a3441;
+  --card-pad: 14px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --content-max: 1320px;
 }
 
 /* ── 전역 리셋/베이스 ───────────────────────────────────────── */
@@ -79,6 +96,44 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* 스크린리더 전용(시각적으로 숨김, 접근성 텍스트 유지) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 통일 카드: 라운드 · 서브틀 보더 · 그림자 · 등장 페이드 */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-rise {
+    animation: card-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 숫자(가격·수익률·score)는 탭 정렬 + monospace로 자릿수 흔들림 방지 */
@@ -129,9 +184,243 @@ td[data-testid='perf-return'],
 }
 
 main {
-  padding: 16px;
-  max-width: 1280px;
+  padding: var(--sp-4);
+  max-width: var(--content-max);
   margin: 0 auto;
+}
+
+.board-loading {
+  color: var(--text-mid);
+  padding: var(--sp-5) 0;
+}
+
+/* ============================================================================
+   오늘 한눈에 히어로 스트립 §D-3
+   ========================================================================== */
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+  margin: 0 0 var(--sp-4);
+  background: radial-gradient(
+      120% 140% at 0% 0%,
+      rgba(255, 213, 74, 0.06),
+      transparent 45%
+    ),
+    linear-gradient(180deg, #10151d, var(--bg-1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero {
+    animation: card-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+.hero-lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.hero-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--grade-s);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-hi);
+}
+
+.hero-date {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-lo);
+}
+
+.hero-metrics {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* 장 분위기 큰 배지 */
+.hero-mood {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  min-width: 132px;
+}
+
+.hero-mood--on {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.1);
+}
+.hero-mood--half {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.1);
+}
+.hero-mood--off {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.hero-mood-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: 0.02em;
+}
+
+.hero-mood-badge {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text-hi);
+  letter-spacing: -0.01em;
+}
+
+.hero-mood-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-mid);
+}
+
+/* 숫자 타일(추천 N · 스캔 풀 · 커버리지) */
+.hero-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  min-width: 92px;
+}
+
+.hero-tile-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--text-hi);
+}
+
+.hero-tile-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+.hero-health {
+  display: flex;
+  align-items: center;
+}
+
+.hero-health .health {
+  margin-left: 0;
+}
+
+/* ============================================================================
+   메인 그리드: 좌 2/3 추천 · 우 1/3 위젯 레일 §D-4
+   ========================================================================== */
+
+.board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  align-items: start;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-4);
+}
+
+.board-main {
+  min-width: 0;
+}
+
+.board-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  position: sticky;
+  top: 96px;
+}
+
+.board-rail > * {
+  width: 100%;
+  max-width: none;
+  border-radius: var(--radius-lg);
+  transition: border-color 0.16s ease;
+}
+
+.board-rail > *:hover {
+  border-color: #38445480;
+}
+
+@media (max-width: 1080px) {
+  .board-grid {
+    grid-template-columns: 1fr;
+  }
+  .board-rail {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+.board-empty {
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.board-empty-title {
+  margin: 0 0 var(--sp-2);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-hi);
+}
+
+.board-empty-hint {
+  margin: 0;
+  color: var(--text-mid);
+  font-size: 13px;
+}
+
+.board-empty-hint strong {
+  color: var(--grade-s);
+}
+
+.board-empty-reason {
+  margin: var(--sp-3) 0 0;
+  color: var(--provisional);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 main > header h1 {
@@ -139,6 +428,24 @@ main > header h1 {
   font-weight: 700;
   letter-spacing: -0.01em;
   margin: 4px 0 12px;
+}
+
+/* 신호 5가지 레전드(종목상세) */
+.signal-legend {
+  margin: 0 0 var(--sp-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: -0.01em;
+}
+
+/* 레짐 게이지 친화 라벨 */
+.regime-pill .regime-label {
+  font-weight: 700;
+}
+
+.regime-pill .regime-market {
+  font-weight: 800;
 }
 
 /* ============================================================================
@@ -975,9 +1282,30 @@ td.exp-close-cell {
   position: relative;
   background: var(--bg-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: 12px 14px 12px 16px;
   overflow: hidden;
+  transition: transform 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.top3-card:hover {
+  transform: translateY(-2px);
+  border-color: #38445480;
+  box-shadow: var(--shadow-pop);
+}
+
+/* 페이지 로드 시 순차 등장(고임팩트 순간) */
+@media (prefers-reduced-motion: no-preference) {
+  .rec-top3-cards .top3-card {
+    animation: card-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .rec-top3-cards .top3-card:nth-child(2) {
+    animation-delay: 0.06s;
+  }
+  .rec-top3-cards .top3-card:nth-child(3) {
+    animation-delay: 0.12s;
+  }
 }
 
 .top3-card::before {
@@ -1074,10 +1402,7 @@ td.exp-close-cell {
   border: 1px solid transparent;
 }
 
-.regime-pill::before {
-  content: '●';
-  font-size: 9px;
-}
+/* 친화 라벨에 이모지 신호등을 쓰므로 별도 도트는 생략한다. */
 
 .regime-on {
   color: var(--regime-go);
@@ -1389,44 +1714,13 @@ td.exp-close-cell {
    섹터 히트맵 + 시장폭(Board 상단 패널) — GET /market
    ========================================================================== */
 
-.board-top {
-  display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
-  align-items: start;
-  gap: 12px;
-  margin: 8px 0 12px;
-}
-
-.board-market-panel {
-  display: grid;
-  grid-template-columns: 1fr minmax(220px, 300px);
-  gap: 12px;
-  align-items: start;
-}
-
-.board-market-panel .sector-heatmap {
-  max-width: none;
-}
-
-/* 우측 컬럼: 투자자 수급 + 신고가 근접 위젯 세로 스택 */
-.board-side-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-.board-widgets {
-  margin: 0 0 16px;
-}
-
 .board-reminder {
-  margin: 16px 0 0;
+  margin: var(--sp-4) 0 0;
 }
 
 .sector-heatmap {
   width: 100%;
-  max-width: 420px;
+  max-width: none;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1503,15 +1797,6 @@ td.exp-close-cell {
   margin: 0;
   color: var(--text-lo);
   font-size: 12.5px;
-}
-
-@media (max-width: 900px) {
-  .board-top {
-    grid-template-columns: 1fr;
-  }
-  .board-market-panel {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 640px) {
@@ -2062,10 +2347,7 @@ td.exp-close-cell {
   border: 1px solid transparent;
 }
 
-.index-strip .idx-regime::before {
-  content: '●';
-  font-size: 8px;
-}
+/* idx-regime 라벨에 이모지 신호등 포함 — 별도 도트 생략. */
 
 /* .regime-on / .regime-half / .regime-off 색은 레짐 게이지와 공유 */
 
