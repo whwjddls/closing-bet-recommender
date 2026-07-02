@@ -27,3 +27,29 @@ def test_universe_empty(client):
     assert body["as_of"] is None
     assert body["total"] == 0
     assert body["rows"] == []
+
+
+def test_universe_writer_upsert_then_endpoint_returns_rows(client, db_session):
+    """T2: persist_universe_cache 로 선정 유니버스를 적재하면 /universe 가 rows 를 반환한다.
+    라이터가 일부 필드(name/sec_type/listing)를 비워도 nullable 로 200 직렬화돼야 한다."""
+    from types import SimpleNamespace
+
+    from app.store import final_cache
+
+    bundle = SimpleNamespace(
+        run_date=date(2026, 6, 30), universe=["000660", "035720"],
+        market_of={"000660": "KOSPI", "035720": "KOSDAQ"},
+        avg_value_20d={"000660": 5e10, "035720": 3e10})
+    saved = final_cache.persist_universe_cache(db_session, bundle)
+    db_session.commit()
+    assert saved == 2
+
+    body = client.get("/universe").json()
+    assert body["as_of"] == "2026-06-30"
+    assert body["total"] == 2
+    assert body["eligible_count"] == 2                 # 선정 종목 eligible=True
+    rows = {r["ticker"]: r for r in body["rows"]}
+    assert set(rows) == {"000660", "035720"}
+    assert rows["000660"]["market"] == "KOSPI"
+    assert rows["000660"]["avg_value_20d"] == 5e10
+    assert rows["000660"]["name"] is None              # 미채움 필드 nullable

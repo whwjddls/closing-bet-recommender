@@ -228,17 +228,18 @@ class DisclosuresResponse(BaseModel):
 
 
 class UniverseRow(BaseModel):
+    # 장전 유니버스 라이터가 일부 필드만 채울 수 있어 전 필드 nullable (널-500 방지).
     model_config = ConfigDict(from_attributes=True)
     ticker: str
-    name: str
-    market: str
-    sec_type: str
-    avg_value_20d: float
-    is_managed: bool
-    is_warning: bool
-    is_caution: bool
-    listing_days: int
-    eligible: bool
+    name: str | None = None
+    market: str | None = None
+    sec_type: str | None = None
+    avg_value_20d: float | None = None
+    is_managed: bool | None = None
+    is_warning: bool | None = None
+    is_caution: bool | None = None
+    listing_days: int | None = None
+    eligible: bool | None = None
     as_of: date
 
 

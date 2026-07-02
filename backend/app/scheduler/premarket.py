@@ -77,8 +77,10 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
 
         with session_factory() as db:
             saved = final_cache.persist_prefetch_bundle(db, bundle)
+            universe_saved = final_cache.persist_universe_cache(db, bundle)
             db.commit()
-        logger.info("premarket prefetch persisted %d tickers for %s", saved, run_date)
+        logger.info("premarket prefetch persisted %d tickers (%d universe rows) for %s",
+                    saved, universe_saved, run_date)
     else:
         logger.info("premarket prefetch done for %s", run_date)
     return "OK"

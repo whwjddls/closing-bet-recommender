@@ -11,7 +11,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.store.models import FinalPrefetch
+from app.store.models import FinalPrefetch, UniverseCache
 
 
 def persist_prefetch_bundle(db: Session, bundle) -> int:
@@ -32,6 +32,26 @@ def persist_prefetch_bundle(db: Session, bundle) -> int:
         row.d1_supply_value = bundle.net_purchases.get(ticker, 0.0)
         row.market = getattr(bundle, "market_of", {}).get(ticker)
     return len(tickers)
+
+
+def persist_universe_cache(db: Session, bundle) -> int:
+    """선정 유니버스(bundle.universe)를 UniverseCache 에 (ticker, as_of) 로 upsert.
+
+    /universe 스캐너용. 모르는 필드(name/sec_type/listing 등)는 None 허용(널-안전).
+    선정된 종목은 eligible=True 로 표시한다. 저장 건수 반환."""
+    as_of = bundle.run_date
+    market_of = getattr(bundle, "market_of", {}) or {}
+    avg_value_of = getattr(bundle, "avg_value_20d", {}) or {}
+    universe = list(getattr(bundle, "universe", []) or [])
+    for ticker in universe:
+        row = db.get(UniverseCache, (ticker, as_of))
+        if row is None:
+            row = UniverseCache(ticker=ticker, as_of=as_of)
+            db.add(row)
+        row.market = market_of.get(ticker)
+        row.avg_value_20d = avg_value_of.get(ticker)
+        row.eligible = True
+    return len(universe)
 
 
 def load_prefetch(db: Session, run_date: date) -> dict[str, FinalPrefetch]:
