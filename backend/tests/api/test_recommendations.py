@@ -87,6 +87,30 @@ def test_recommendations_cold_start_null_signals_serialize_200(client, db_sessio
     assert row["near_60"] is None
 
 
+def test_recommendations_serialize_exp_close_and_supply_today(client, db_session):
+    """T4: 예상 체결가·당일 외인/기관 가집계(잠정 라벨)가 응답에 직렬화된다."""
+    db_session.add(_published_run())
+    db_session.add(_rec(rank=1, exp_close=24550.0, supply_today="외인▲기관▲"))
+    db_session.add(_regime())
+    db_session.commit()
+    row = client.get("/recommendations/2026-06-30").json()["recommendations"][0]
+    assert row["exp_close"] == 24550.0
+    assert row["supply_today"] == "외인▲기관▲"
+
+
+def test_recommendations_null_exp_close_supply_today_serialize_200(client, db_session):
+    """콜드/결측: 예상체결가·가집계 None 이어도 500 없이 200 직렬화(널-안전)."""
+    db_session.add(_published_run())
+    db_session.add(_rec(rank=1))                    # exp_close/supply_today 미설정 → None
+    db_session.add(_regime())
+    db_session.commit()
+    resp = client.get("/recommendations/2026-06-30")
+    assert resp.status_code == 200
+    row = resp.json()["recommendations"][0]
+    assert row["exp_close"] is None
+    assert row["supply_today"] is None
+
+
 def test_recommendations_unpublished_run_has_no_rows(client, db_session):
     db_session.add(Run(run_date=date(2026, 6, 30), started_at=datetime.now(), finished_at=datetime.now(),
                        status="UNPUBLISHED", kis_coverage_pct=61.0, board_published=False,

@@ -141,6 +141,83 @@ def test_orchestrate_loads_persisted_final_prefetch_into_candidates():
     assert by_ticker["000660"].high_252 == 98.0
 
 
+class SignalAdapter(FakeAdapter):
+    """T4 신호 배선 표면(VI/상한가/예상체결가/가집계/종목정보)을 노출하는 어댑터 페이크."""
+
+    def __init__(self, *, vi=None, limit_up=None, exp=None, flows=None, ineligible=None):
+        self._vi = vi or set()
+        self._limit = limit_up or set()
+        self._exp = exp or {}
+        self._flows = flows or {}
+        self._ineligible = ineligible or set()
+        self.info_calls: list[str] = []
+
+    def get_vi_tickers(self):
+        return set(self._vi)
+
+    def get_limit_up_tickers(self):
+        return set(self._limit)
+
+    def get_exp_closing_prices(self):
+        return dict(self._exp)
+
+    def get_provisional_flows(self):
+        return dict(self._flows)
+
+    def get_stock_basic_info(self, ticker):
+        self.info_calls.append(ticker)
+        return {"ticker": ticker, "is_ineligible": ticker in self._ineligible}
+
+
+def _capture_quotes_pipeline(store_box):
+    def pipeline(candidates, fetch_live, regime_by_market, modeled_avg, veto_by_ticker, max_emit):
+        store_box["quotes"] = fetch_live([c.ticker for c in candidates])
+        return fake_run_pipeline(candidates, fetch_live, regime_by_market, modeled_avg,
+                                 veto_by_ticker, max_emit)
+    return pipeline
+
+
+def test_orchestrate_dynamic_hygiene_marks_real_vi_limit_lists():
+    """실제 VI/상한가 리스트 기반으로 후보 LiveQuote 플래그가 세팅돼야 한다(폴백과 OR)."""
+    box = {}
+    orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                    adapter=SignalAdapter(vi={"005930"}, limit_up={"000660"}),
+                    store=DictStore(), run_pipeline_fn=_capture_quotes_pipeline(box))
+    quotes = box["quotes"]
+    assert quotes["005930"].is_vi is True          # VI 리스트 반영
+    assert quotes["000660"].is_limit_up is True    # 상한가 리스트 반영
+
+
+def test_orchestrate_fills_exp_close_and_supply_today():
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=SignalAdapter(exp={"005930": 71200.0},
+                                                flows={"005930": "외인▲기관▲"}),
+                          store=DictStore(), run_pipeline_fn=fake_run_pipeline)
+    row = {r.ticker: r for r in res.recommendations}["005930"]
+    assert row.exp_close == 71200.0
+    assert row.supply_today == "외인▲기관▲"
+
+
+def test_orchestrate_fills_none_when_signals_absent():
+    """콜드/결측: 예상체결가·가집계 미제공이면 None(널-안전)."""
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=SignalAdapter(), store=DictStore(),
+                          run_pipeline_fn=fake_run_pipeline)
+    row = res.recommendations[0]
+    assert row.exp_close is None and row.supply_today is None
+
+
+def test_orchestrate_final_hygiene_excludes_ineligible_and_reranks():
+    adapter = SignalAdapter(ineligible={"005930"})
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=adapter, store=DictStore(),
+                          run_pipeline_fn=fake_run_pipeline)
+    emitted = {r.ticker for r in res.recommendations}
+    assert "005930" not in emitted                 # 부적격 → 최종 위생 제외
+    assert adapter.info_calls == ["005930"]         # emit된 종목만 조회
+    assert [r.rank for r in res.recommendations] == list(range(1, len(res.recommendations) + 1))
+
+
 def test_orchestrate_uses_real_orchestrator_store_prefetch_end_to_end():
     """운영 seam: 실 OrchestratorStore.load_prefetch(final_cache)로 DB 영속화된 FINAL
     번들이 orchestrate_run 후보에 반영되어야 한다(load_prefetch 미소비 회귀 방지)."""

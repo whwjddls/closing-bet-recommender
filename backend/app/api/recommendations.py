@@ -22,6 +22,7 @@ def _to_row(rec: Recommendation) -> RecommendationRow:
         near_252=rec.near_252, near_60=rec.near_60, rvol=rec.rvol,
         s_shin=rec.s_shin, rvol_confirm=rec.rvol_confirm, supply_tilt=rec.supply_tilt,
         regime_mult=rec.regime_mult, veto=rec.veto,
+        exp_close=rec.exp_close, supply_today=rec.supply_today,
         spark=rec.spark or [], base_flag=rec.base_flag, provisional_flag=rec.provisional_flag,
     )
 

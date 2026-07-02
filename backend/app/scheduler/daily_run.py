@@ -69,6 +69,8 @@ def _persist_recs(db, run_date, result):
             final=r.final, grade=r.grade, near_252=r.near_252, near_60=r.near_60, rvol=r.rvol,
             target_price=r.target_price, stop_price=r.stop_price,
             spark=r.spark, base_flag=r.base_flag,
+            exp_close=getattr(r, "exp_close", None),
+            supply_today=getattr(r, "supply_today", None),
             provisional_flag=True, created_at=now,
         ))
 

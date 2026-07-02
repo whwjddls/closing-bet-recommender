@@ -57,6 +57,8 @@ class Recommendation(Base):
     spark: Mapped[list[float] | None] = mapped_column(JSON)       # 스파크라인 series
     base_flag: Mapped[bool | None] = mapped_column(Boolean)       # 베이스 돌파 배지
     provisional_flag: Mapped[bool | None] = mapped_column(Boolean)
+    exp_close: Mapped[float | None] = mapped_column(Float)        # KIS 예상 체결가(잠정)
+    supply_today: Mapped[str | None] = mapped_column(String)      # 당일 외인/기관 가집계 라벨(잠정)
     created_at: Mapped[dt.datetime | None] = mapped_column(DateTime)
 
     performances: Mapped[list["Performance"]] = relationship(

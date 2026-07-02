@@ -165,6 +165,25 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
     def get_quote(self, ticker: str) -> Quote:
         return self._kis.get_quote(ticker)
 
+    # ── 과열가드/신호 배선용 KIS 래퍼 위임(모두 graceful — 상위에서 재차 방어) ──
+    def get_vi_tickers(self) -> set[str]:
+        return self._kis.get_vi_tickers()
+
+    def get_limit_up_tickers(self) -> set[str]:
+        return self._kis.get_limit_up_tickers()
+
+    def get_exp_closing_prices(self) -> dict[str, float]:
+        return self._kis.get_exp_closing_prices()
+
+    def get_provisional_flows(self) -> dict[str, str]:
+        return self._kis.get_provisional_flows()
+
+    def get_stock_basic_info(self, ticker: str) -> dict:
+        return self._kis.get_stock_basic_info(ticker)
+
+    def get_near_new_highs(self) -> "list[dict]":
+        return self._kis.get_near_new_highs()
+
     def get_quotes_bulk(self, tickers: list[str]) -> tuple[dict[str, Quote], float]:
         """부분 실패 허용 → (성공분, 커버리지). <70%면 호출측 미발행."""
         quotes: dict[str, Quote] = {}

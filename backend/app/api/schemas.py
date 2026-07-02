@@ -44,6 +44,8 @@ class RecommendationRow(BaseModel):
     supply_tilt: float
     regime_mult: float
     veto: int
+    exp_close: float | None = None      # KIS 예상 체결가(잠정 — 확정 종가 아님); 결측 None
+    supply_today: str | None = None     # 당일 외인/기관 가집계 라벨(잠정 — D-1 확정 아님); 결측 None
     spark: list[float] = []
     base_flag: bool
     provisional_flag: bool
