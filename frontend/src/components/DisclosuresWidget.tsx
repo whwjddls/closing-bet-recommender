@@ -28,6 +28,19 @@ function kindClass(kind: string): string {
   return isDilutive(kind) ? 'dsc-kind--dilution' : 'dsc-kind--neutral';
 }
 
+// (ticker,title) 기준 중복 제거 — 정정 재공시가 같은 제목으로 두 번 뜨는 것 방지.
+function dedupeDisclosures(items: DisclosureItem[]): DisclosureItem[] {
+  const seen = new Set<string>();
+  const unique: DisclosureItem[] = [];
+  for (const item of items) {
+    const key = `${item.ticker}::${item.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+  return unique;
+}
+
 export default function DisclosuresWidget() {
   const [data, setData] = useState<DisclosuresResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -46,7 +59,7 @@ export default function DisclosuresWidget() {
     };
   }, []);
 
-  const items: DisclosureItem[] = data?.items ?? [];
+  const items: DisclosureItem[] = dedupeDisclosures(data?.items ?? []);
   const hasItems = items.length > 0;
 
   if (failed || (data && !hasItems)) {

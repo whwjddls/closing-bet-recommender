@@ -87,6 +87,9 @@ export default function PicksTray({
   onRemove: (ticker: string) => void;
   onClear?: () => void;
 }) {
+  // 빈 상태에선 하단 부유 밴드를 아예 렌더하지 않는다(픽을 담으면 등장).
+  if (picks.length === 0) return null;
+
   const dist = computeDistribution(picks);
 
   return (
@@ -96,13 +99,7 @@ export default function PicksTray({
       role="region"
       aria-label="담기 트레이"
     >
-      {picks.length === 0 ? (
-        <span className="picks-hint" data-testid="picks-tray-empty">
-          행에서 담기를 눌러 픽을 모으세요
-        </span>
-      ) : (
-        <>
-          <div className="picks-chips" data-testid="picks-chips">
+      <div className="picks-chips" data-testid="picks-chips">
             {picks.map((r) => (
               <span
                 key={r.ticker}
@@ -159,8 +156,6 @@ export default function PicksTray({
               CSV 내보내기
             </button>
           </div>
-        </>
-      )}
     </div>
   );
 }

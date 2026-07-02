@@ -47,10 +47,12 @@ export default function Performance() {
 
   const a = data.aggregate;
   const hasBenchmark = a.benchmark_curve.length > 0;
+  // 표본 0(콜드스타트 극단) → 리스크 지표는 아직 의미 없어 흐리게 처리.
+  const noSample = a.sample_size === 0;
 
   return (
     <main>
-      <h1>성과 리포트 ({data.eval_date})</h1>
+      <h1>성과 리포트{data.eval_date ? ` (${data.eval_date})` : ''}</h1>
 
       <section
         data-testid="agg-panel"
@@ -71,7 +73,11 @@ export default function Performance() {
         </div>
 
         {/* 리스크 지표 줄: 최대 하락폭(적색) · 손익비 · 최대연속손실 */}
-        <div className="agg-metrics" data-testid="agg-metrics">
+        <div
+          className={`agg-metrics${noSample ? ' agg-metrics--dim' : ''}`}
+          data-testid="agg-metrics"
+          data-no-sample={noSample}
+        >
           <div className="metric metric--risk" data-testid="metric-mdd">
             <span className="metric-label">최대 하락폭</span>
             <span className="metric-val mono">{formatPercent(a.mdd)}</span>

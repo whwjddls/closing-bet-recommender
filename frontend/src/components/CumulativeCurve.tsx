@@ -26,13 +26,14 @@ export default function CumulativeCurve({ strategy, benchmark }: Props) {
 
   if (strategy.length < 2) {
     return (
-      <svg
+      <div
         data-testid="cum-chart"
         data-empty="true"
-        width={W}
-        height={H}
-        className="cum-chart"
-      />
+        className="cum-chart cum-empty"
+        style={{ width: W, height: H }}
+      >
+        아직 그릴 기록이 없어요
+      </div>
     );
   }
 

@@ -40,7 +40,7 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
       >
         {title}
         <p className="news-empty" data-testid="news-empty">
-          표시할 뉴스가 없어요
+          표시할 뉴스가 없어요 (장중에 조회돼요)
         </p>
       </section>
     );

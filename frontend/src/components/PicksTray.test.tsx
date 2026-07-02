@@ -37,11 +37,10 @@ function rec(p: Partial<Recommendation>): Recommendation {
 }
 
 describe('PicksTray', () => {
-  it('빈 트레이면 안내 힌트', () => {
+  it('빈 트레이면 부유 밴드를 렌더하지 않는다(레이아웃 오염 방지)', () => {
     render(<PicksTray picks={[]} onRemove={() => {}} />);
-    expect(screen.getByTestId('picks-tray-empty')).toHaveTextContent(
-      '행에서 담기를 눌러 픽을 모으세요',
-    );
+    expect(screen.queryByTestId('picks-tray')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('picks-tray-empty')).not.toBeInTheDocument();
   });
 
   it('담은 픽 칩·개수·시장분포를 보여준다', () => {
