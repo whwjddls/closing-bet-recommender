@@ -2327,6 +2327,79 @@ td.exp-close-cell {
 }
 
 /* ============================================================================
+   오늘의 깔때기(FunnelPanel) — 추천 0건인 날의 이유를 숫자로. 스펙 §2.1
+   ========================================================================== */
+
+.funnel-panel {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.funnel-panel .fp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.funnel-panel .fp-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+
+.funnel-panel .fp-cov {
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+
+.funnel-panel .fp-flow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 0;
+}
+
+.funnel-panel .fp-num {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--text-hi);
+}
+
+.funnel-panel .fp-final {
+  color: var(--accent);
+}
+
+.funnel-panel .fp-arrow {
+  color: var(--text-lo);
+  font-size: 15px;
+}
+
+.funnel-panel .fp-legend {
+  margin: 3px 0 0;
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+
+.funnel-panel .fp-reason {
+  margin: 7px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-mid);
+}
+
+.funnel-panel .fp-skeleton {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12px;
+}
+
+/* ============================================================================
    내 전략의 달력(PerfHeatmap) — 성과 잔디 패널. 스펙 2026-07-04 §2.1
    ========================================================================== */
 
