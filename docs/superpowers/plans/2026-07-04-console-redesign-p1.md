@@ -286,7 +286,8 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 - [ ] **Step 5-1: 이모지 전수 조사** — **진짜 이모지 범위만** 스캔한다(기하 글리프 범위 2190–21FF·25A0–25FF는 제외 — `→` 주석, `▲` 백엔드 계약 라벨, `▮` 로고, `●◐▲▼■▌▸` 등 기능/장식 글리프는 이모지가 아니며 제거 대상 아님):
 
 ```bash
-cd frontend && grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{23FF}]" src --include='*.ts' --include='*.tsx' --include='*.css'
+# LC_ALL 프리픽스 필수 — Windows Git Bash에서 없으면 "-P supports only unibyte" 에러(실측)
+cd frontend && LC_ALL=C.UTF-8 grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{23FF}]" src --include='*.ts' --include='*.tsx' --include='*.css'
 ```
 
 **유일 예외: `✓`(U+2713)** — 완료 표시로 유지(GlobalHeader 테스트 단언 존재). 그 외 결과 전부를 아래 표대로 교체(표에 없는 발견분 — 예: PerfSummaryCard `✅/❌`, theme.css `content:'⏰'` — 도 같은 원칙: 아이콘은 lucide, 의미 라벨은 텍스트, CSS content 이모지는 규칙 삭제). **`.ts` 데이터 라벨 변경은 해당 테스트 단언도 같은 스텝에서 수정**:
@@ -306,7 +307,10 @@ cd frontend && grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}
 | `Board.tsx` 시황 `🟢🟡🔴` | 문자열 | `<span className="mood-dot" data-mood="go/hold/off" />`(8px 원, 배경 `--regime-*`) — Board 테스트에 이모지 단언 있으면 함께 수정 |
 | RecTable 헤더 `⚑`·행 `★/─` | 텍스트 | `⚑/─`는 리스크 컬럼 폐지로 소멸(Task 6), `★`는 `<Star size={11} />` |
 | PerfSummaryCard `✅/❌`(outcomeIcon) | 문자열 | `<CircleCheck size={12} />`/`<CircleX size={12} />` (방향색) — 테스트는 data-outcome 단언이라 무변경 |
-| `theme.css` `content:'⏰'` 류 CSS 이모지 | CSS | 규칙 삭제(필요 시 해당 JSX에 lucide 추가) |
+| `IndexStrip.tsx`·`RegimeGauge.tsx` `🟢🟡🔴` 라벨 | 문자열 | Board와 동일 — `mood-dot` 원 + 텍스트 라벨('좋음/보통/쉬어가기'). 각 테스트의 이모지 단언 동시 수정 |
+| `PerfTable.tsx` `'✅성공'/'❌실패'/'⚠공시'` | 문자열 | 텍스트 `'성공'/'실패'`(방향색) + `공시`는 `<TriangleAlert size={11} />` 병기 — PerfTable.test 단언 동시 수정 |
+| `PicksTray.tsx` `⚠ 쏠림` | 텍스트 | `<TriangleAlert size={12} />` |
+| `theme.css` `content:'⏰'/'👋'/'⛃'/'📰'/'📊'` CSS 이모지 | CSS | 규칙 삭제(필요 시 해당 JSX에 lucide 추가) |
 
 - [ ] **Step 5-2: JobButton 시그니처** — `idleLabel: string` → `idleLabel: ReactNode` (렌더는 그대로). 기존 테스트 무변경으로 green이어야 함(문자열도 ReactNode).
 - [ ] **Step 5-3: 상태바 리스킨** — GlobalHeader 마크업 구조·testid 전부 유지, CSS만 콘솔화: 1줄 고정(56px→40px), `--bg-0` 배경 + 하단 헤어라인, 로고 `종가베팅▮콘솔`(▮는 `--accent`), 요소 간 구분은 `·` 대신 얇은 세로 디바이더, **15:00 KST 이후 카운트다운에 `gh-countdown--hot` 클래스(금색+펄스 keyframe)**. 기존 urgencyClass 로직에 시각 조건만 추가.
