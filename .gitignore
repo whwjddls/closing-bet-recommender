@@ -16,3 +16,4 @@ build/
 frontend/src/**/*.js
 frontend/src/**/*.js.map
 frontend/*.tsbuildinfo
+.superpowers/
