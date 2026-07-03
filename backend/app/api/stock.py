@@ -25,9 +25,20 @@ def get_chart_provider() -> Callable:
     return _provider
 
 
+def get_name_provider() -> Callable:
+    """종목명 공급자(KRX). 참고 조회(추천 이력 없음) 응답의 name 채움용.
+    테스트는 dependency_overrides 로 주입. 지연 임포트 — 추천 이력이 있으면
+    (rec.name 사용) pykrx 네트워크가 발생하지 않는다."""
+    def _resolver(code: str) -> str | None:
+        from app.data.pykrx_client import stock_name
+        return stock_name(code)
+    return _resolver
+
+
 @router.get("/stock/{code}", response_model=StockDetailResponse)
 def get_stock(code: str, on: date | None = None, db: Session = Depends(get_db),
-              chart: Callable = Depends(get_chart_provider)) -> StockDetailResponse:
+              chart: Callable = Depends(get_chart_provider),
+              namer: Callable = Depends(get_name_provider)) -> StockDetailResponse:
     stmt = select(Recommendation).where(Recommendation.ticker == code)
     if on is not None:
         stmt = stmt.where(Recommendation.run_date == on)
@@ -45,7 +56,7 @@ def get_stock(code: str, on: date | None = None, db: Session = Depends(get_db),
     if rec is None:
         last_close = candles[-1].close if candles else 0.0
         return StockDetailResponse(
-            ticker=code, name=code, price_provisional=last_close,
+            ticker=code, name=namer(code) or code, price_provisional=last_close,
             grade=None, final=None, candles=candles,
             high_52w=cd["high_52w"], prior_high=cd["prior_high"],
             base_box=BaseBox(**box) if box else None,

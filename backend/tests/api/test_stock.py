@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pandas as pd
 
 import app.data.pykrx_client as pykrx_client
-from app.api.stock import get_chart_provider
+from app.api.stock import get_chart_provider, get_name_provider
 from app.store.models import Recommendation
 
 
@@ -92,14 +92,25 @@ def test_stock_reference_mode_when_no_recommendation(client):
     # 추천 이력 없는 종목(신고가 근접 위젯 진입 등) → 404 대신 참고 조회:
     # 차트/갭/수급은 제공, 추천 전용 필드(grade/final/contributions)는 None/빈 값.
     client.app.dependency_overrides[get_chart_provider] = lambda: _fake_chart
+    client.app.dependency_overrides[get_name_provider] = (
+        lambda: (lambda code: "테스트종목"))               # 실 KRX 네트워크 차단
     resp = client.get("/stock/999999")
     assert resp.status_code == 200
     body = resp.json()
     assert body["grade"] is None and body["final"] is None
     assert body["contributions"] == {}
     assert body["ticker"] == "999999"
+    assert body["name"] == "테스트종목"                    # name=code 하드코딩 제거 검증
     assert len(body["candles"]) == 2
     assert body["price_provisional"] == 109.0          # 마지막 종가로 현재가 대체
+
+
+def test_stock_reference_mode_name_falls_back_to_code(client):
+    # 종목명 조회 실패/미상장(None) → 코드 폴백(빈 이름 금지)
+    client.app.dependency_overrides[get_chart_provider] = lambda: _fake_chart
+    client.app.dependency_overrides[get_name_provider] = lambda: (lambda code: None)
+    body = client.get("/stock/999999").json()
+    assert body["name"] == "999999"
 
 
 class _FakePykrxChart:
