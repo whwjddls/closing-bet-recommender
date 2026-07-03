@@ -97,5 +97,6 @@
 
 - 백엔드: 데이터레이어(pykrx/KIS/DART, 어댑터) · 엔진(신호 5종+파이프라인) · 백테스트(rank-IC/직교화/수용기준) · API 13종(`/recommendations /stock /performance /reminder /universe /market /calendar /disclosures /highs /news /run /run/status /health /backtest`) · 스케줄러(장전/15:20/채점) · 오케스트레이터(D-1 200 풀+RVOL 생산자) · KIS TR 9종 · 자동 마이그레이션 · 토큰 파일 캐시.
 - 프론트: 다크 콕핏 전면 리디자인 + 초보자 친화 카피 전면 교체("오늘 장 분위기/평소보다 거래 N배/다음날 아침 9~10시 팔기") · 위젯 12종 · 스캔 실행 버튼 · Playwright 시각 QA 2라운드(16건 발견·수정, KST 버그 포함) · 참고 조회 모드.
-- 품질: 적대적 리뷰 누적 6회(설계3·플랜1·구현2), 통합 결함 20+4+1건 수정, 테스트 백엔드 310+·프론트 146.
+- 품질: 적대적 리뷰 누적 6회(설계3·플랜1·구현2), 통합 결함 20+4+1건 수정, 테스트 백엔드 310+·프론트 179.
 - 스크린샷 스크립트: 세션 스크래치패드 `ui_shots.mjs` (frontend에 복사 후 `node _ui_shots.mjs`, playwright devDep 설치됨).
+- 신고가 위젯 빈 화면 수정: /highs ETF 필터(KRX 교차검증) · 참고 조회 실명 · 차트 테마/빈데이터 가드 (2026-07-03)
