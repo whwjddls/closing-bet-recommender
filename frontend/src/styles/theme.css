@@ -2327,6 +2327,69 @@ td.exp-close-cell {
 }
 
 /* ============================================================================
+   내 전략의 달력(PerfHeatmap) — 성과 잔디 패널. 스펙 2026-07-04 §2.1
+   ========================================================================== */
+
+.perf-heatmap {
+  display: block;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: inherit;
+  transition: border-color 0.14s ease;
+}
+
+.perf-heatmap:hover {
+  border-color: var(--border-hover);
+}
+
+.perf-heatmap .ph-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.perf-heatmap .ph-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+
+.perf-heatmap .ph-count {
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+
+.perf-heatmap .ph-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.perf-heatmap .ph-cell {
+  aspect-ratio: 1;
+  border-radius: 1px;
+  background: var(--cell-skip);
+}
+
+.perf-heatmap .ph-cell[data-kind='win'] {
+  background: var(--cell-win);
+}
+
+.perf-heatmap .ph-cell[data-kind='loss'] {
+  background: var(--cell-loss);
+}
+
+.perf-heatmap .ph-empty {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12px;
+}
+
+/* ============================================================================
    어제 성과 요약 카드(PerfSummaryCard) — 위젯 스택 최상단, /performance 링크
    전략의 나머지 절반(청산 결과)을 한 화면에서 바로 확인. §1-3
    ========================================================================== */
