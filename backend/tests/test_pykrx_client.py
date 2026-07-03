@@ -6,6 +6,7 @@ import pytest
 from app.data.broker_adapter import HealthCheckResult
 import numpy as np
 
+import app.data.pykrx_client as pykrx_client
 from app.data.pykrx_client import (
     PykrxClient,
     PrefetchBundle,
@@ -621,3 +622,74 @@ def test_supply_5d_none_on_empty():
 
 def test_supply_5d_none_on_outage():
     assert supply_5d("000660", dt.date(2026, 6, 30), _FakeSupplyPx(raises=True)) is None
+
+
+# ── 상장주식 집합·종목명 헬퍼(신고가 위젯 빈 화면 수정) ──────────────────
+
+
+class _FakePykrxListing:
+    """상장목록/종목명용 주입형 가짜 pykrx — 네트워크 없음."""
+
+    def __init__(self, tickers=("005930", "122350"), names=None, boom=False):
+        self._tickers = list(tickers)
+        self._names = names if names is not None else {"005930": "삼성전자"}
+        self._boom = boom
+
+    def get_market_ticker_list(self, day_s, market):
+        if self._boom:
+            raise ConnectionError("KRX outage")
+        return list(self._tickers)
+
+    def get_market_ticker_name(self, ticker):
+        if self._boom:
+            raise ConnectionError("KRX outage")
+        # 실측: 미상장 티커(ETF 등)는 문자열이 아니라 빈 DataFrame 을 반환한다
+        return self._names.get(ticker, pd.DataFrame())
+
+
+def _clear_listing_caches():
+    pykrx_client._LISTED_CACHE.clear()
+    pykrx_client._NAME_CACHE.clear()
+
+
+def test_filter_listed_stocks_drops_non_stocks():
+    _clear_listing_caches()
+    rows = [{"ticker": "005930", "name": "삼성전자"},
+            {"ticker": "000117", "name": "어떤채권ETF"}]
+    out = pykrx_client.filter_listed_stocks(rows, pykrx_module=_FakePykrxListing())
+    assert [r["ticker"] for r in out] == ["005930"]
+    _clear_listing_caches()
+
+
+def test_filter_listed_stocks_fail_open_on_error_and_empty():
+    _clear_listing_caches()
+    rows = [{"ticker": "000117", "name": "어떤채권ETF"}]
+    # KRX 조회 실패 → 원본 유지(fail-open)
+    assert pykrx_client.filter_listed_stocks(
+        rows, pykrx_module=_FakePykrxListing(boom=True)) == rows
+    # 빈 상장목록(휴장 등) → 원본 유지
+    assert pykrx_client.filter_listed_stocks(
+        rows, pykrx_module=_FakePykrxListing(tickers=())) == rows
+    _clear_listing_caches()
+
+
+def test_listed_stock_set_caches_per_day():
+    _clear_listing_caches()
+    day_s = "20260703"
+    first = pykrx_client.listed_stock_set(day_s, pykrx_module=_FakePykrxListing())
+    assert "005930" in first
+    # 두 번째 호출은 캐시 히트 — 장애 모듈을 줘도 네트워크(예외) 안 탄다
+    second = pykrx_client.listed_stock_set(day_s, pykrx_module=_FakePykrxListing(boom=True))
+    assert second == first
+    _clear_listing_caches()
+
+
+def test_stock_name_resolves_and_none_for_unlisted():
+    _clear_listing_caches()
+    px = _FakePykrxListing()
+    assert pykrx_client.stock_name("005930", pykrx_module=px) == "삼성전자"
+    assert pykrx_client.stock_name("000117", pykrx_module=px) is None   # 빈 DataFrame → None
+    # 캐시 히트 — 장애 모듈을 줘도 이미 캐시된 이름 반환
+    assert pykrx_client.stock_name(
+        "005930", pykrx_module=_FakePykrxListing(boom=True)) == "삼성전자"
+    _clear_listing_caches()

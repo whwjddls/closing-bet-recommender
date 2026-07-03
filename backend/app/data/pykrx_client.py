@@ -528,3 +528,59 @@ def market_overview(pykrx_module: Any | None = None) -> dict:
         "sectors": sector_changes(asof, px),
         "investors": market_investors(asof, px),
     }
+
+
+# ── 참고 조회·신고가 위젯 지원 — KRX 상장 주식 판별/종목명 ──────────────────
+# KIS 랭킹(near-new-highlow)은 ETF·ETN·채권펀드를 섞어 반환하는데, 이들은
+# 전략 대상이 아니고 pykrx 주식 API(차트·수급)가 지원하지 않아 클릭 시
+# 빈 화면이 된다. KRX 상장주식 목록과 교차검증해 걸러낸다.
+_LISTED_CACHE: dict[str, frozenset[str]] = {}   # day_s → 상장주식 집합(프로세스 캐시)
+_NAME_CACHE: dict[str, str] = {}                # ticker → 종목명
+
+
+def listed_stock_set(day_s: str, pykrx_module: Any | None = None) -> frozenset[str]:
+    """해당 일자 KRX 상장 주식(KOSPI∪KOSDAQ∪KONEX) 티커 집합. ETF·ETN·ELW 미포함.
+
+    빈 결과는 캐시하지 않는다 — 휴장/일시 장애 시 다음 호출이 재시도한다."""
+    cached = _LISTED_CACHE.get(day_s)
+    if cached is not None:
+        return cached
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    listed = frozenset(str(t) for t in px.get_market_ticker_list(day_s, "ALL"))
+    if listed:
+        _LISTED_CACHE[day_s] = listed
+    return listed
+
+
+def filter_listed_stocks(rows: list[dict], pykrx_module: Any | None = None,
+                         today: dt.date | None = None) -> list[dict]:
+    """KIS 랭킹 행에서 비주식(ETF·ETN·채권펀드 등)을 ticker 교차검증으로 제거.
+
+    KRX 조회 실패·빈 목록이면 원본 그대로(fail-open) — 필터 장애로 위젯이
+    통째로 비는 것보다 잡음 섞인 목록이 낫다."""
+    day_s = _yyyymmdd(today or dt.date.today())
+    try:
+        listed = listed_stock_set(day_s, pykrx_module)
+    except Exception:                                   # noqa: BLE001  (외부 IO)
+        return rows
+    if not listed:
+        return rows
+    return [r for r in rows if str(r.get("ticker", "")) in listed]
+
+
+def stock_name(ticker: str, pykrx_module: Any | None = None) -> str | None:
+    """KRX 종목명. 미상장(ETF 등)·조회 실패 시 None.
+
+    실측(2026-07-03): pykrx는 미상장 티커에 문자열이 아닌 빈 DataFrame을 반환."""
+    cached = _NAME_CACHE.get(ticker)
+    if cached is not None:
+        return cached
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    try:
+        name = px.get_market_ticker_name(ticker)
+    except Exception:                                   # noqa: BLE001  (외부 IO)
+        return None
+    if isinstance(name, str) and name:
+        _NAME_CACHE[ticker] = name
+        return name
+    return None
