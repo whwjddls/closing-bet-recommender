@@ -209,9 +209,10 @@ describe('deriveHeatmapCells', () => {
 // 성과 잔디(내 전략의 달력) 셀 파생 — /performance aggregate.cumulative_curve 기반.
 // 스펙 §2.1: 증분>0 win(빨강)·<0 loss(파랑)·곡선에 없는 날/증분0 skip(회색).
 // 첫 점 규칙: cum[0] 자체를 그날의 증분으로 취급.
+import type { CurvePoint } from '../api/client';   // client.ts 기존 타입 재사용(드리프트 방지)
+
 export type HeatCellKind = 'win' | 'loss' | 'skip';
 export interface HeatCell { date: string; kind: HeatCellKind; delta: number | null; }
-interface CurvePoint { date: string; cum: number; }
 
 export function deriveHeatmapCells(curve: CurvePoint[], dates: string[]): HeatCell[] {
   const deltaByDate = new Map<string, number>();
@@ -282,13 +283,13 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 
 **Files:** Modify `frontend/src/components/GlobalHeader.tsx`(+test), `JobButton.tsx`, `RunScanButton.tsx`, `NewsBadge.tsx`, `PerfSummaryCard.tsx`, `RecTable.tsx`(material-hint 아이콘만), `theme.css`
 
-- [ ] **Step 5-1: 이모지 전수 조사** — **ts/tsx/css 전부**를 유니코드 범위로 스캔(고정 목록 금지 — 누락 실사고 방지):
+- [ ] **Step 5-1: 이모지 전수 조사** — **진짜 이모지 범위만** 스캔한다(기하 글리프 범위 2190–21FF·25A0–25FF는 제외 — `→` 주석, `▲` 백엔드 계약 라벨, `▮` 로고, `●◐▲▼■▌▸` 등 기능/장식 글리프는 이모지가 아니며 제거 대상 아님):
 
 ```bash
-cd frontend && grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{25A0}-\x{25FF}]" src --include='*.ts' --include='*.tsx' --include='*.css'
+cd frontend && grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{23FF}]" src --include='*.ts' --include='*.tsx' --include='*.css'
 ```
 
-결과 전부를 아래 표대로 교체(표에 없는 발견분도 같은 원칙 — 아이콘은 lucide, 의미 라벨은 텍스트). **`.ts` 데이터 라벨 변경은 해당 테스트 단언도 같은 스텝에서 수정**:
+**유일 예외: `✓`(U+2713)** — 완료 표시로 유지(GlobalHeader 테스트 단언 존재). 그 외 결과 전부를 아래 표대로 교체(표에 없는 발견분 — 예: PerfSummaryCard `✅/❌`, theme.css `content:'⏰'` — 도 같은 원칙: 아이콘은 lucide, 의미 라벨은 텍스트, CSS content 이모지는 규칙 삭제). **`.ts` 데이터 라벨 변경은 해당 테스트 단언도 같은 스텝에서 수정**:
 
 | 위치 | 현재 | 교체(lucide, 14px) |
 |---|---|---|
@@ -304,6 +305,8 @@ cd frontend && grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}
 | `theme.css` `content:'📰'` ::before | CSS | 규칙 삭제(NewsBadge가 lucide 사용) |
 | `Board.tsx` 시황 `🟢🟡🔴` | 문자열 | `<span className="mood-dot" data-mood="go/hold/off" />`(8px 원, 배경 `--regime-*`) — Board 테스트에 이모지 단언 있으면 함께 수정 |
 | RecTable 헤더 `⚑`·행 `★/─` | 텍스트 | `⚑/─`는 리스크 컬럼 폐지로 소멸(Task 6), `★`는 `<Star size={11} />` |
+| PerfSummaryCard `✅/❌`(outcomeIcon) | 문자열 | `<CircleCheck size={12} />`/`<CircleX size={12} />` (방향색) — 테스트는 data-outcome 단언이라 무변경 |
+| `theme.css` `content:'⏰'` 류 CSS 이모지 | CSS | 규칙 삭제(필요 시 해당 JSX에 lucide 추가) |
 
 - [ ] **Step 5-2: JobButton 시그니처** — `idleLabel: string` → `idleLabel: ReactNode` (렌더는 그대로). 기존 테스트 무변경으로 green이어야 함(문자열도 ReactNode).
 - [ ] **Step 5-3: 상태바 리스킨** — GlobalHeader 마크업 구조·testid 전부 유지, CSS만 콘솔화: 1줄 고정(56px→40px), `--bg-0` 배경 + 하단 헤어라인, 로고 `종가베팅▮콘솔`(▮는 `--accent`), 요소 간 구분은 `·` 대신 얇은 세로 디바이더, **15:00 KST 이후 카운트다운에 `gh-countdown--hot` 클래스(금색+펄스 keyframe)**. 기존 urgencyClass 로직에 시각 조건만 추가.
@@ -332,17 +335,17 @@ cd frontend && grep -rn "top3\|exit-cta\|exit_label\|buy-price\|exp-return\|exp-
 | ⚑ 리스크 | 컬럼 폐지. 행 `data-risk` 속성·리스크 행 좌측 `--risk` 보더 유지, 종목 셀 보조줄의 '희석 주의' 배지(deriveBadges)가 시각 신호 담당 |
 | 현재가* | 유지(1줄째) — 잠정 `*` 마커 유지 |
 | 매수 참고가 | 컬럼 폐지 → **현재가 셀 2줄째** `매수 {값}` 보조줄로 통합. testid `buy-price`와 잠정 `*` 이 보조줄에 유지 |
-| 예상 마감가 | 컬럼 폐지 → 현재가 셀 3줄째 소형 텍스트 `예상 {값}` (testid `exp-close` 유지, null이면 줄 생략) |
+| 예상 마감가 | 컬럼 폐지 → 현재가 셀 3줄째 소형 텍스트 `예상 {값}` (testid `exp-close` 유지, **null이면 `예상 —`** — 기존 exp-close null 테스트(≈:171-172)가 `—` 존재를 단언하므로 계약 유지 + 정직한 placeholder 원칙 부합) |
 | 다음날 아침 팔기(exit-cta) | 컬럼 폐지 → **테이블 각주 행**(colspan, testid `table-footnote`): `* 15:20 잠정 — 마감(15:30) 확정 · 기본 전략: 다음날 아침 9~10시에 팔기` (불변조항 #3 카피 보존). 참고 목표/손절은 전용 컬럼으로 이미 보존 |
 | 기대(exp-return) | 참고목표 셀 안에 `+9.2%` 소형 병기(방향색, testid `exp-return` 유지) |
 | 신호(배지·supply_today) | deriveBadges 배지는 종목 셀 보조줄로, supply_today는 신규 수급 컬럼으로 |
-| 차트(MiniChart) | 컬럼 폐지 + **RecTable의 MiniChart import 제거**(noUnusedLocals tsc 실패 방지). 스파크는 종목 상세 존치 |
+| 차트(MiniChart) | 컬럼 폐지 + **MiniChart 컴포넌트·테스트 파일 삭제**(RecTable이 유일 소비처 — 남기면 테스트가 살려두는 죽은 코드. git 이력으로 복원 가능) |
 | #·등급·담기 | 유지(등급은 배지 박스 → 색 글자, testid `rec-grade` 유지) |
 
 최종 컬럼: `# 등급 종목 현재가(3줄 복합) 참고목표(기대 병기) 참고손절 평소보다거래 수급 재료 담기` + 각주 행
 
 - [ ] **Step 6-3: 실패 테스트 먼저 수정** — RecTable.test에서(전부 이 스텝에서):
-  - `top3-card` 단언 → 상위 3행 `rec-row[data-top3="true"]` 3개 + 1위 행 `row-rank-marker` 존재로 대체
+  - 기존 `data-top3` 행 단언(≈:94-98)은 **무변경 통과**(카드가 아니라 행 속성 단언임). 신규 단언 1건 추가: 1위 행에 `row-rank-marker` 존재
   - "TOP3 카드마다 재료 배지" → "모든 행의 재료 컬럼에 NewsBadge"(`news-badge`+`news-badge-none` 합 = 행 수)
   - exit-cta/'오전 VWAP' 단언(≈:88-92) → `table-footnote`가 "아침 9~10시" 카피 포함 단언으로 대체
   - buy-price 잠정 `*` 단언(≈:101-108) → 현재가 셀 보조줄 `buy-price` 단언으로 이관(`*` 유지 확인)
