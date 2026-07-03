@@ -1,7 +1,9 @@
 """백테스트 로더의 pykrx 무응답(hang) 방어 — 실측(2026-07-03): 종목 1개가 무응답이면
 로더 전체가 영원히 멈춤(라이브 파이프라인은 이미 try/except로 방어되지만 로더는 미방어였음)."""
+import datetime as dt
 import time
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -70,3 +72,37 @@ def test_load_price_panel_skips_hanging_ticker_and_keeps_others(monkeypatch):
 
     assert elapsed < 2.0                                  # 5초 hang을 기다리지 않았음
     assert set(panel["ticker"].unique()) == {"000660"}    # 무응답 종목만 빠지고 나머지는 포함
+
+
+class _ZeroRowPykrx:
+    """거래정지 구간(0원 행) 포함 가짜 pykrx — 실측(2026-07-03): pykrx는 정지일을
+    시/고/저/종가 전부 0인 행으로 반환한다. 0 종가는 signal=∞·fwd_ret=−100% 오염원."""
+
+    def get_market_ohlcv(self, frm, to, ticker):
+        idx = pd.to_datetime(["2026-06-01", "2026-06-02", "2026-06-03"])
+        return pd.DataFrame(
+            {"시가": [100.0, 0.0, 104.0], "고가": [105.0, 0.0, 110.0],
+             "저가": [99.0, 0.0, 103.0], "종가": [104.0, 0.0, 109.0],
+             "거래량": [1000, 0, 2000]},
+            index=idx,
+        )
+
+
+def test_load_price_panel_drops_zero_close_rows(monkeypatch):
+    # 0원 행이 rank-IC를 오염(신호 최하위·수익률 ∞ → 가짜 음의 상관)시키지 않도록 제외.
+    monkeypatch.setattr(loaders, "_universe", lambda _px, _asof: ["000660"])
+    panel = loaders.load_price_panel(
+        dt.date(2026, 6, 1), dt.date(2026, 6, 3), pykrx_module=_ZeroRowPykrx())
+    assert len(panel) == 2                                # 0원 행(6/2)만 제거
+    assert (panel["close"] > 0).all()
+    finite_signals = panel["signal"].dropna()
+    assert np.isfinite(finite_signals).all()              # ∞ 신호 미유입
+
+
+def test_load_vwap_panel_drops_zero_open_rows(monkeypatch):
+    # 시가 0(정지일)은 익일 진입 프록시로 쓸 수 없음 — ret=−100% 가짜 수익률 방지.
+    monkeypatch.setattr(loaders, "_universe", lambda _px, _asof: ["000660"])
+    panel = loaders.load_vwap_panel(
+        dt.date(2026, 6, 1), dt.date(2026, 6, 3), pykrx_module=_ZeroRowPykrx())
+    assert (panel["vwap_0900_1000"] > 0).all()
+    assert list(panel["eval_date"].dt.strftime("%Y-%m-%d")) == ["2026-06-03"]

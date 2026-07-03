@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import math
 import threading
 
 import pandas as pd
@@ -93,12 +94,15 @@ def load_price_panel(start: dt.date, end: dt.date, pykrx_module=None) -> pd.Data
             d = pykrx_client._parse_day(idx)
             if d is None or not (start <= d <= end):
                 continue
+            if float(close.loc[idx]) <= 0:
+                continue    # 실측(2026-07-03): 거래정지일은 0원 행 — signal ∞·ret −100% 오염원
             sig = signal.loc[idx]
+            ok = pd.notna(sig) and math.isfinite(float(sig))      # href=0 → ∞ 신호 차단
             rows.append({
                 "date": pd.Timestamp(d),
                 "ticker": ticker,
                 "close": float(close.loc[idx]),
-                "signal": float(sig) if pd.notna(sig) else float("nan"),
+                "signal": float(sig) if ok else float("nan"),
             })
     return pd.DataFrame(rows, columns=["date", "ticker", "close", "signal"])
 
@@ -122,6 +126,8 @@ def load_vwap_panel(start: dt.date, end: dt.date, pykrx_module=None) -> pd.DataF
             d = pykrx_client._parse_day(idx)
             if d is None or d <= start:                           # eval_date > run_date(≥start)
                 continue
+            if float(opens.loc[idx]) <= 0:
+                continue    # 정지일 시가 0 — 익일 진입 프록시 불가(−100% 가짜 수익률 방지)
             rows.append({
                 "eval_date": pd.Timestamp(d),
                 "ticker": ticker,
