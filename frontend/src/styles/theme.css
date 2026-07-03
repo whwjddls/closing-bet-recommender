@@ -753,6 +753,20 @@ main > header h1 {
   white-space: nowrap;
 }
 
+/* 보조 잡 버튼(종목 후보 가져오기·성과 채점) — 금색 주 버튼 옆 낮은 위계 */
+.run-scan-btn--secondary {
+  background: var(--bg-2);
+  color: var(--text-hi);
+  border-color: var(--border);
+  font-weight: 700;
+}
+
+.run-scan-btn--secondary:hover:not(:disabled) {
+  background: var(--bg-2);
+  border-color: var(--text-mid);
+  box-shadow: none;
+}
+
 .run-scan-toast {
   position: absolute;
   top: calc(100% + 8px);
@@ -1634,6 +1648,15 @@ td.exp-close-cell {
 /* ============================================================================
    성과추적
    ========================================================================== */
+
+/* 상단: 제목 + 성과 채점 버튼 한 줄 */
+.perf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
 
 .perf-table td[data-testid='perf-return'] {
   font-weight: 700;

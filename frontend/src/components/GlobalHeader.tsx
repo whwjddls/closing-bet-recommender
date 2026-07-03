@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import {
   fetchRecommendations,
   fetchRunStatus,
+  fetchPrefetchStatus,
+  triggerPrefetch,
   type RegimeInfo,
   type RunStatusResponse,
 } from '../api/client';
 import { kstToday } from '../lib/date';
-import { REFETCH_EVENT } from '../lib/events';
+import { REFETCH_EVENT, emitRefetch } from '../lib/events';
 import { getStoredTheme, toggleTheme, type Theme } from '../lib/theme';
+import JobButton, { type JobToast } from './JobButton';
 import RunScanButton from './RunScanButton';
 
 type Verdict = 'GO' | 'CAUTION' | 'RISK_OFF';
@@ -73,6 +76,16 @@ function urgencyClass(ms: number): string {
   if (ms < 60 * 1000) return 'gh-danger'; // 1분 미만 적색 점멸
   if (ms < 5 * 60 * 1000) return 'gh-warn'; // 5분 미만 앰버
   return '';
+}
+
+// 프리페치(종목 후보 가져오기) 완료 상태 → 초보자 친화 토스트.
+function prefetchToast(status: RunStatusResponse): JobToast {
+  if (status.last_error) return { tone: 'error', message: status.last_error };
+  if (status.last_result === 'SKIPPED')
+    return { tone: 'warn', message: '오늘은 휴장일이에요' };
+  if (status.last_result === 'OK')
+    return { tone: 'ok', message: '종목 후보 준비 완료 — 이제 스캔이 빨라요' };
+  return { tone: 'warn', message: status.last_result ?? '완료' };
 }
 
 function deriveVerdict(regimes: RegimeInfo[]): Verdict | null {
@@ -197,6 +210,16 @@ export default function GlobalHeader() {
         >
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>
+        <JobButton
+          idleLabel="📥 종목 후보 가져오기"
+          runningLabel="가져오는 중"
+          hint="5~10분 걸려요 — 매일 아침 한 번이면 충분해요"
+          trigger={triggerPrefetch}
+          fetchStatus={fetchPrefetchStatus}
+          describeResult={prefetchToast}
+          onDone={emitRefetch}
+          testId="job-prefetch"
+        />
         <RunScanButton />
       </div>
     </div>

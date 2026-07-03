@@ -1,8 +1,26 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  fireEvent,
+} from '@testing-library/react';
 import Performance from './Performance';
 import * as api from '../api/client';
 import type { PerformanceResponse } from '../api/client';
+
+beforeEach(() => {
+  // 페이지의 채점 버튼이 mount 시 상태를 동기화하므로 idle 응답을 stub.
+  vi.spyOn(api, 'fetchScoringStatus').mockResolvedValue({
+    running: false,
+    last_result: null,
+    last_error: null,
+    finished_at: null,
+    started_at: null,
+    elapsed_sec: null,
+  });
+});
 
 const warm: PerformanceResponse = {
   eval_date: '2026-06-29',
@@ -146,5 +164,39 @@ describe('Performance', () => {
       'data-cold-start',
       'true',
     );
+  });
+
+  it('상단에 성과 채점하기 버튼을 노출한다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('job-scoring-btn')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('job-scoring-btn')).toHaveTextContent(
+      '성과 채점하기',
+    );
+  });
+
+  it('10시 이전 채점 시도(rejected)면 사유를 경고 토스트로 보여준다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    vi.spyOn(api, 'triggerScoring').mockResolvedValue({
+      status: 'rejected',
+      reason: '오전 10시 이후에 눌러주세요 — 9~10시 아침 평균가 집계가 끝나야 채점할 수 있어요',
+    });
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('job-scoring-btn')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('job-scoring-btn'));
+    await waitFor(() =>
+      expect(screen.getByTestId('job-scoring-toast')).toHaveTextContent(
+        '10시 이후',
+      ),
+    );
+    expect(screen.getByTestId('job-scoring-toast')).toHaveAttribute(
+      'data-tone',
+      'warn',
+    );
+    expect(screen.getByTestId('job-scoring-btn')).not.toBeDisabled();
   });
 });

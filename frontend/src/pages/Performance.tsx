@@ -1,9 +1,33 @@
-import { useEffect, useState } from 'react';
-import { fetchPerformance, type PerformanceResponse } from '../api/client';
-import { cachedFetch } from '../lib/dataCache';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  fetchPerformance,
+  fetchScoringStatus,
+  triggerScoring,
+  type PerformanceResponse,
+  type RunStatusResponse,
+} from '../api/client';
+import { cachedFetch, invalidateCache } from '../lib/dataCache';
 import { formatPercent } from '../lib/format';
+import JobButton, { type JobToast } from '../components/JobButton';
 import PerfTable from '../components/PerfTable';
 import CumulativeCurve from '../components/CumulativeCurve';
+
+// 채점 잡 완료 상태 → 초보자 친화 토스트. SCORED:n 은 채점 건수.
+function scoringToast(status: RunStatusResponse): JobToast {
+  if (status.last_error) return { tone: 'error', message: status.last_error };
+  if (status.last_result === 'SKIPPED')
+    return { tone: 'warn', message: '오늘은 휴장일이에요' };
+  if (status.last_result?.startsWith('SCORED:')) {
+    const n = Number(status.last_result.slice('SCORED:'.length));
+    return n > 0
+      ? { tone: 'ok', message: `${n}종목 채점 완료` }
+      : {
+          tone: 'warn',
+          message: '채점할 픽이 없어요 — 어제 추천이 없었거나 이미 채점됐어요',
+        };
+  }
+  return { tone: 'ok', message: status.last_result ?? '채점 완료' };
+}
 
 function pct(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
@@ -36,11 +60,21 @@ export default function Performance() {
   const [data, setData] = useState<PerformanceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     cachedFetch('performance', fetchPerformance)
       .then(setData)
       .catch((e) => setError(String(e)));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 채점 완료 → 캐시 무효화 후 재조회(신선한 성공률 즉시 반영).
+  const reloadAfterScoring = useCallback(() => {
+    invalidateCache('performance');
+    load();
+  }, [load]);
 
   if (error)
     return <p data-testid="perf-error">성과를 불러오지 못했습니다: {error}</p>;
@@ -53,7 +87,19 @@ export default function Performance() {
 
   return (
     <main>
-      <h1>성과 리포트{data.eval_date ? ` (${data.eval_date})` : ''}</h1>
+      <div className="perf-head">
+        <h1>성과 리포트{data.eval_date ? ` (${data.eval_date})` : ''}</h1>
+        <JobButton
+          idleLabel="🧮 성과 채점하기"
+          runningLabel="채점 중"
+          hint="어제 픽의 아침(9~10시) 결과를 계산해요"
+          trigger={triggerScoring}
+          fetchStatus={fetchScoringStatus}
+          describeResult={scoringToast}
+          onDone={reloadAfterScoring}
+          testId="job-scoring"
+        />
+      </div>
 
       <section
         data-testid="agg-panel"

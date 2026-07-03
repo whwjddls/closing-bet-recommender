@@ -304,6 +304,14 @@ export interface RunStatusResponse {
   elapsed_sec: number | null; // 현재 실행 경과 초(미실행이면 null)
 }
 
+// POST /jobs/{prefetch|scoring} — 수동 잡 트리거(버튼용).
+// rejected: 실행 조건 미충족(예: 채점은 오전 10시 이후) — reason에 사유.
+export type JobTriggerStatus = 'started' | 'already_running' | 'rejected';
+export interface JobTriggerResponse {
+  status: JobTriggerStatus;
+  reason: string | null;
+}
+
 // GET /news/{ticker} — 종목 최근 뉴스(재료 확인). 빈/실패는 정직한 placeholder.
 export interface NewsItem {
   datetime: string;
@@ -349,5 +357,12 @@ export const fetchReminder = () => getJson<ReminderResponse>(`/reminder`);
 export const fetchHighs = () => getJson<HighsResponse>(`/highs`);
 export const triggerRun = () => postJson<RunTriggerResponse>(`/run`);
 export const fetchRunStatus = () => getJson<RunStatusResponse>(`/run/status`);
+// 수동 잡 2종 — 종목 후보 가져오기(프리페치) / 성과 채점. 상태 응답은 /run/status 와 동일 형태.
+export const triggerPrefetch = () => postJson<JobTriggerResponse>(`/jobs/prefetch`);
+export const fetchPrefetchStatus = () =>
+  getJson<RunStatusResponse>(`/jobs/prefetch/status`);
+export const triggerScoring = () => postJson<JobTriggerResponse>(`/jobs/scoring`);
+export const fetchScoringStatus = () =>
+  getJson<RunStatusResponse>(`/jobs/scoring/status`);
 export const fetchNews = (ticker: string) =>
   getJson<NewsResponse>(`/news/${ticker}`);

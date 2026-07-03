@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { cachedFetch, clearDataCache } from './dataCache';
+import { cachedFetch, clearDataCache, invalidateCache } from './dataCache';
 
 beforeEach(() => clearDataCache());
 
@@ -54,5 +54,19 @@ describe('cachedFetch', () => {
     clearDataCache();
     await cachedFetch('k', fetcher, 60_000);
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidateCache는 해당 키만 무효화한다', async () => {
+    const fa = vi.fn().mockResolvedValue({ v: 'a' });
+    const fb = vi.fn().mockResolvedValue({ v: 'b' });
+    await cachedFetch('a', fa, 60_000);
+    await cachedFetch('b', fb, 60_000);
+
+    invalidateCache('a');
+
+    await cachedFetch('a', fa, 60_000); // 무효화된 키 → 재조회
+    await cachedFetch('b', fb, 60_000); // 다른 키 → 캐시 유지
+    expect(fa).toHaveBeenCalledTimes(2);
+    expect(fb).toHaveBeenCalledTimes(1);
   });
 });

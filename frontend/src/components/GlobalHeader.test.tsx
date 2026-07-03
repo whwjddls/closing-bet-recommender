@@ -27,6 +27,20 @@ vi.mock('../api/client', () => ({
     }),
   ),
   triggerRun: vi.fn(() => Promise.resolve({ status: 'started' })),
+  // 프리페치(종목 후보 가져오기) 버튼 — 기본은 미실행.
+  triggerPrefetch: vi.fn(() =>
+    Promise.resolve({ status: 'started', reason: null }),
+  ),
+  fetchPrefetchStatus: vi.fn(() =>
+    Promise.resolve({
+      running: false,
+      last_result: null,
+      last_error: null,
+      finished_at: null,
+      started_at: null,
+      elapsed_sec: null,
+    }),
+  ),
 }));
 
 // mount 시 발사되는 fetch promise들을 act 안에서 정리(act 경고 방지).
@@ -41,6 +55,14 @@ describe('GlobalHeader', () => {
     render(<GlobalHeader />);
     expect(screen.getByTestId('close-countdown')).toBeInTheDocument();
     expect(screen.getByTestId('honesty-banner')).toBeInTheDocument();
+    await flushMountEffects();
+  });
+
+  it('종목 후보 가져오기(프리페치) 버튼을 노출한다', async () => {
+    render(<GlobalHeader />);
+    expect(screen.getByTestId('job-prefetch-btn')).toHaveTextContent(
+      '종목 후보 가져오기',
+    );
     await flushMountEffects();
   });
 

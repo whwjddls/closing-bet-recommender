@@ -53,6 +53,12 @@ export async function cachedFetch<T>(
   }
 }
 
+// 특정 키 무효화 — 데이터가 확실히 바뀐 직후(예: 채점 실행 완료 → performance)
+// 다음 조회가 캐시 대신 신선한 값을 받도록 한다.
+export function invalidateCache(key: string): void {
+  store.delete(key);
+}
+
 // 테스트 격리용 — 모듈 전역 캐시를 비운다.
 export function clearDataCache(): void {
   store.clear();
