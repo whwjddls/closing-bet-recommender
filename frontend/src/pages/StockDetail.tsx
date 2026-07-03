@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { createChart } from 'lightweight-charts';
-import { fetchStock, type StockDetailResponse } from '../api/client';
+import { fetchStock, type StockContributions, type StockDetailResponse } from '../api/client';
 import { formatPrice } from '../lib/format';
 import SignalContribution from '../components/SignalContribution';
 import OvernightGapStat from '../components/OvernightGapStat';
@@ -89,9 +89,16 @@ export default function StockDetail() {
       {/* ── 상단 요약 바 ─────────────────────────────────────── */}
       <header className="sd-summary card">
         <div className="sd-summary-id">
-          <span className={`grade-badge grade-${detail.grade}`}>
-            {detail.grade}
-          </span>
+          {detail.grade ? (
+            <span className={`grade-badge grade-${detail.grade}`}>
+              {detail.grade}
+            </span>
+          ) : (
+            <span className="grade-badge grade-ref" data-testid="reference-badge"
+                  title="추천 목록에 없는 종목 — 차트·통계만 참고하세요">
+              참고
+            </span>
+          )}
           <h1 className="sd-name">
             {detail.name}
             <span className="sd-code mono">{detail.ticker}</span>
@@ -113,7 +120,9 @@ export default function StockDetail() {
           </div>
           <div className="sd-metric">
             <span className="sd-metric-label">종합 점수</span>
-            <span className="sd-metric-val mono">{detail.final.toFixed(2)}</span>
+            <span className="sd-metric-val mono">
+              {detail.final != null ? detail.final.toFixed(2) : '—'}
+            </span>
           </div>
         </div>
       </header>
@@ -129,10 +138,12 @@ export default function StockDetail() {
 
           <VolumeHistogram candles={detail.candles} />
 
-          <SignalContribution
-            contributions={detail.contributions}
-            final={detail.final}
-          />
+          {detail.final != null && (
+            <SignalContribution
+              contributions={detail.contributions as StockContributions}
+              final={detail.final}
+            />
+          )}
 
           <SupplyFlow5d supply={detail.supply_5d} />
         </section>

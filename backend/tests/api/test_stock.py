@@ -88,9 +88,18 @@ def test_stock_specific_date_query(client, db_session):
     assert body["final"] == 0.7
 
 
-def test_stock_404_when_missing(client):
-    # 차트 공급자 미오버라이드 — 404 가 차트 호출보다 먼저라 지연 임포트도 일어나지 않음
-    assert client.get("/stock/999999").status_code == 404
+def test_stock_reference_mode_when_no_recommendation(client):
+    # 추천 이력 없는 종목(신고가 근접 위젯 진입 등) → 404 대신 참고 조회:
+    # 차트/갭/수급은 제공, 추천 전용 필드(grade/final/contributions)는 None/빈 값.
+    client.app.dependency_overrides[get_chart_provider] = lambda: _fake_chart
+    resp = client.get("/stock/999999")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["grade"] is None and body["final"] is None
+    assert body["contributions"] == {}
+    assert body["ticker"] == "999999"
+    assert len(body["candles"]) == 2
+    assert body["price_provisional"] == 109.0          # 마지막 종가로 현재가 대체
 
 
 class _FakePykrxChart:

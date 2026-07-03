@@ -68,8 +68,8 @@ class StockDetailResponse(BaseModel):
     ticker: str
     name: str
     price_provisional: float
-    grade: str
-    final: float
+    grade: str | None = None            # 추천 이력 없는 참고 조회(신고가 위젯 등)면 None
+    final: float | None = None
     candles: list[Candle] = []
     high_52w: float
     prior_high: float

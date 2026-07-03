@@ -104,13 +104,13 @@ export interface StockDetailResponse {
   ticker: string;
   name: string;
   price_provisional: number;
-  grade: Grade;
-  final: number;
+  grade: Grade | null;                 // 추천 이력 없는 참고 조회(신고가 위젯 진입 등)면 null
+  final: number | null;
   candles: Candle[];
   high_52w: number;
   prior_high: number;
   base_box: BaseBox | null;
-  contributions: StockContributions;
+  contributions: Partial<StockContributions>;  // 참고 조회면 {}
   overnight_gap: OvernightGap | null;
   supply_5d: Supply5d | null; // 최근 5일 수급(표본 부족이면 null)
 }

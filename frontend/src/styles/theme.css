@@ -3478,3 +3478,11 @@ td.exp-close-cell {
     flex: 1 1 0;
   }
 }
+
+/* 참고 조회 배지 — 추천 이력 없는 종목 상세(신고가 위젯 진입 등) */
+.grade-badge.grade-ref {
+  color: var(--text-mid);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  font-weight: 600;
+}
