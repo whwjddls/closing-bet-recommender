@@ -5,50 +5,58 @@
    ========================================================================== */
 
 :root {
-  /* ── 베이스(다크) ─────────────────────────────────────────── */
-  --bg-0: #0b0e14; /* 앱 배경(최하층) */
-  --bg-1: #141922; /* 카드/테이블 배경 */
-  --bg-2: #1c2430; /* 행 hover·헤더·입력 */
-  --border: #2a3441; /* 구분선 */
-  --text-hi: #e6edf3; /* 주요 숫자·종목명 */
-  --text-mid: #9da7b3; /* 라벨·보조 */
-  --text-lo: #5b6673; /* 비활성·주석 */
+  /* ── 베이스(다크) — 콘솔 팔레트(스펙 2026-07-04 §1.1) ───────── */
+  --bg-0: #0a0c10; /* 앱 배경(최하층) */
+  --bg-1: #10141b; /* 패널/테이블 배경 */
+  --bg-2: #161b23; /* 행 hover·헤더·입력 */
+  --border: #232a33; /* 헤어라인(위계의 기본 수단) */
+  --text-hi: #e8edf2; /* 주요 숫자·종목명 */
+  --text-mid: #8a96a3; /* 라벨·보조 */
+  --text-lo: #5c6773; /* 비활성·주석 */
 
   /* ── 방향색(한국 관례: 상승=빨강, 하락=파랑) ──────────────── */
-  --up: #ff4d4f; /* 상승·매수·양(+) */
-  --up-bg: #2a1416; /* 상승 셀 배경 틴트 */
-  --down: #3b82f6; /* 하락·음(-) */
-  --down-bg: #111c2e; /* 하락 셀 배경 틴트 */
-  --flat: #9da7b3; /* 보합 */
+  --up: #ff5d5d; /* 상승·매수·양(+) */
+  --up-bg: rgba(255, 93, 93, 0.1); /* 상승 셀 배경 틴트 */
+  --down: #4d8dff; /* 하락·음(-) */
+  --down-bg: rgba(77, 141, 255, 0.1); /* 하락 셀 배경 틴트 */
+  --flat: #8a96a3; /* 보합 */
 
-  /* ── 등급 색코드(S/A/B/C) ─────────────────────────────────── */
-  --grade-s: #ffd54a; /* 금 */
-  --grade-s-bg: #2a2410;
-  --grade-a: #4ade80; /* 초록 */
-  --grade-a-bg: #122016;
-  --grade-b: #60a5fa; /* 하늘 */
-  --grade-b-bg: #0f1b2e;
-  --grade-c: #6b7684; /* 회색 dim */
+  /* ── 강조·등급 색코드(S/A/B/C) — 금색(--accent)로 S/경고/잠정 통합 ── */
+  --accent: #f0b429;
+  --grade-s: #f0b429; /* 금 */
+  --grade-s-bg: rgba(240, 180, 41, 0.1);
+  --grade-a: #3fbf6f; /* 초록 */
+  --grade-a-bg: rgba(63, 191, 111, 0.1);
+  --grade-b: #4d8dff; /* 파랑 */
+  --grade-b-bg: rgba(77, 141, 255, 0.1);
+  --grade-c: #5c6773; /* 회색 dim */
 
   /* ── 시황 레짐 신호등 ─────────────────────────────────────── */
-  --regime-go: #22c55e; /* 1.0 공격 GO */
-  --regime-hold: #f59e0b; /* 0.5 보수 */
-  --regime-off: #ef4444; /* 0.0 RISK-OFF */
+  --regime-go: #3fbf6f; /* 1.0 공격 GO */
+  --regime-hold: #f0b429; /* 0.5 보수 */
+  --regime-off: #ff5d5d; /* 0.0 RISK-OFF */
 
   /* ── 신선도/리스크 ───────────────────────────────────────── */
-  --provisional: #f59e0b; /* 15:20 잠정 앰버 */
-  --confirmed: #22c55e; /* D-1 확정 */
-  --risk: #ef4444; /* 희석 veto·관리 적색 */
+  --provisional: #f0b429; /* 15:20 잠정 */
+  --confirmed: #3fbf6f; /* D-1 확정 */
+  --risk: #ff5d5d; /* 희석 veto·관리 적색 */
+
+  /* ── 잔디(내 전략의 달력) 셀 ─────────────────────────────── */
+  --cell-win: #a83438;
+  --cell-loss: #2b5bb8;
+  --cell-skip: #232a33;
 
   /* ── 타이포 ──────────────────────────────────────────────── */
-  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-  --font-mono: ui-monospace, 'Roboto Mono', 'SFMono-Regular', 'Menlo',
+  --font-sans: 'Pretendard Variable', 'Pretendard', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic',
+    sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Menlo',
     'Consolas', monospace;
 
-  --radius: 8px;
-  --radius-sm: 5px;
-  --radius-lg: 12px;
+  /* 콘솔 형태: 둥근 카드 폐지 — 사각 패널 + 헤어라인 */
+  --radius: 2px;
+  --radius-sm: 2px;
+  --radius-lg: 2px;
 
   /* ── 간격 스케일(4px 리듬) ─────────────────────────────── */
   --sp-1: 4px;
@@ -58,17 +66,17 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* ── 카드 통일 토큰 ──────────────────────────────────────── */
-  --card-bg: #141922;
-  --card-border: #2a3441;
+  /* ── 패널 통일 토큰(그림자 대신 헤어라인 위계) ───────────── */
+  --card-bg: #10141b;
+  --card-border: #232a33;
   --card-pad: 14px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-card: none;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
   --content-max: 1320px;
 
   /* ── 테마 적응 보조 토큰(다크 기본) ─────────────────────── */
-  --grad-top: #10151d; /* 헤더/카드 상단 그라데이션(elevation) */
-  --border-hover: #38445480; /* 카드 hover 보더 */
+  --grad-top: #10141b; /* 헤더/패널 상단(그라데이션 사실상 제거) */
+  --border-hover: #3a4552; /* 패널 hover 보더 */
 }
 
 /* ============================================================================
@@ -77,49 +85,56 @@
    틴트 배경은 화이트 위에서 은은한 파스텔로.
    ========================================================================== */
 :root[data-theme='light'] {
-  --bg-0: #f4f6fa;
-  --bg-1: #ffffff;
-  --bg-2: #eef2f7;
-  --border: #e2e8f0;
-  --text-hi: #1a202c;
-  --text-mid: #4a5568;
-  --text-lo: #94a3b8;
+  /* 종이 터미널(스펙 §1.1 — P1에서 확정한 값) */
+  --bg-0: #f2f0eb;
+  --bg-1: #fbfaf7;
+  --bg-2: #ece9e2;
+  --border: #d8d4ca;
+  --text-hi: #1e232b;
+  --text-mid: #5a626e;
+  --text-lo: #98a0ab;
 
   /* 방향색(한국 관례 유지) */
-  --up: #e5484d;
-  --up-bg: #fdecec; /* 연한 파스텔 레드 */
-  --down: #2563eb;
-  --down-bg: #e9effd; /* 연한 파스텔 블루 */
-  --flat: #64748b;
+  --up: #d93843;
+  --up-bg: rgba(217, 56, 67, 0.09);
+  --down: #2b62d9;
+  --down-bg: rgba(43, 98, 217, 0.09);
+  --flat: #5a626e;
 
-  /* 등급 */
+  /* 강조·등급 */
+  --accent: #b7791f;
   --grade-s: #b7791f;
-  --grade-s-bg: #fbf3e0;
-  --grade-a: #15803d;
-  --grade-a-bg: #e7f6ec;
-  --grade-b: #2563eb;
-  --grade-b-bg: #e9effd;
-  --grade-c: #94a3b8;
+  --grade-s-bg: rgba(183, 121, 31, 0.1);
+  --grade-a: #1f8a4c;
+  --grade-a-bg: rgba(31, 138, 76, 0.1);
+  --grade-b: #2b62d9;
+  --grade-b-bg: rgba(43, 98, 217, 0.09);
+  --grade-c: #98a0ab;
 
   /* 시황 레짐 신호등 */
-  --regime-go: #15803d;
-  --regime-hold: #b45309;
-  --regime-off: #dc2626;
+  --regime-go: #1f8a4c;
+  --regime-hold: #b7791f;
+  --regime-off: #c22f39;
 
   /* 신선도/리스크 */
-  --provisional: #b45309;
-  --confirmed: #15803d;
-  --risk: #dc2626;
+  --provisional: #b7791f;
+  --confirmed: #1f8a4c;
+  --risk: #c22f39;
 
-  /* 카드/그림자 */
-  --card-bg: #ffffff;
-  --card-border: #e2e8f0;
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.08);
-  --shadow-pop: 0 8px 24px rgba(15, 23, 42, 0.18);
+  /* 잔디 셀 */
+  --cell-win: #c9575c;
+  --cell-loss: #5b82d9;
+  --cell-skip: #ddd9cf;
 
-  /* 테마 보조 토큰 — 라이트에선 은은한 상단 하이라이트/보더 */
-  --grad-top: #f8fafc;
-  --border-hover: #cbd5e1;
+  /* 패널/그림자 */
+  --card-bg: #fbfaf7;
+  --card-border: #d8d4ca;
+  --shadow-card: none;
+  --shadow-pop: 0 8px 24px rgba(30, 35, 43, 0.15);
+
+  /* 테마 보조 토큰 */
+  --grad-top: #fbfaf7;
+  --border-hover: #b9b3a5;
 }
 
 /* ── 전역 리셋/베이스 ───────────────────────────────────────── */
@@ -202,6 +217,13 @@ td[data-testid='perf-return'],
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+}
+
+/* 숫자 셀은 전부 모노 tabular(콘솔 원칙 — 스펙 §1.2) */
+td.num,
+.exp-return {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================================
