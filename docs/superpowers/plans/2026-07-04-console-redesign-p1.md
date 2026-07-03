@@ -66,6 +66,7 @@ import '@fontsource/jetbrains-mono/700.css';
   --text-hi: #E8EDF2;  --text-mid: #8A96A3;  --text-lo: #5C6773;
   --up: #FF5D5D;  --down: #4D8DFF;
   /* 등급·강조: 금색(--accent)로 S/경고/잠정 통합, A는 녹색 */
+  --accent: #F0B429;
   --grade-s: #F0B429;  --grade-a: #3FBF6F;  --grade-b: #4D8DFF;  --grade-c: #5C6773;
   --provisional: #F0B429;  --confirmed: #3FBF6F;  --risk: #FF5D5D;
   --regime-go: #3FBF6F;  --regime-hold: #F0B429;  --regime-off: #FF5D5D;
@@ -91,6 +92,7 @@ import '@fontsource/jetbrains-mono/700.css';
   --border: #D8D4CA;
   --text-hi: #1E232B;  --text-mid: #5A626E;  --text-lo: #98A0AB;
   --up: #D93843;  --down: #2B62D9;
+  --accent: #B7791F;
   --grade-s: #B7791F;  --grade-a: #1F8A4C;  --grade-b: #2B62D9;  --grade-c: #98A0AB;
   --provisional: #B7791F;  --confirmed: #1F8A4C;  --risk: #C22F39;
   --regime-go: #1F8A4C;  --regime-hold: #B7791F;  --regime-off: #C22F39;
@@ -233,7 +235,7 @@ export function deriveHeatmapCells(curve: CurvePoint[], dates: string[]): HeatCe
 
 **Files:** Create `frontend/src/components/PerfHeatmap.tsx`, `frontend/src/components/PerfHeatmap.test.tsx`; Modify `theme.css`
 
-동작: `cachedFetch('performance', fetchPerformance)` → 최근 42일(달력일 기준, KST) 날짜열 생성 → `deriveHeatmapCells` → 7열 그리드 잔디. 헤더 `내 전략의 달력` + 우측 `성공 n · 실패 m`. 표본 0(`aggregate.sample_size === 0`) 또는 fetch 실패 → "아직 기록이 없어요". 전체가 `/performance` 링크(`Link`). 날짜열은 `kstToday()` 기반(자정 버그 방지 — `lib/date.ts` 재사용).
+동작: `cachedFetch('performance', fetchPerformance)` → 최근 42일(달력일 기준, KST) 날짜열 생성 → `deriveHeatmapCells` → 7열 그리드 잔디. 헤더 `내 전략의 달력` + 우측 `성공 n · 실패 m`. 표본 0(`aggregate.sample_size === 0`) 또는 fetch 실패 → "아직 기록이 없어요" — **빈 상태는 `perf-heatmap` 컨테이너 안에 `perf-heatmap-empty`로 렌더**(컨테이너 testid 상시 존재 → Board 테스트가 fetch 결과와 무관하게 안정). 전체가 `/performance` 링크(`Link`). 날짜열은 `kstToday()` 기반(자정 버그 방지 — `lib/date.ts` 재사용).
 
 - [ ] **Step 3-1: 실패 테스트** — `PerfSummaryCard.test.tsx`의 목 구조를 재사용(같은 PerformanceResponse 픽스처 패턴, MemoryRouter 래핑):
   - 곡선 3점(승2·패1) → `heat-cell` 42개 렌더 + `data-kind` win/loss 셀 존재 + 카운트 문구
@@ -280,7 +282,13 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 
 **Files:** Modify `frontend/src/components/GlobalHeader.tsx`(+test), `JobButton.tsx`, `RunScanButton.tsx`, `NewsBadge.tsx`, `PerfSummaryCard.tsx`, `RecTable.tsx`(material-hint 아이콘만), `theme.css`
 
-- [ ] **Step 5-1: 이모지 전수 조사** — `grep -rn "📥\|🧮\|📰\|☀️\|🌙\|⚠\|🔍\|📊\|⏱\|▶\|🔔\|👆" frontend/src --include="*.tsx"` 결과 전부를 아래 표대로 교체(발견되는 추가 이모지도 같은 원칙):
+- [ ] **Step 5-1: 이모지 전수 조사** — **ts/tsx/css 전부**를 유니코드 범위로 스캔(고정 목록 금지 — 누락 실사고 방지):
+
+```bash
+cd frontend && grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{25A0}-\x{25FF}]" src --include='*.ts' --include='*.tsx' --include='*.css'
+```
+
+결과 전부를 아래 표대로 교체(표에 없는 발견분도 같은 원칙 — 아이콘은 lucide, 의미 라벨은 텍스트). **`.ts` 데이터 라벨 변경은 해당 테스트 단언도 같은 스텝에서 수정**:
 
 | 위치 | 현재 | 교체(lucide, 14px) |
 |---|---|---|
@@ -292,10 +300,16 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 | NewsBadge `📰` | 텍스트 | `<Newspaper size={12} />` |
 | PerfSummaryCard `📊`(CSS ::before) | CSS | ::before 규칙 삭제, JSX에 `<ChartColumn size={14} />` |
 | RecTable material-hint `🔍` | 텍스트 | `<Search size={13} />` |
+| `lib/badges.ts` `'⚠희석'` 라벨(.ts 데이터) | 문자열 | 텍스트 `'희석 주의'` — **`badges.test.ts` 등 관련 단언 동시 수정** |
+| `theme.css` `content:'📰'` ::before | CSS | 규칙 삭제(NewsBadge가 lucide 사용) |
+| `Board.tsx` 시황 `🟢🟡🔴` | 문자열 | `<span className="mood-dot" data-mood="go/hold/off" />`(8px 원, 배경 `--regime-*`) — Board 테스트에 이모지 단언 있으면 함께 수정 |
+| RecTable 헤더 `⚑`·행 `★/─` | 텍스트 | `⚑/─`는 리스크 컬럼 폐지로 소멸(Task 6), `★`는 `<Star size={11} />` |
 
 - [ ] **Step 5-2: JobButton 시그니처** — `idleLabel: string` → `idleLabel: ReactNode` (렌더는 그대로). 기존 테스트 무변경으로 green이어야 함(문자열도 ReactNode).
 - [ ] **Step 5-3: 상태바 리스킨** — GlobalHeader 마크업 구조·testid 전부 유지, CSS만 콘솔화: 1줄 고정(56px→40px), `--bg-0` 배경 + 하단 헤어라인, 로고 `종가베팅▮콘솔`(▮는 `--accent`), 요소 간 구분은 `·` 대신 얇은 세로 디바이더, **15:00 KST 이후 카운트다운에 `gh-countdown--hot` 클래스(금색+펄스 keyframe)**. 기존 urgencyClass 로직에 시각 조건만 추가.
 - [ ] **Step 5-4: 테스트** — 기존 GlobalHeader 테스트 green 확인 + 신규 1건: 15:00 이후(fake timers)면 `close-countdown`에 `gh-countdown--hot` 클래스.
+
+확정 해석: **지수(코스피/코스닥)는 상태바에 통합하지 않는다** — 기존 IndexStrip 유지(스펙 §2.1 상태바 필수 목록에 지수 없음).
 - [ ] **Step 5-5: 게이트 + 샷** (다크/라이트 상단바 클립) 
 - [ ] **Step 5-6: Commit** — `feat(frontend): 상태바 콘솔화 + 이모지 전면 제거(lucide 아이콘)`
 
@@ -305,21 +319,43 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 
 **Files:** Modify `frontend/src/components/RecTable.tsx`, `frontend/src/components/RecTable.test.tsx`, `theme.css`
 
-- [ ] **Step 6-1: 영향 조사** — `grep -rn "top3" frontend/src` — RecTable 본체/테스트 외 참조(Board.test 등)를 전부 나열하고 이 태스크에서 함께 이관.
-- [ ] **Step 6-2: 실패 테스트 먼저 수정** — RecTable.test에서:
-  - `top3-card` 단언 → 삭제하고 대체: 상위 3행 `rec-row[data-top3="true"]`가 3개, 1위 행에 `row-rank-marker` testid 존재
-  - "TOP3 카드마다 재료 배지" → "모든 행의 재료 컬럼에 NewsBadge" (`news-badge`/`news-badge-none` 수 = 행 수)
-  - 신규: 수급 컬럼 — `supply_today='외인▲기관▲'` 픽스처 행이 `외국인+ 기관+` 텍스트를 보여주고, 없으면 `—`
-- [ ] **Step 6-3: 실패 확인** → FAIL
-- [ ] **Step 6-4: 구현**
-  - TOP3 카드 블록(`rec-top3-cards` JSX)과 관련 CSS(`.top3-card`·`.t3-*`) 삭제. 행 하이라이트: `.rec-top3 { border-left:2px solid var(--grade-s); background:색 4% 틴트 }` + 1~3위 행 첫 컬럼에 `<span data-testid="row-rank-marker">★</span>`… 아님 lucide `<Star size={11}/>`
-  - 컬럼 재편(순서): `# 등급 종목 현재가* 참고목표 참고손절 평소보다거래 수급 재료 담기` — 기존 "예상 마감가"는 현재가 셀 아래 보조줄로 이동(컬럼 수 절약), "신호" 컬럼의 deriveBadges 배지는 종목명 아래 보조줄로
-  - 수급 셀: `formatSupplyToday(r.supply_today)` + 잠정 툴팁(기존 문구 유지), `+` 포함 시 `dir-up` 색
-  - 재료 셀: `<NewsBadge ticker={r.ticker} />` (TOP3에서만 노출되던 것을 전 행으로 — cachedFetch 5분 캐시가 재조회를 흡수, 최대 30행)
-  - 등급 셀: 배지 박스 → 색 글자(`.grade-S{color:var(--grade-s);font-weight:800}` 등), testid `rec-grade` 유지
-  - 테이블 CSS: 헤어라인 행 구분, 셀 padding 축소(밀도↑), 숫자 셀 전부 `--font-mono`
-- [ ] **Step 6-5: 통과 + 전체 게이트 + 샷**(추천 있는 상태가 필요하므로 vitest 픽스처 스토리는 테스트로, 실화면은 빈 보드라도 헤더/깔때기 확인)
-- [ ] **Step 6-6: Commit** — `feat(frontend): 추천 테이블 콘솔화 — TOP3 행마커·수급 풀네임·재료 컬럼`
+- [ ] **Step 6-1: 영향 조사(광범위)** — 아래 grep 결과 전부를 나열하고 이 태스크 안에서 이관(누락 금지):
+
+```bash
+cd frontend && grep -rn "top3\|exit-cta\|exit_label\|buy-price\|exp-return\|exp-close\|supply-today-badge\|col-risk\|MiniChart" src
+```
+
+- [ ] **Step 6-2: 기존 컬럼 처분표** — 컬럼 재편은 "삭제"가 아니라 아래 처분을 따른다(스펙 불변조항 #2·#3 보존):
+
+| 기존 컬럼 | 처분 |
+|---|---|
+| ⚑ 리스크 | 컬럼 폐지. 행 `data-risk` 속성·리스크 행 좌측 `--risk` 보더 유지, 종목 셀 보조줄의 '희석 주의' 배지(deriveBadges)가 시각 신호 담당 |
+| 현재가* | 유지(1줄째) — 잠정 `*` 마커 유지 |
+| 매수 참고가 | 컬럼 폐지 → **현재가 셀 2줄째** `매수 {값}` 보조줄로 통합. testid `buy-price`와 잠정 `*` 이 보조줄에 유지 |
+| 예상 마감가 | 컬럼 폐지 → 현재가 셀 3줄째 소형 텍스트 `예상 {값}` (testid `exp-close` 유지, null이면 줄 생략) |
+| 다음날 아침 팔기(exit-cta) | 컬럼 폐지 → **테이블 각주 행**(colspan, testid `table-footnote`): `* 15:20 잠정 — 마감(15:30) 확정 · 기본 전략: 다음날 아침 9~10시에 팔기` (불변조항 #3 카피 보존). 참고 목표/손절은 전용 컬럼으로 이미 보존 |
+| 기대(exp-return) | 참고목표 셀 안에 `+9.2%` 소형 병기(방향색, testid `exp-return` 유지) |
+| 신호(배지·supply_today) | deriveBadges 배지는 종목 셀 보조줄로, supply_today는 신규 수급 컬럼으로 |
+| 차트(MiniChart) | 컬럼 폐지 + **RecTable의 MiniChart import 제거**(noUnusedLocals tsc 실패 방지). 스파크는 종목 상세 존치 |
+| #·등급·담기 | 유지(등급은 배지 박스 → 색 글자, testid `rec-grade` 유지) |
+
+최종 컬럼: `# 등급 종목 현재가(3줄 복합) 참고목표(기대 병기) 참고손절 평소보다거래 수급 재료 담기` + 각주 행
+
+- [ ] **Step 6-3: 실패 테스트 먼저 수정** — RecTable.test에서(전부 이 스텝에서):
+  - `top3-card` 단언 → 상위 3행 `rec-row[data-top3="true"]` 3개 + 1위 행 `row-rank-marker` 존재로 대체
+  - "TOP3 카드마다 재료 배지" → "모든 행의 재료 컬럼에 NewsBadge"(`news-badge`+`news-badge-none` 합 = 행 수)
+  - exit-cta/'오전 VWAP' 단언(≈:88-92) → `table-footnote`가 "아침 9~10시" 카피 포함 단언으로 대체
+  - buy-price 잠정 `*` 단언(≈:101-108) → 현재가 셀 보조줄 `buy-price` 단언으로 이관(`*` 유지 확인)
+  - supply-today-badge 원문 단언(≈:175-191) → 수급 셀이 `외국인+ 기관+` + `잠정` 태그 표시로 교체(testid `supply-today-badge` 유지)
+  - 신규: `supply_today` 없음 → `—`
+- [ ] **Step 6-4: 실패 확인** → FAIL
+- [ ] **Step 6-5: 구현**
+  - TOP3 카드 블록(`rec-top3-cards` JSX)·관련 CSS(`.top3-card`·`.t3-*`) 삭제. 행 하이라이트 `.rec-top3 { border-left:2px solid var(--grade-s); background: rgba(240,180,41,.05); }` + 1~3위 행 첫 컬럼 `<span data-testid="row-rank-marker"><Star size={11} /></span>`
+  - 처분표대로 셀 구성. 수급 셀: `formatSupplyToday(r.supply_today)` + `잠정` 미니 태그 + 기존 툴팁 문구, `+` 포함 시 `dir-up` 색
+  - 재료 셀: `<NewsBadge ticker={r.ticker} />` 전 행. **첫 렌더 시 최대 30행 병렬 fetchNews 버스트 발생을 인지하고 허용** — 실추천은 보통 소수·백엔드 /news는 graceful 빈 응답·cachedFetch 5분이 정렬/필터 remount 재조회를 흡수. 문제가 실측되면 후속으로 상위 10행만 자동 조회(이번 스코프 아님)
+  - 테이블 CSS: 헤어라인 행 구분, 셀 padding 축소, 숫자 셀 `--font-mono`
+- [ ] **Step 6-6: 통과 + 전체 게이트 + 샷**(추천 있는 상태가 필요하므로 vitest 픽스처 스토리는 테스트로, 실화면은 빈 보드라도 헤더/깔때기 확인)
+- [ ] **Step 6-7: Commit** — `feat(frontend): 추천 테이블 콘솔화 — TOP3 행마커·수급 풀네임·재료 컬럼`
 
 ---
 
@@ -327,7 +363,7 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 
 **Files:** Modify `frontend/src/pages/Board.tsx`(+test), `theme.css`
 
-- [ ] **Step 7-1: 실패 테스트** — Board.test에 추가: 렌더 시 `funnel-panel`과 `perf-heatmap`이 레일에 존재(기존 setup 목으로 충분 — universe·recommendations 이미 목됨).
+- [ ] **Step 7-1: 실패 테스트** — Board.test의 `setup()`에 `vi.spyOn(api, 'fetchPerformance').mockResolvedValue(표본0 픽스처)` 추가(현재 미목 상태라 실 fetch 거부에 의존 중 — 결정성 확보), 그 후 신규 단언: 렌더 시 `funnel-panel`과 `perf-heatmap`이 레일에 존재(universe·recommendations는 기존 목).
 - [ ] **Step 7-2: 구현** — 보드 레일 순서: `FunnelPanel`(최상단) → `PerfSummaryCard` → `PerfHeatmap` → 기존 위젯들. FunnelPanel엔 Board가 이미 들고 있는 `universe.rows.length`·`board` 전달. 위젯 패널 통일 CSS: 위젯 컨테이너 셀렉터 그룹에 패널 규칙(사각·헤어라인·제목줄 11px `--text-mid`) 일괄 적용 — 위젯별 개별 radius/그림자 규칙은 토큰이 이미 처리하므로 **이탈값만 정리**.
 - [ ] **Step 7-3: 통과 + 전체 게이트** 
 - [ ] **Step 7-4: Commit** — `feat(frontend): 보드 레일 재배치 — 깔때기·잔디 패널 배치`
@@ -337,8 +373,8 @@ props 주도(자체 fetch 없음 — Board가 이미 가진 데이터 전달): `
 ### Task 8: 최종 검수
 
 - [ ] **Step 8-1: 전체 게이트** — `npx vitest run`(전부) · `npx tsc --noEmit` · `npx vite build` · `.js` 0
-- [ ] **Step 8-2: Playwright 풀샷 4장** — 보드/성과 × 다크/라이트 (`_shot_console.mjs` 작성→실행→삭제). **사람 눈 검수 항목**: 모노 숫자 정렬, 헤어라인 위계, 이모지 잔존 0, 라이트(종이 터미널) 대비 충분, 잔디/깔때기 패널.
-- [ ] **Step 8-3: 스크린샷을 보고 어색한 상위 3개를 즉석 수정**(색 틴트·간격 수준만 — 구조 변경 금지)
+- [ ] **Step 8-2: Playwright 풀샷 4장 + 이모지 0 검증** — 보드/성과 × 다크/라이트 (`_shot_console.mjs` 작성→실행→삭제). 이모지 잔존은 Step 5-1의 **동일한 유니코드 범위 grep이 0건**임을 명령으로 검증. 눈 검수: 모노 숫자 정렬, 헤어라인 위계, 라이트(종이 터미널) 대비, 잔디/깔때기 패널.
+- [ ] **Step 8-3: 스크린샷을 보고 어색한 상위 3개를 즉석 수정** — 허용 범위: 색 틴트·간격·**잔존 이모지 제거(관련 테스트 수정 포함)**. 구조 변경만 금지.
 - [ ] **Step 8-4: WORK-PLAN §5에 한 줄 기록 + 계획서 체크박스 갱신 후 Commit** — `docs: 콘솔 리디자인 P1 완료 기록`
 
 ---
