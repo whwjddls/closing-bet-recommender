@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getStoredTheme,
   applyTheme,
   persistTheme,
   initTheme,
   toggleTheme,
+  THEME_EVENT,
 } from './theme';
 
 beforeEach(() => {
@@ -45,5 +46,13 @@ describe('theme lib', () => {
     expect(back).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(getStoredTheme()).toBe('dark');
+  });
+
+  it('applyTheme는 THEME_EVENT를 발행한다(canvas 차트 재도색용)', () => {
+    const seen = vi.fn();
+    window.addEventListener(THEME_EVENT, seen);
+    applyTheme('light');
+    expect(seen).toHaveBeenCalledTimes(1);
+    window.removeEventListener(THEME_EVENT, seen);
   });
 });

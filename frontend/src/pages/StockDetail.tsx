@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { createChart } from 'lightweight-charts';
+import { createChart, ColorType } from 'lightweight-charts';
 import { fetchStock, type StockContributions, type StockDetailResponse } from '../api/client';
 import { formatPrice } from '../lib/format';
+import { THEME_EVENT } from '../lib/theme';
 import SignalContribution from '../components/SignalContribution';
 import OvernightGapStat from '../components/OvernightGapStat';
 import VolumeHistogram from '../components/VolumeHistogram';
@@ -55,6 +56,8 @@ export default function StockDetail() {
   const [detail, setDetail] = useState<StockDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
+  // 테마 전환 시 차트 재생성 트리거(canvas는 CSS 변수 미적용).
+  const [themeEpoch, setThemeEpoch] = useState(0);
 
   useEffect(() => {
     if (!code) return;
@@ -64,9 +67,35 @@ export default function StockDetail() {
   }, [code]);
 
   useEffect(() => {
+    const bump = () => setThemeEpoch((v) => v + 1);
+    window.addEventListener(THEME_EVENT, bump);
+    return () => window.removeEventListener(THEME_EVENT, bump);
+  }, []);
+
+  useEffect(() => {
     if (!detail || detail.candles.length === 0 || !chartRef.current) return;
-    const chart = createChart(chartRef.current, { height: 320 });
-    const series = chart.addCandlestickSeries();
+    const chart = createChart(chartRef.current, {
+      height: 320,
+      layout: {
+        background: { type: ColorType.Solid, color: themeColor('--bg-1', '#141922') },
+        textColor: themeColor('--text-mid', '#9da7b3'),
+      },
+      grid: {
+        vertLines: { color: themeColor('--border', '#2a3441') },
+        horzLines: { color: themeColor('--border', '#2a3441') },
+      },
+    });
+    const upColor = themeColor('--up', '#e5484d'); // 1년 최고가(강세 빨강)
+    const downColor = themeColor('--down', '#2563eb'); // 전고점(파랑)
+    const flatColor = themeColor('--flat', '#94a3b8'); // 눌림 구간(중립 회색)
+    const series = chart.addCandlestickSeries({
+      upColor,
+      downColor,
+      borderUpColor: upColor,
+      borderDownColor: downColor,
+      wickUpColor: upColor,
+      wickDownColor: downColor,
+    });
     series.setData(
       detail.candles.map((c) => ({
         time: c.date,
@@ -76,9 +105,6 @@ export default function StockDetail() {
         close: c.close,
       })),
     );
-    const upColor = themeColor('--up', '#e5484d'); // 1년 최고가(강세 빨강)
-    const downColor = themeColor('--down', '#2563eb'); // 전고점(파랑)
-    const flatColor = themeColor('--flat', '#94a3b8'); // 눌림 구간(중립 회색)
     const priceLines: PriceLineSpec[] = [
       { price: detail.high_52w, color: upColor, title: '1년 최고가' },
       { price: detail.prior_high, color: downColor, title: '전고점' },
@@ -92,7 +118,7 @@ export default function StockDetail() {
     }
     chart.timeScale().fitContent();
     return () => chart.remove();
-  }, [detail]);
+  }, [detail, themeEpoch]);
 
   if (error) return <p data-testid="detail-error">불러오기 실패: {error}</p>;
   if (!detail) return <p className="board-loading">로딩 중…</p>;

@@ -15,9 +15,14 @@ export function getStoredTheme(): Theme {
   }
 }
 
+// 테마 변경 브로드캐스트 — canvas 차트(lightweight-charts)는 CSS 변수가
+// 자동 적용되지 않아, 구독 컴포넌트가 현재 토큰으로 다시 그린다.
+export const THEME_EVENT = 'closingbet:theme';
+
 // 문서 루트에 테마를 반영. dark/light 모두 명시적으로 표기한다.
 export function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
+  window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: theme }));
 }
 
 export function persistTheme(theme: Theme): void {

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import StockDetail from './StockDetail';
 import * as api from '../api/client';
 import type { StockDetailResponse } from '../api/client';
+import { THEME_EVENT } from '../lib/theme';
 
 // lightweight-charts 목 (canvas 미사용). hoist-safe 하도록 vi.hoisted 사용.
-const { createChart, setData, createPriceLine } = vi.hoisted(() => {
+const { createChart, setData, createPriceLine, addCandlestickSeries } = vi.hoisted(() => {
   const setData = vi.fn();
   const createPriceLine = vi.fn();
   const candleSeries = { setData, createPriceLine };
@@ -16,9 +17,13 @@ const { createChart, setData, createPriceLine } = vi.hoisted(() => {
     remove: vi.fn(),
     timeScale: () => ({ fitContent: vi.fn() }),
   }));
-  return { createChart, setData, createPriceLine };
+  return { createChart, setData, createPriceLine, addCandlestickSeries };
 });
-vi.mock('lightweight-charts', () => ({ createChart, CrosshairMode: {} }));
+vi.mock('lightweight-charts', () => ({
+  createChart,
+  CrosshairMode: {},
+  ColorType: { Solid: 'solid' },
+}));
 
 const detail: StockDetailResponse = {
   ticker: '000660',
@@ -199,5 +204,29 @@ describe('참고 조회 빈 데이터 가드', () => {
     vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
     renderAt('000660');
     await waitFor(() => expect(screen.getByTestId('sd-code')).toBeInTheDocument());
+  });
+});
+
+describe('차트 테마', () => {
+  it('테마 전환 이벤트가 오면 차트를 다시 그린다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
+    renderAt('000660');
+    await waitFor(() => expect(createChart).toHaveBeenCalledTimes(1));
+    act(() => {
+      window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: 'light' }));
+    });
+    await waitFor(() => expect(createChart).toHaveBeenCalledTimes(2));
+  });
+
+  it('캔들색은 한국 관례(상승/하락) 옵션으로 지정한다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
+    renderAt('000660');
+    await waitFor(() => expect(addCandlestickSeries).toHaveBeenCalled());
+    expect(addCandlestickSeries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        upColor: expect.any(String),
+        downColor: expect.any(String),
+      }),
+    );
   });
 });
