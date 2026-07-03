@@ -64,7 +64,7 @@ export default function StockDetail() {
   }, [code]);
 
   useEffect(() => {
-    if (!detail || !chartRef.current) return;
+    if (!detail || detail.candles.length === 0 || !chartRef.current) return;
     const chart = createChart(chartRef.current, { height: 320 });
     const series = chart.addCandlestickSeries();
     series.setData(
@@ -114,21 +114,31 @@ export default function StockDetail() {
           )}
           <h1 className="sd-name">
             {detail.name}
-            <span className="sd-code mono">{detail.ticker}</span>
+            {detail.name !== detail.ticker && (
+              <span className="sd-code mono" data-testid="sd-code">
+                {detail.ticker}
+              </span>
+            )}
           </h1>
         </div>
         <div className="sd-summary-metrics">
           <div className="sd-metric">
             <span className="sd-metric-label">현재가</span>
-            <span className="sd-metric-val mono">
-              {formatPrice(detail.price_provisional)}
-              <sup
-                data-testid="provisional-watermark"
-                className="sd-prov"
-                title="15:20 기준 값 — 마감(15:30) 때 바뀔 수 있어요"
-              >
-                15:20 기준
-              </sup>
+            <span className="sd-metric-val mono" data-testid="sd-price">
+              {detail.price_provisional > 0 ? (
+                <>
+                  {formatPrice(detail.price_provisional)}
+                  <sup
+                    data-testid="provisional-watermark"
+                    className="sd-prov"
+                    title="15:20 기준 값 — 마감(15:30) 때 바뀔 수 있어요"
+                  >
+                    15:20 기준
+                  </sup>
+                </>
+              ) : (
+                '—'
+              )}
             </span>
           </div>
           <div className="sd-metric">
@@ -147,7 +157,13 @@ export default function StockDetail() {
             왜 추천? <small>이 종목을 고른 이유</small>
           </h2>
 
-          <div ref={chartRef} data-testid="daily-chart" className="sd-chart" />
+          {detail.candles.length > 0 ? (
+            <div ref={chartRef} data-testid="daily-chart" className="sd-chart" />
+          ) : (
+            <p className="sd-chart-empty card" data-testid="daily-chart-empty">
+              차트 데이터 없음 — 주식이 아닌 종목(ETF 등)이거나 거래 이력이 없어요
+            </p>
+          )}
 
           <VolumeHistogram candles={detail.candles} />
 

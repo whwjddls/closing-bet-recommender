@@ -149,3 +149,55 @@ describe('StockDetail', () => {
     );
   });
 });
+
+const referenceEmpty: StockDetailResponse = {
+  ticker: '000117',
+  name: '000117',            // 백엔드 이름 조회 실패 시 코드 폴백 케이스
+  price_provisional: 0,      // 캔들 없음 → 0 센티널
+  grade: null,
+  final: null,
+  candles: [],
+  high_52w: 0,
+  prior_high: 0,
+  base_box: null,
+  contributions: {},
+  overnight_gap: null,
+  supply_5d: null,
+};
+
+describe('참고 조회 빈 데이터 가드', () => {
+  it('캔들이 없으면 차트 캔버스 대신 placeholder(흰 박스 금지)', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(referenceEmpty);
+    renderAt('000117');
+    await waitFor(() =>
+      expect(screen.getByTestId('daily-chart-empty')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('daily-chart')).not.toBeInTheDocument();
+    expect(createChart).not.toHaveBeenCalled();
+  });
+
+  it('현재가 0은 —로 표기하고 잠정 워터마크를 숨긴다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(referenceEmpty);
+    renderAt('000117');
+    await waitFor(() =>
+      expect(screen.getByTestId('daily-chart-empty')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('sd-price')).toHaveTextContent('—');
+    expect(screen.queryByTestId('provisional-watermark')).not.toBeInTheDocument();
+  });
+
+  it('종목명이 코드와 같으면 코드 중복 표기를 생략한다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(referenceEmpty);
+    renderAt('000117');
+    await waitFor(() =>
+      expect(screen.getByTestId('daily-chart-empty')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('sd-code')).not.toBeInTheDocument();
+  });
+
+  it('정상 종목은 코드 병기를 유지한다', async () => {
+    vi.spyOn(api, 'fetchStock').mockResolvedValue(detail);
+    renderAt('000660');
+    await waitFor(() => expect(screen.getByTestId('sd-code')).toBeInTheDocument());
+  });
+});

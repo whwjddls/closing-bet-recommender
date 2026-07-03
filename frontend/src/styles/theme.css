@@ -1853,6 +1853,15 @@ td.exp-close-cell {
   overflow: hidden;
 }
 
+/* 캔들 없는 종목(ETF 등 참고 조회) — 흰 캔버스 대신 정직한 placeholder */
+.sd-chart-empty {
+  margin: 0;
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+  color: var(--text-lo);
+  font-size: 12.5px;
+}
+
 .sd-stop {
   padding: var(--sp-3) var(--sp-4);
   border-left: 3px solid var(--provisional);
