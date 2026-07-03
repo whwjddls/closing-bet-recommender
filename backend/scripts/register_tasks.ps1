@@ -20,7 +20,8 @@ function Register-OneTask {
 Register-OneTask -Name "CBR-Premarket" -Module "app.scheduler.premarket" -Time "08:30"
 # 15:20 런 — 15:18 기동(부팅·토큰 갱신 여유), 모듈이 캘린더로 15:20–15:30 창·거래일 판정
 Register-OneTask -Name "CBR-DailyRun"  -Module "app.scheduler.daily_run" -Time "15:18"
-# 익일 오전 채점(09:00–10:00 VWAP 산출 후) + DART 오버나잇 재스캔
-Register-OneTask -Name "CBR-Scoring"   -Module "app.scheduler.scoring_job" -Time "09:05"
+# 익일 오전 채점 + DART 오버나잇 재스캔 — 반드시 10:00 이후(09:00–10:00 VWAP 창
+# 완료 후). 09:05에 돌리면 5분치 부분 VWAP으로 잘못 채점되고 멱등이라 영구 고착.
+Register-OneTask -Name "CBR-Scoring"   -Module "app.scheduler.scoring_job" -Time "10:05"
 
 Write-Host "done. 확인: Get-ScheduledTask -TaskName 'CBR-*'"

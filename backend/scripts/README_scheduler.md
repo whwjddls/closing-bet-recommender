@@ -11,7 +11,7 @@
 |---|---|---|---|
 | CBR-Premarket | `python -m app.scheduler.premarket` | 08:30 | FINAL prefetch + 헬스체크(실패→fail-closed) |
 | CBR-DailyRun  | `python -m app.scheduler.daily_run` | 15:18 | 거래일·세션 판정 후 15:20 스냅샷 파이프라인, 커버리지<70%→미발행, top3 알림 |
-| CBR-Scoring   | `python -m app.scheduler.scoring_job` | 09:05 | 전 거래일 픽 채점(확정종가·오전VWAP·N/A) + DART 오버나잇 재스캔 |
+| CBR-Scoring   | `python -m app.scheduler.scoring_job` | 10:05 | 전 거래일 픽 채점(확정종가·오전VWAP·N/A) + DART 오버나잇 재스캔. **10:00 이전 실행 금지**(부분 VWAP 오채점) |
 
 ## 운영 메모
 - 각 모듈은 `TradingCalendar`로 거래일/특수세션을 자체 판정 → 휴장일엔 즉시 종료.

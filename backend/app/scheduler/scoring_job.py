@@ -1,6 +1,7 @@
 """익일 채점 스케줄러 — N/A·DART 오버나잇 재스캔·룩어헤드 가드 (스펙 §6.3/§6.4).
 
-익일 09~10시에 실행. ``run_date = prev_trading_day(eval_date)`` 로 역매핑하고,
+익일 **10:00 이후**에 실행(09:00–10:00 VWAP 창 완료 후 — 이전에 돌리면 부분
+VWAP으로 오채점되고 멱등이라 고착됨). ``run_date = prev_trading_day(eval_date)`` 로 역매핑하고,
 매수가 = **확정 종가 close[run_date]**, 청산 = **오전 VWAP(eval_date) 09:00–10:00**.
 VWAP 결측/잠김 → outcome=NA(분모 제외). DART 오버나잇 공시 발생 시 재스캔 플래그.
 **룩어헤드 가드**: close 는 run_date(t)로만, VWAP 는 eval_date(t+1)로만 조회한다.
