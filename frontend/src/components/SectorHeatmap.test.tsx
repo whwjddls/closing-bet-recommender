@@ -70,4 +70,21 @@ describe('SectorHeatmap', () => {
       await screen.findByTestId('sector-heatmap-empty'),
     ).toHaveTextContent('시장 데이터 없음');
   });
+
+  it('화면 전환(재mount) 시 재조회 없이 캐시된 지표를 즉시 보여준다', async () => {
+    const spy = vi.spyOn(api, 'fetchMarket').mockResolvedValue(market);
+    const { unmount } = render(<SectorHeatmap />);
+    await waitFor(() =>
+      expect(screen.getAllByTestId('sector-tile')).toHaveLength(3),
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // 다른 화면 갔다 오면 위젯이 remount되지만, 신선한 캐시가 있으면
+    // 네트워크 재조회 없이 직전 지표를 그대로 유지한다("지표 사라짐" 방지).
+    render(<SectorHeatmap />);
+    expect(await screen.findByTestId('sector-tiles')).toBeInTheDocument();
+    expect(screen.getAllByTestId('sector-tile')).toHaveLength(3);
+    expect(spy).toHaveBeenCalledTimes(1); // 재조회 없음(캐시 히트)
+  });
 });

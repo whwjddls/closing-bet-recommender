@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchMarket, type MarketInvestors as Investors } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 import { directionClass } from '../lib/format';
 
 // 순매수(억) 표기: 방향 화살표 + 부호 + 절대값 억 단위(천단위 콤마).
@@ -24,7 +25,7 @@ export default function MarketInvestors() {
 
   useEffect(() => {
     let alive = true;
-    fetchMarket()
+    cachedFetch('market', fetchMarket)
       .then((m) => {
         if (!alive) return;
         // 구버전 응답(investors 미포함)은 정직하게 placeholder 처리.

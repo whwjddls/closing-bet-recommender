@@ -4,6 +4,7 @@ import {
   type ReminderResponse,
   type ReminderPick,
 } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 
 // 전략의 나머지 절반 — 매수만큼 청산도 규칙. 어제 픽들의 익일 오전 매도 관리 뷰.
 // morning_vwap 이 null 이면 KIS 분봉 미연동으로 청산 기준을 아직 추정 못함(정직 표기).
@@ -34,7 +35,7 @@ export default function ReminderWidget() {
 
   useEffect(() => {
     let alive = true;
-    fetchReminder()
+    cachedFetch('reminder', fetchReminder)
       .then((d) => {
         if (alive) setData(d);
       })

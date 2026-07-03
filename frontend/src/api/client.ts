@@ -294,11 +294,14 @@ export interface RunTriggerResponse {
 
 // GET /run/status — 실행 상태 폴링(3초 주기). running=false 로 떨어지면 종료.
 // last_result: 'OK'(추천 발행) | 'UNPUBLISHED'(오늘은 못 만듦) 등 백엔드 문자열.
+// started_at/elapsed_sec: 장시간 스캔(장전 캐시 없으면 3~10분)의 경과 표시용.
 export interface RunStatusResponse {
   running: boolean;
   last_result: string | null;
   last_error: string | null;
   finished_at: string | null;
+  started_at: string | null; // 현재 실행 시작 시각(ISO, 미실행이면 null)
+  elapsed_sec: number | null; // 현재 실행 경과 초(미실행이면 null)
 }
 
 // GET /news/{ticker} — 종목 최근 뉴스(재료 확인). 빈/실패는 정직한 placeholder.

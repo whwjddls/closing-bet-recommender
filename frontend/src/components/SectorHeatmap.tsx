@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchMarket, type MarketResponse } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 import { directionClass } from '../lib/format';
 
 // 등락률 크기 → 배경 틴트 알파(진하기). |pct| ≈ 3%에서 거의 최대.
@@ -27,7 +28,7 @@ export default function SectorHeatmap() {
 
   useEffect(() => {
     let alive = true;
-    fetchMarket()
+    cachedFetch('market', fetchMarket)
       .then((m) => {
         if (alive) setMarket(m);
       })

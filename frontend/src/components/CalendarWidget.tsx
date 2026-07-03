@@ -4,6 +4,7 @@ import {
   type CalendarResponse,
   type CalendarEvent,
 } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 
 // kind 문자열 → 칩 색 카테고리. 백엔드 enum 미확정이므로 토큰 매칭 + 기본값.
 type KindTone = 'expiry' | 'exdiv' | 'holiday' | 'default';
@@ -42,7 +43,7 @@ export default function CalendarWidget() {
 
   useEffect(() => {
     let alive = true;
-    fetchCalendar()
+    cachedFetch('calendar', fetchCalendar)
       .then((c) => {
         if (alive) setCalendar(c);
       })

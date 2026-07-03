@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchPerformance, type PerformanceResponse } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 import { formatPercent } from '../lib/format';
 import PerfTable from '../components/PerfTable';
 import CumulativeCurve from '../components/CumulativeCurve';
@@ -36,7 +37,7 @@ export default function Performance() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPerformance()
+    cachedFetch('performance', fetchPerformance)
       .then(setData)
       .catch((e) => setError(String(e)));
   }, []);

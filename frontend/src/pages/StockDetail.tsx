@@ -21,6 +21,16 @@ interface PriceLineSpec {
 // 가격이 큰 순으로 정렬 후 그룹 대표가 대비 0.5% 이내면 같은 그룹으로 묶는다.
 const PRICE_MERGE_TOLERANCE = 0.005;
 
+// 차트는 canvas(lightweight-charts)라 CSS 변수가 자동 적용되지 않는다.
+// 현재 테마 토큰을 읽어 라인색을 맞춘다(읽기 실패 시 양테마 무난한 폴백).
+function themeColor(varName: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName)
+    .trim();
+  return value || fallback;
+}
+
 function mergePriceLines(specs: PriceLineSpec[]): PriceLineSpec[] {
   const sorted = [...specs].sort((a, b) => b.price - a.price);
   const groups: PriceLineSpec[][] = [];
@@ -66,13 +76,16 @@ export default function StockDetail() {
         close: c.close,
       })),
     );
+    const upColor = themeColor('--up', '#e5484d'); // 1년 최고가(강세 빨강)
+    const downColor = themeColor('--down', '#2563eb'); // 전고점(파랑)
+    const flatColor = themeColor('--flat', '#94a3b8'); // 눌림 구간(중립 회색)
     const priceLines: PriceLineSpec[] = [
-      { price: detail.high_52w, color: '#c00', title: '1년 최고가' },
-      { price: detail.prior_high, color: '#08c', title: '전고점' },
+      { price: detail.high_52w, color: upColor, title: '1년 최고가' },
+      { price: detail.prior_high, color: downColor, title: '전고점' },
     ];
     if (detail.base_box) {
-      priceLines.push({ price: detail.base_box.high, color: '#999', title: '눌림 상단' });
-      priceLines.push({ price: detail.base_box.low, color: '#999', title: '눌림 하단' });
+      priceLines.push({ price: detail.base_box.high, color: flatColor, title: '눌림 상단' });
+      priceLines.push({ price: detail.base_box.low, color: flatColor, title: '눌림 하단' });
     }
     for (const line of mergePriceLines(priceLines)) {
       series.createPriceLine(line);

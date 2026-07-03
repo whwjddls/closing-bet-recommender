@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
-import { fetchRecommendations, type RegimeInfo } from '../api/client';
+import {
+  fetchRecommendations,
+  fetchRunStatus,
+  type RegimeInfo,
+  type RunStatusResponse,
+} from '../api/client';
 import { kstToday } from '../lib/date';
+import { REFETCH_EVENT } from '../lib/events';
+import { getStoredTheme, toggleTheme, type Theme } from '../lib/theme';
 import RunScanButton from './RunScanButton';
 
 type Verdict = 'GO' | 'CAUTION' | 'RISK_OFF';
@@ -36,15 +43,29 @@ function formatCountdown(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-// 데이터 기준 시각(HH:MM:SS, KST).
-function formatKstClock(d: Date): string {
-  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
-  return kst.toISOString().slice(11, 19);
+// ISO 시각 → KST 'YYYY-MM-DD' / 'HH:MM' (kstToday 와 같은 오프셋 방식).
+function kstDateOf(iso: string): string {
+  return new Date(new Date(iso).getTime() + 9 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
 }
 
-// 데이터 나이(초). 미래 시각/시계 오차는 0으로 클램프.
-function ageSeconds(nowMs: number, at: Date): number {
-  return Math.max(0, Math.floor((nowMs - at.getTime()) / 1000));
+function kstHmOf(iso: string): string {
+  return new Date(new Date(iso).getTime() + 9 * 3600 * 1000)
+    .toISOString()
+    .slice(11, 16);
+}
+
+// 스캔 상태 칩 라벨 — 기존 "기준 HH:MM:SS · N초 전"(브라우저 수신 시각이라
+// 사실상 무의미)을 대체하는 진짜 정보. 오늘 완료 여부는 KST 날짜로 판정하고,
+// 발행 성공(OK)일 때만 ✓를 붙인다(UNPUBLISHED 완료를 성공처럼 안 보이게).
+function scanChipLabel(status: RunStatusResponse): string {
+  if (status.running) return '스캔 진행 중…';
+  if (status.finished_at && kstDateOf(status.finished_at) === kstToday()) {
+    const check = status.last_result === 'OK' ? ' ✓' : '';
+    return `스캔 ${kstHmOf(status.finished_at)} 완료${check}`;
+  }
+  return '오늘 스캔 전';
 }
 
 function urgencyClass(ms: number): string {
@@ -65,17 +86,17 @@ export default function GlobalHeader() {
   const [remaining, setRemaining] = useState<number>(() =>
     msUntilClose(new Date()),
   );
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [verdict, setVerdict] = useState<Verdict | null>(null);
-  // 보드 데이터를 받은 클라이언트 기준 시각(run_date는 날짜뿐이라 신선도 계산 불가).
-  const [dataAt, setDataAt] = useState<Date | null>(null);
+  // 오늘 스캔 실행 상태(/run/status). 조회 실패면 null → 칩 숨김(가짜 정보 금지).
+  const [scanStatus, setScanStatus] = useState<RunStatusResponse | null>(null);
+  // 현재 테마(문서엔 main.tsx initTheme에서 이미 적용됨 — 여기선 아이콘 상태만 추적).
+  const [theme, setTheme] = useState<Theme>(() => getStoredTheme());
+
+  // 토글: 문서/저장 반영은 toggleTheme(부수효과)이 하고, 아이콘 상태만 갱신.
+  const handleToggleTheme = () => setTheme(toggleTheme(theme));
 
   useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setRemaining(msUntilClose(now));
-      setNowMs(now.getTime());
-    };
+    const tick = () => setRemaining(msUntilClose(new Date()));
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
@@ -87,13 +108,32 @@ export default function GlobalHeader() {
       .then((board) => {
         if (!alive) return;
         setVerdict(deriveVerdict(Object.values(board.regimes)));
-        setDataAt(new Date());
       })
       .catch(() => {
         /* 정직성 배너·카운트다운은 데이터 없이도 상시 노출 */
       });
     return () => {
       alive = false;
+    };
+  }, []);
+
+  // 스캔 상태 칩: mount 1회 + 스캔 완료 이벤트(REFETCH_EVENT) 때 갱신 — 추가 폴링 없음.
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetchRunStatus()
+        .then((s) => {
+          if (alive) setScanStatus(s);
+        })
+        .catch(() => {
+          if (alive) setScanStatus(null);
+        });
+    };
+    load();
+    window.addEventListener(REFETCH_EVENT, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(REFETCH_EVENT, load);
     };
   }, []);
 
@@ -108,15 +148,15 @@ export default function GlobalHeader() {
         >
           {remaining <= 0
             ? '⏱ 장 마감 · 다음 거래일 15:20'
-            : `⏱ 마감까지 ${formatCountdown(remaining)}`}
+            : `⏱ 마감(15:30)까지 ${formatCountdown(remaining)}`}
         </span>
-        {dataAt && (
+        {scanStatus && (
           <span
-            className="gh-timestamp"
-            data-testid="data-timestamp"
-            title="데이터 기준 시각 · 경과 시간"
+            className="gh-scan-status"
+            data-testid="scan-status"
+            title="오늘 스캔 실행 상태"
           >
-            기준 {formatKstClock(dataAt)} · {ageSeconds(nowMs, dataAt)}초 전
+            {scanChipLabel(scanStatus)}
           </span>
         )}
       </div>
@@ -133,9 +173,30 @@ export default function GlobalHeader() {
       </div>
 
       <div className="gh-right">
-        <span className="gh-honesty" data-testid="honesty-banner">
-          ⚠ 15:20 잠정 · 수급 D-1 · 체결 미연동
+        <span
+          className="gh-honesty"
+          data-testid="honesty-banner"
+          title={
+            '가격: 15:20 스캔 잠정치(확정 종가 아님)\n' +
+            '수급: 어제(D-1) 확정 데이터 기준\n' +
+            '증권사 미연동 — 실제 주문 실행 없음'
+          }
+        >
+          ⚠ 참고용 추천 · 주문은 안 나가요
         </span>
+        <button
+          type="button"
+          className="gh-theme-toggle"
+          data-testid="theme-toggle"
+          data-theme={theme}
+          onClick={handleToggleTheme}
+          aria-label={
+            theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'
+          }
+          title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
         <RunScanButton />
       </div>
     </div>

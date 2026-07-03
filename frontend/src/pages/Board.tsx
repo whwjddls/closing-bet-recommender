@@ -10,6 +10,7 @@ import {
 } from '../api/client';
 import { notifyTop3 } from '../lib/notify';
 import { REFETCH_EVENT } from '../lib/events';
+import { cachedFetch } from '../lib/dataCache';
 import RecTable from '../components/RecTable';
 import RegimeGauge from '../components/RegimeGauge';
 import Scanner from '../components/Scanner';
@@ -22,6 +23,7 @@ import CalendarWidget from '../components/CalendarWidget';
 import DisclosuresWidget from '../components/DisclosuresWidget';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
 import ReminderWidget from '../components/ReminderWidget';
+import PerfSummaryCard from '../components/PerfSummaryCard';
 import Onboarding from '../components/Onboarding';
 import { kstToday } from '../lib/date';
 
@@ -62,7 +64,8 @@ export default function Board() {
     setError(null);
     Promise.all([
       fetchRecommendations(kstToday()),
-      fetchUniverse(),
+      // 후보 풀은 캐시 경유 — 스캔이 자원을 점유해 재조회가 실패해도 직전 값 유지.
+      cachedFetch('universe', fetchUniverse),
       fetchHealth(),
     ])
       .then(([b, u, h]) => {
@@ -236,6 +239,7 @@ export default function Board() {
           </div>
 
           <aside className="board-rail" aria-label="시장 요약 위젯">
+            <PerfSummaryCard />
             <NearHighsWidget />
             <SectorHeatmap />
             <MarketInvestors />

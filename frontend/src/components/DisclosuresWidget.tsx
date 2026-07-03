@@ -4,6 +4,7 @@ import {
   type DisclosuresResponse,
   type DisclosureItem,
 } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 
 // 희석성(주식수 증가) 공시는 리스크 적색 톤. 배당류는 중립/청색.
 // 백엔드 kind enum 미확정 → 토큰 매칭으로 분류(기본=희석 아님).
@@ -47,7 +48,7 @@ export default function DisclosuresWidget() {
 
   useEffect(() => {
     let alive = true;
-    fetchDisclosures()
+    cachedFetch('disclosures', fetchDisclosures)
       .then((d) => {
         if (alive) setData(d);
       })

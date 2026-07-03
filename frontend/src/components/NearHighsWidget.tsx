@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchHighs, type HighItem } from '../api/client';
+import { cachedFetch } from '../lib/dataCache';
 
 // GET /highs — 52주 신고가 근접 종목(장중 KIS 조회). 빈 배열/실패는 정직한 placeholder.
 // 신고가 근접은 강세 신호 → 한국 관례색 상승빨강 톤으로 칩을 표기한다.
@@ -10,7 +11,7 @@ export default function NearHighsWidget() {
 
   useEffect(() => {
     let alive = true;
-    fetchHighs()
+    cachedFetch('highs', fetchHighs)
       .then((res) => {
         if (alive) setItems(res.items);
       })
