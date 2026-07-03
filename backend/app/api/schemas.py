@@ -274,6 +274,11 @@ class RunStatusResponse(BaseModel):     # GET /run/status — 백그라운드 �
     elapsed_sec: float | None = None    # 실행 중 경과 초(UI '스캔 중 · N분' 표시용)
 
 
+class JobTriggerResponse(BaseModel):    # POST /jobs/{prefetch|scoring} — 수동 잡 트리거
+    status: str                         # "started" | "already_running" | "rejected"
+    reason: str | None = None           # rejected 사유(예: 채점은 10시 이후) — 그 외 None
+
+
 class NewsItem(BaseModel):              # 종목 뉴스 1건 — /news/{ticker}
     datetime: str = ""
     title: str = ""
