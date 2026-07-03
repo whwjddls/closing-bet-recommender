@@ -753,6 +753,45 @@ main > header h1 {
   white-space: nowrap;
 }
 
+/* 재료(뉴스) 확인 배지 — TOP3 카드. 숫자 필터가 못 보는 오늘의 재료를 사람이 확인 */
+.news-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  cursor: help;
+}
+
+.news-badge--has {
+  color: var(--grade-s);
+  border-color: var(--grade-s);
+  background: var(--grade-s-bg);
+}
+
+.news-badge--none {
+  color: var(--text-lo);
+  background: var(--bg-2);
+}
+
+/* 매수 전 재료 확인 안내 — 인간 최종 필터 단계(퀀트가 못 거르는 것) */
+.rec-material-hint {
+  margin: 10px 0 8px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--provisional);
+  background: var(--bg-1);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text-mid);
+}
+
+.rec-material-hint strong {
+  color: var(--text-hi);
+}
+
 /* 보조 잡 버튼(종목 후보 가져오기·성과 채점) — 금색 주 버튼 옆 낮은 위계 */
 .run-scan-btn--secondary {
   background: var(--bg-2);

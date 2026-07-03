@@ -5,6 +5,7 @@ import { deriveBadges } from '../lib/badges';
 import { formatPrice, formatPercent, directionClass } from '../lib/format';
 import MiniChart from './MiniChart';
 import InfoDot from './InfoDot';
+import NewsBadge from './NewsBadge';
 
 type SortKey = 'score' | 'grade' | 'supply';
 const GRADE_ORDER = { S: 0, A: 1, B: 2, C: 3 } as const;
@@ -125,6 +126,18 @@ export default function RecTable({
                     {formatPercent(exp)}
                   </span>
                 </div>
+                <div className="t3-row t3-news">
+                  <span>
+                    재료
+                    <InfoDot
+                      label="재료 확인"
+                      text="숫자 필터는 재료(주도 테마·뉴스)를 판단하지 못해요. 매수 전 직접 확인하세요"
+                    />
+                  </span>
+                  <span className="t3-val">
+                    <NewsBadge ticker={r.ticker} />
+                  </span>
+                </div>
                 {hasRisk(r) && <div className="t3-risk">⚠ 조심 신호</div>}
               </article>
             );
@@ -137,7 +150,13 @@ export default function RecTable({
           조건에 맞는 종목이 없어요. 필터를 풀어보세요.
         </p>
       ) : (
-        <table>
+        <>
+          <p className="rec-material-hint" data-testid="material-hint">
+            🔍 매수 전 마지막 체크:{' '}
+            <strong>오늘 재료(주도 테마·뉴스)가 있는 종목인지</strong> 종목명을
+            눌러 최근 뉴스로 확인하세요 — 숫자 필터는 재료를 판단하지 못해요.
+          </p>
+          <table>
           <thead>
             <tr>
               <th className="col-risk">⚑</th>
@@ -328,7 +347,8 @@ export default function RecTable({
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </>
       )}
     </section>
   );

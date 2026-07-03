@@ -1,10 +1,16 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactElement } from 'react';
 import RecTable from './RecTable';
+import * as api from '../api/client';
 import type { Recommendation } from '../api/client';
+
+// TOP3 카드의 재료(뉴스) 배지가 mount 시 뉴스를 조회하므로 기본 stub 제공.
+beforeEach(() => {
+  vi.spyOn(api, 'fetchNews').mockResolvedValue({ items: [] });
+});
 
 function rec(p: Partial<Recommendation>): Recommendation {
   return {
@@ -196,5 +202,23 @@ describe('RecTable', () => {
     const btn = within(rowA).getByTestId('pick-toggle');
     expect(btn).toHaveAttribute('aria-pressed', 'true');
     expect(btn).toHaveTextContent('담음');
+  });
+
+  it('추천이 있으면 재료(인간 최종 필터) 확인 안내를 보여준다', () => {
+    wrap(<RecTable recommendations={recs} />);
+    expect(screen.getByTestId('material-hint')).toHaveTextContent('재료');
+    expect(screen.getByTestId('material-hint')).toHaveTextContent(
+      '숫자 필터는 재료를 판단하지 못해요',
+    );
+  });
+
+  it('TOP3 카드마다 재료(뉴스) 배지를 보여준다', async () => {
+    vi.spyOn(api, 'fetchNews').mockResolvedValue({
+      items: [{ datetime: '20260703 1510', title: '대규모 수주 공시' }],
+    });
+    wrap(<RecTable recommendations={recs} />);
+    const badges = await screen.findAllByTestId('news-badge');
+    expect(badges).toHaveLength(3); // TOP3 카드 3장
+    expect(badges[0]).toHaveTextContent('뉴스 1건');
   });
 });

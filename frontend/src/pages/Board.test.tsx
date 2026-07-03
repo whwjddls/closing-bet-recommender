@@ -90,6 +90,7 @@ function setup(recRes: RecommendationsResponse) {
     ],
   });
   vi.spyOn(api, 'fetchHighs').mockResolvedValue({ items: [] });
+  vi.spyOn(api, 'fetchNews').mockResolvedValue({ items: [] }); // TOP3 재료 배지용
 }
 
 const wrap = () =>
