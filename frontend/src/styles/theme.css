@@ -181,6 +181,38 @@ a {
   border: 0;
 }
 
+/* 콘솔 스켈레톤 로딩(모션③) — "로딩 중…" 텍스트 대체 */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skeleton-line {
+  height: 11px;
+  border-radius: 2px;
+  background: var(--bg-2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-line {
+    background: linear-gradient(
+      90deg,
+      var(--bg-2) 25%,
+      var(--bg-1) 37%,
+      var(--bg-2) 63%
+    );
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+  }
+}
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
 /* 통일 카드: 라운드 · 서브틀 보더 · 그림자 · 등장 페이드 */
 .card {
   background: var(--card-bg);
