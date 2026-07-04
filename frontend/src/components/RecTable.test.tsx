@@ -7,7 +7,7 @@ import RecTable from './RecTable';
 import * as api from '../api/client';
 import type { Recommendation } from '../api/client';
 
-// TOP3 카드의 재료(뉴스) 배지가 mount 시 뉴스를 조회하므로 기본 stub 제공.
+// 재료(뉴스) 배지가 각 행 mount 시 뉴스를 조회하므로 기본 stub 제공.
 beforeEach(() => {
   vi.spyOn(api, 'fetchNews').mockResolvedValue({ items: [] });
 });
@@ -85,17 +85,23 @@ const recs: Recommendation[] = [
 const wrap = (ui: ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
 describe('RecTable', () => {
-  it('전체 행을 렌더하고 청산 주 CTA(오전 VWAP)를 강조한다', () => {
+  it('전체 행을 렌더하고 청산 각주(아침 9~10시)를 보여준다', () => {
     wrap(<RecTable recommendations={recs} />);
     expect(screen.getAllByTestId('rec-row')).toHaveLength(4);
-    expect(screen.getAllByTestId('exit-cta')[0]).toHaveTextContent('오전 VWAP');
+    expect(screen.getByTestId('table-footnote')).toHaveTextContent(
+      '아침 9~10시',
+    );
   });
 
-  it('top3(rank<=3) 행은 강조 표시', () => {
+  it('top3(rank<=3) 행은 강조 + 순위 마커', () => {
     wrap(<RecTable recommendations={recs} />);
     const rows = screen.getAllByTestId('rec-row');
     expect(rows[0]).toHaveAttribute('data-top3', 'true');
     expect(rows[3]).toHaveAttribute('data-top3', 'false');
+    expect(
+      within(rows[0]).getByTestId('row-rank-marker'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId('row-rank-marker')).toHaveLength(3);
   });
 
   it('provisional 매수가는 워터마크(*), 확정가는 워터마크 없음', () => {
@@ -172,22 +178,23 @@ describe('RecTable', () => {
     expect(noExp).toHaveTextContent('—');
   });
 
-  it('당일 잠정수급 배지: supply_today 있으면 앰버 배지(잠정 표기), 없으면 미노출', () => {
+  it('수급 컬럼: supply_today 있으면 풀네임+잠정 태그, 없으면 —', () => {
     wrap(
       <RecTable
         recommendations={[
-          rec({ ticker: '111', name: 'HasSup', supply_today: '외인▲' }),
+          rec({ ticker: '111', name: 'HasSup', supply_today: '외인▲기관▲' }),
           rec({ ticker: '222', name: 'NoSup', supply_today: null }),
         ]}
       />,
     );
     const rows = screen.getAllByTestId('rec-row');
     const badge = within(rows[0]).getByTestId('supply-today-badge');
-    expect(badge).toHaveTextContent('외인▲');
+    expect(badge).toHaveTextContent('외국인+ 기관+'); // 축약 금지(풀네임)
     expect(badge).toHaveTextContent('잠정');
     expect(
       within(rows[1]).queryByTestId('supply-today-badge'),
     ).not.toBeInTheDocument();
+    expect(within(rows[1]).getByTestId('supply-cell')).toHaveTextContent('—');
   });
 
   it('이미 담은 행은 담음 상태(aria-pressed)로 표시', () => {
@@ -212,13 +219,13 @@ describe('RecTable', () => {
     );
   });
 
-  it('TOP3 카드마다 재료(뉴스) 배지를 보여준다', async () => {
+  it('모든 행의 재료 컬럼에 뉴스 배지를 보여준다', async () => {
     vi.spyOn(api, 'fetchNews').mockResolvedValue({
       items: [{ datetime: '20260703 1510', title: '대규모 수주 공시' }],
     });
     wrap(<RecTable recommendations={recs} />);
     const badges = await screen.findAllByTestId('news-badge');
-    expect(badges).toHaveLength(3); // TOP3 카드 3장
+    expect(badges).toHaveLength(4); // 전 행
     expect(badges[0]).toHaveTextContent('뉴스 1건');
   });
 });

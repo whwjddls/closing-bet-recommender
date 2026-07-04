@@ -1254,30 +1254,6 @@ td small {
   font-size: 11px;
 }
 
-/* ── 리스크 좌측 고정 컬럼 ⚑ §P5 ─────────────────────────── */
-.col-risk {
-  width: 26px;
-  text-align: center;
-  padding-left: 6px;
-  padding-right: 6px;
-}
-
-td.col-risk {
-  color: var(--text-lo);
-  font-size: 12px;
-}
-
-td.col-risk.has-risk {
-  color: var(--risk);
-  font-weight: 700;
-}
-
-.col-star {
-  width: 20px;
-  text-align: center;
-  color: var(--grade-s);
-}
-
 /* ── 등급 배지 + 좌측 색바 ───────────────────────────────── */
 .grade {
   text-align: center;
@@ -1340,46 +1316,12 @@ td.col-risk.has-risk {
   color: var(--text-mid);
 }
 
-/* ── 청산 CTA ─────────────────────────────────────────────── */
-.exit-cta .exit-primary {
-  color: var(--text-hi);
-  font-weight: 700;
-}
-
-.exit-cta .ref-stop {
-  color: var(--text-lo);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  margin-top: 2px;
-}
-
-/* ── 기대수익 컬럼(굵고 큰 결정 핵심) ─────────────────────── */
+/* ── 기대수익(참고목표 셀 병기 — 목표 도달 시 상단) ───────── */
 .exp-return {
-  font-size: 15px;
+  display: block;
+  font-size: 11px;
   font-weight: 700;
-  text-align: right;
   white-space: nowrap;
-}
-
-/* ── 예상체결가 컬럼(15:20 KIS 예상 — 잠정 앰버 강조) ──────── */
-.col-exp-close {
-  text-align: right;
-  white-space: nowrap;
-}
-
-td.exp-close-cell {
-  text-align: right;
-}
-
-.exp-close-val {
-  color: var(--provisional);
-  font-weight: 700;
-  cursor: help;
-  border-bottom: 1px dashed rgba(245, 158, 11, 0.55);
-}
-
-.exp-close-dash {
-  color: var(--text-lo);
 }
 
 /* ── 당일 잠정 수급 배지(외인/기관 가집계 — 앰버, D-1 확정과 구분) ── */
@@ -1481,130 +1423,114 @@ td.exp-close-cell {
   font-weight: 700;
 }
 
-/* ── 미니 스파크 차트 ─────────────────────────────────────── */
-.mini polyline {
-  stroke: var(--text-mid);
-}
-
-.mini-up polyline {
-  stroke: var(--up);
-}
-
-.mini-down polyline {
-  stroke: var(--down);
-}
-
 /* ============================================================================
-   TOP3 카드 §3-2
+   추천 테이블 콘솔화 (2026-07-04 P1) — 상위 3행 마커·복합 셀·수급/재료 컬럼
    ========================================================================== */
 
-.rec-top3-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+.rec-table {
+  width: 100%;
+  border-collapse: collapse;
 }
 
-.top3-card {
-  position: relative;
-  background: var(--bg-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 12px 14px 12px 16px;
-  overflow: hidden;
-  transition: transform 0.16s ease, border-color 0.16s ease,
-    box-shadow 0.16s ease;
+.rec-table th {
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--text-lo);
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
-.top3-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-hover);
-  box-shadow: var(--shadow-pop);
+.rec-table th.num {
+  text-align: right;
 }
 
-/* 페이지 로드 시 순차 등장(고임팩트 순간) */
-@media (prefers-reduced-motion: no-preference) {
-  .rec-top3-cards .top3-card {
-    animation: card-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .rec-top3-cards .top3-card:nth-child(2) {
-    animation-delay: 0.06s;
-  }
-  .rec-top3-cards .top3-card:nth-child(3) {
-    animation-delay: 0.12s;
-  }
+.rec-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
 }
 
-.top3-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
+.rec-table .col-num {
+  width: 34px;
+  color: var(--text-lo);
+  white-space: nowrap;
 }
 
-.top3-card.grade-row-S::before {
-  background: var(--grade-s);
-}
-.top3-card.grade-row-A::before {
-  background: var(--grade-a);
-}
-.top3-card.grade-row-B::before {
-  background: var(--grade-b);
-}
-.top3-card.grade-row-C::before {
-  background: var(--grade-c);
+.rec-table .rank-star {
+  color: var(--accent);
+  vertical-align: -1px;
+  margin-right: 2px;
 }
 
-.top3-card .t3-head {
+/* 상위 3행 강조: 좌측 금색 바 + 은은한 틴트(카드 폐지 대체) */
+.rec-table tr.rec-top3 {
+  background: rgba(240, 180, 41, 0.05);
+}
+
+/* 종목 셀: 이름줄 + 배지 보조줄 */
+.rec-name-cell .rec-name-line {
+  font-weight: 600;
+}
+
+.rec-name-cell .rec-badges {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
 }
 
-.top3-card .t3-name {
+/* 현재가 복합 셀(현재가/매수/예상 3줄) */
+.rec-price-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rec-price-cell .rec-px {
+  display: block;
   font-weight: 700;
-  font-size: 14px;
   color: var(--text-hi);
 }
 
-.top3-card .t3-code {
-  font-family: var(--font-mono);
+.rec-price-cell .rec-buy,
+.rec-price-cell .rec-exp {
+  display: block;
   font-size: 11px;
-  color: var(--text-lo);
-}
-
-.top3-card .t3-rank {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-lo);
-}
-
-.top3-card .t3-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 12px;
   color: var(--text-mid);
-  margin: 3px 0;
 }
 
-.top3-card .t3-row .t3-val {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+.rec-price-cell .rec-exp {
+  color: var(--text-lo);
+}
+
+/* 참고목표 셀(목표가 + 기대수익 병기) */
+.rec-target-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rec-target-cell .rec-target {
+  display: block;
   color: var(--text-hi);
 }
 
-.top3-card .t3-exp {
-  font-size: 17px;
+.rvol-cell {
+  font-weight: 700;
 }
 
-.top3-card .t3-risk {
-  color: var(--risk);
-  font-weight: 700;
+.supply-cell .supply-dash,
+.rec-table td .supply-dash {
+  color: var(--text-lo);
+}
+
+/* 콘솔 각주 행 — 청산 카피(불변조항)·잠정 표기 */
+.table-footnote {
+  color: var(--text-lo);
+  font-size: 11px;
+  padding-top: 8px;
+  border-bottom: none;
 }
 
 /* ============================================================================
