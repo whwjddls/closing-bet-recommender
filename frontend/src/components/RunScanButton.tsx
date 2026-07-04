@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Play } from 'lucide-react';
 import {
   triggerRun,
   fetchRunStatus,
@@ -188,7 +189,9 @@ export default function RunScanButton() {
             스캔 중 · {formatElapsed(elapsedSec)}
           </>
         ) : (
-          <>▶ 지금 스캔 실행</>
+          <>
+            <Play size={14} aria-hidden="true" /> 지금 스캔 실행
+          </>
         )}
       </button>
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Calculator } from 'lucide-react';
 import {
   fetchPerformance,
   fetchScoringStatus,
@@ -90,7 +91,11 @@ export default function Performance() {
       <div className="perf-head">
         <h1>성과 리포트{data.eval_date ? ` (${data.eval_date})` : ''}</h1>
         <JobButton
-          idleLabel="🧮 성과 채점하기"
+          idleLabel={
+            <>
+              <Calculator size={14} aria-hidden="true" /> 성과 채점하기
+            </>
+          }
           runningLabel="채점 중"
           hint="어제 픽의 아침(9~10시) 결과를 계산해요"
           trigger={triggerScoring}

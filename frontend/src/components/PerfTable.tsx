@@ -1,9 +1,11 @@
+import { TriangleAlert } from 'lucide-react';
 import type { PickResult } from '../api/client';
 import { formatPrice, formatPercent, directionClass } from '../lib/format';
 
+// 색상은 outcome 속성 기반 CSS가 담당 — 이모지 없이 텍스트만(콘솔 원칙).
 const OUTCOME_LABEL: Record<PickResult['outcome'], string> = {
-  SUCCESS: '✅성공',
-  FAIL: '❌실패',
+  SUCCESS: '성공',
+  FAIL: '실패',
   NA: 'N/A',
 };
 
@@ -70,7 +72,8 @@ export default function PerfTable({ rows }: { rows: PickResult[] }) {
             <td>
               {r.dart_overnight_flag && (
                 <span data-testid="dart-flag" className="tag-dart">
-                  ⚠공시
+                  <TriangleAlert size={11} aria-hidden="true" />
+                  공시
                 </span>
               )}
             </td>

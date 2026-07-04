@@ -4,11 +4,11 @@ import { formatPrice } from '../lib/format';
 type Level = 'on' | 'half' | 'off';
 
 // regime_mult → 초보자용 장 분위기 신호등. 게이지·헤더 판정과 동일 규칙.
-// 1.0=🟢 좋음 / 0.5=🟡 보통(절반만) / 0.0=🔴 쉬어가기
+// 1.0=좋음(go) / 0.5=보통·절반만(hold) / 0.0=쉬어가기(off) — 색은 mood-dot 원이 담당.
 function regimeBadge(mult: number): { level: Level; label: string } {
-  if (mult >= 1.0) return { level: 'on', label: '🟢 좋음' };
-  if (mult > 0) return { level: 'half', label: '🟡 보통' };
-  return { level: 'off', label: '🔴 쉬어가기' };
+  if (mult >= 1.0) return { level: 'on', label: '좋음' };
+  if (mult > 0) return { level: 'half', label: '보통' };
+  return { level: 'off', label: '쉬어가기' };
 }
 
 // GlobalHeader 바로 아래 상시 노출되는 얇은 지수 바.
@@ -48,6 +48,7 @@ export default function IndexStrip({ regimes }: { regimes: RegimeInfo[] }) {
               data-testid={`index-regime-${r.market}`}
               data-level={badge.level}
             >
+              <span className="mood-dot" data-mood={badge.level} aria-hidden="true" />
               {badge.label}
             </span>
           </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { JobTriggerResponse, RunStatusResponse } from '../api/client';
 
 // 수동 잡 트리거 버튼(범용) — "종목 후보 가져오기"(프리페치) / "성과 채점하기"(채점).
@@ -17,7 +18,7 @@ export interface JobToast {
 }
 
 interface JobButtonProps {
-  idleLabel: string; // 예: '📥 종목 후보 가져오기'
+  idleLabel: ReactNode; // 예: <><Download size={14} /> 종목 후보 가져오기</>
   runningLabel: string; // 예: '가져오는 중'
   hint?: string; // 실행 중 보조 안내(선택)
   trigger: () => Promise<JobTriggerResponse>;

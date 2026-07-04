@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Download, Moon, Sun, Timer, TriangleAlert } from 'lucide-react';
 import {
   fetchRecommendations,
   fetchRunStatus,
@@ -70,6 +71,9 @@ function scanChipLabel(status: RunStatusResponse): string {
   }
   return '오늘 스캔 전';
 }
+
+// 15:00 KST(마감 30분 전)부터 카운트다운 강조 — "결전 시간" 시각 신호(스펙 §2.1).
+const CLOSE_HOT_WINDOW_MS = 30 * 60_000;
 
 function urgencyClass(ms: number): string {
   if (ms <= 0) return 'gh-closed';
@@ -153,15 +157,26 @@ export default function GlobalHeader() {
   return (
     <div className="global-header" data-testid="global-header" role="banner">
       <div className="gh-left">
-        <span className="gh-logo">종가베팅</span>
+        <span className="gh-logo">
+          종가베팅
+          <span className="gh-logo-mark" aria-hidden="true">
+            ▮
+          </span>
+          콘솔
+        </span>
         <span
-          className={`gh-countdown ${urgencyClass(remaining)}`}
+          className={`gh-countdown ${urgencyClass(remaining)}${
+            remaining > 0 && remaining <= CLOSE_HOT_WINDOW_MS
+              ? ' gh-countdown--hot'
+              : ''
+          }`}
           data-testid="close-countdown"
           title="15:30 KST 마감까지 · 지나면 다음 거래일 15:20"
         >
+          <Timer size={13} aria-hidden="true" />
           {remaining <= 0
-            ? '⏱ 장 마감 · 다음 거래일 15:20'
-            : `⏱ 마감(15:30)까지 ${formatCountdown(remaining)}`}
+            ? ' 장 마감 · 다음 거래일 15:20'
+            : ` 마감(15:30)까지 ${formatCountdown(remaining)}`}
         </span>
         {scanStatus && (
           <span
@@ -195,7 +210,8 @@ export default function GlobalHeader() {
             '증권사 미연동 — 실제 주문 실행 없음'
           }
         >
-          ⚠ 참고용 추천 · 주문은 안 나가요
+          <TriangleAlert size={13} aria-hidden="true" /> 참고용 추천 · 주문은 안
+          나가요
         </span>
         <button
           type="button"
@@ -208,10 +224,14 @@ export default function GlobalHeader() {
           }
           title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
         >
-          {theme === 'dark' ? '☀️' : '🌙'}
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         </button>
         <JobButton
-          idleLabel="📥 종목 후보 가져오기"
+          idleLabel={
+            <>
+              <Download size={14} aria-hidden="true" /> 종목 후보 가져오기
+            </>
+          }
           runningLabel="가져오는 중"
           hint="5~10분 걸려요 — 매일 아침 한 번이면 충분해요"
           trigger={triggerPrefetch}

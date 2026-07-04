@@ -1,3 +1,4 @@
+import { TriangleAlert } from 'lucide-react';
 import type { Market, Recommendation } from '../api/client';
 
 // 섹터 필드가 아직 없어 시장(KOSPI/KOSDAQ) 기준으로 분포·쏠림을 판정한다.
@@ -135,7 +136,8 @@ export default function PicksTray({
                 data-testid="picks-concentration-warning"
                 role="alert"
               >
-                ⚠ {dist.dominant} {Math.round(dist.dominantShare * 100)}% 쏠림
+                <TriangleAlert size={12} aria-hidden="true" /> {dist.dominant}{' '}
+                {Math.round(dist.dominantShare * 100)}% 쏠림
               </span>
             )}
             {onClear && (

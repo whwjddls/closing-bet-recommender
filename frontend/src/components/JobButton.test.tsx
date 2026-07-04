@@ -44,7 +44,7 @@ function renderJob(overrides: {
     overrides.fetchStatus ?? vi.fn().mockResolvedValue(idle);
   render(
     <JobButton
-      idleLabel="📥 종목 후보 가져오기"
+      idleLabel="종목 후보 가져오기"
       runningLabel="가져오는 중"
       hint="5~10분 걸려요"
       trigger={trigger}

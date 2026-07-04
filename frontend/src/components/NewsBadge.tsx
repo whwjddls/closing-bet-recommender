@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Newspaper } from 'lucide-react';
 import { fetchNews, type NewsItem } from '../api/client';
 import { cachedFetch } from '../lib/dataCache';
 
@@ -51,7 +52,7 @@ export default function NewsBadge({ ticker }: { ticker: string }) {
       data-testid="news-badge"
       title={`최근 뉴스 ${items.length}건 — 주도 테마(재료)인지 직접 판단하세요\n${preview}`}
     >
-      📰 뉴스 {items.length}건
+      <Newspaper size={12} aria-hidden="true" /> 뉴스 {items.length}건
     </span>
   );
 }

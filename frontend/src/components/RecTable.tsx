@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Market, Recommendation } from '../api/client';
 import { deriveBadges } from '../lib/badges';
@@ -152,7 +153,7 @@ export default function RecTable({
       ) : (
         <>
           <p className="rec-material-hint" data-testid="material-hint">
-            🔍 매수 전 마지막 체크:{' '}
+            <Search size={13} aria-hidden="true" /> 매수 전 마지막 체크:{' '}
             <strong>오늘 재료(주도 테마·뉴스)가 있는 종목인지</strong> 종목명을
             눌러 최근 뉴스로 확인하세요 — 숫자 필터는 재료를 판단하지 못해요.
           </p>

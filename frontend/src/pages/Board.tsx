@@ -35,10 +35,10 @@ function overallMood(
 ): { level: Mood; label: string; sub: string } | null {
   if (regimes.length === 0) return null;
   if (regimes.every((r) => r.regime_mult === 0))
-    return { level: 'off', label: '🔴 쉬어가기', sub: '오늘은 쉬는 게 나아요' };
+    return { level: 'off', label: '쉬어가기', sub: '오늘은 쉬는 게 나아요' };
   if (regimes.every((r) => r.regime_mult >= 1))
-    return { level: 'on', label: '🟢 좋음', sub: '분위기 좋아요' };
-  return { level: 'half', label: '🟡 보통', sub: '절반만 (눌림 구간)' };
+    return { level: 'on', label: '좋음', sub: '분위기 좋아요' };
+  return { level: 'half', label: '보통', sub: '절반만 (눌림 구간)' };
 }
 
 export default function Board() {
@@ -146,6 +146,13 @@ export default function Board() {
             >
               <span className="hero-mood-label">오늘 장 분위기</span>
               <span className="hero-mood-badge">
+                {mood && (
+                  <span
+                    className="mood-dot"
+                    data-mood={mood.level}
+                    aria-hidden="true"
+                  />
+                )}
                 {mood ? mood.label : '데이터 없음'}
               </span>
               {mood && <span className="hero-mood-sub">{mood.sub}</span>}
@@ -187,8 +194,12 @@ export default function Board() {
 
         {hasReducedRisk && (
           <p data-testid="reduced-risk-caption" className="caption-reduced-risk">
-            오늘 장 분위기 <strong>🟡 보통</strong> — 절반만: 일부 시장이 눌림
-            상태라 베팅 비중을 줄였어요.
+            오늘 장 분위기{' '}
+            <strong>
+              <span className="mood-dot" data-mood="half" aria-hidden="true" />
+              보통
+            </strong>{' '}
+            — 절반만: 일부 시장이 눌림 상태라 베팅 비중을 줄였어요.
           </p>
         )}
 
@@ -205,7 +216,16 @@ export default function Board() {
                 >
                   <strong>오늘은 쉬어가는 날 — 추천 없음</strong>
                   <p>
-                    장 분위기 <b>🔴 쉬어가기</b> (모든 시장이 5일선 아래).
+                    장 분위기{' '}
+                    <b>
+                      <span
+                        className="mood-dot"
+                        data-mood="off"
+                        aria-hidden="true"
+                      />
+                      쉬어가기
+                    </b>{' '}
+                    (모든 시장이 5일선 아래).
                     시스템은 정상이에요 — 아래 후보 목록은 참고용으로 남겨둡니다.
                   </p>
                   {universe && (

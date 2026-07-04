@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CircleCheck, CircleX } from 'lucide-react';
 import {
   fetchPerformance,
   type PerformanceResponse,
@@ -17,10 +18,12 @@ function pct(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
 }
 
-function outcomeIcon(outcome: PickResult['outcome']): string {
-  if (outcome === 'SUCCESS') return '✅';
-  if (outcome === 'FAIL') return '❌';
-  return '·';
+function OutcomeIcon({ outcome }: { outcome: PickResult['outcome'] }) {
+  if (outcome === 'SUCCESS')
+    return <CircleCheck size={12} className="dir-up" aria-hidden="true" />;
+  if (outcome === 'FAIL')
+    return <CircleX size={12} className="dir-down" aria-hidden="true" />;
+  return <span aria-hidden="true">·</span>;
 }
 
 export default function PerfSummaryCard() {
@@ -118,8 +121,8 @@ export default function PerfSummaryCard() {
               data-testid="perf-summary-pick"
               data-outcome={p.outcome}
             >
-              <span className="psc-pick-icon" aria-hidden="true">
-                {outcomeIcon(p.outcome)}
+              <span className="psc-pick-icon">
+                <OutcomeIcon outcome={p.outcome} />
               </span>
               <span className="psc-pick-name">{p.name}</span>
               {p.morning_return != null && (
