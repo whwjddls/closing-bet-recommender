@@ -84,10 +84,7 @@ function MonthlyGrid({
               </span>
             ))}
           </div>
-          <div
-            className="mcal-grid"
-            style={{ gridTemplateColumns: `repeat(${weeks}, 1fr)` }}
-          >
+          <div className="mcal-grid">
             {cells.map((c) => (
               <span
                 key={c.date}
