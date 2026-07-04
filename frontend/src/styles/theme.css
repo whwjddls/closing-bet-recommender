@@ -589,6 +589,23 @@ main > header h1 {
   font-size: 12.5px;
 }
 
+/* 모바일: 상단바 요소가 3줄로 난잡해지지 않게 정돈(P3 §3) */
+@media (max-width: 640px) {
+  .global-header {
+    row-gap: 6px;
+    padding: 6px 12px;
+  }
+  .gh-right {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .gh-honesty {
+    order: 10; /* 정직성 배너는 줄 맨 끝으로 밀어 한 줄 차지 */
+    flex-basis: 100%;
+  }
+}
+
 .gh-left {
   display: flex;
   align-items: center;
@@ -1458,6 +1475,15 @@ td small {
 /* ============================================================================
    추천 테이블 콘솔화 (2026-07-04 P1) — 상위 3행 마커·복합 셀·수급/재료 컬럼
    ========================================================================== */
+
+/* 모바일: 컬럼 압축 대신 가로 스크롤(P3 §3). 좁은 화면에서 셀 줄바꿈 남발 방지. */
+.rec-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.rec-table-scroll .rec-table {
+  min-width: 720px;
+}
 
 .rec-table {
   width: 100%;

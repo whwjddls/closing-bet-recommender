@@ -252,11 +252,13 @@ export default function Board() {
                 </div>
               )
             ) : (
-              <RecTable
-                recommendations={board.recommendations}
-                pickedTickers={pickedTickers}
-                onTogglePick={togglePick}
-              />
+              <div className="rec-table-scroll">
+                <RecTable
+                  recommendations={board.recommendations}
+                  pickedTickers={pickedTickers}
+                  onTogglePick={togglePick}
+                />
+              </div>
             )}
           </div>
 
