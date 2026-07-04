@@ -1,6 +1,6 @@
 import type { RecommendationsResponse } from '../api/client';
 
-// 오늘의 깔때기 — 후보 풀에서 최종 추천까지. 추천 0건인 날 "왜"를 숫자로 설명한다.
+// 오늘의 걸러내기 — 후보 풀에서 최종 추천까지. 추천 0건인 날 "왜"를 숫자로 설명한다.
 // v1은 가용 데이터만(후보 수·추천 수·커버리지) 사용, 사유는 프론트 파생(스펙 §2.1):
 //   data_available=false → 데이터 없음 / 발행+추천0 → 신호 통과 0(관망).
 // 단계별 상세 카운트(위생·레짐·veto 탈락 수)는 백엔드 확장 후(백로그 P2).
@@ -32,10 +32,10 @@ export default function FunnelPanel({ universeCount, board }: FunnelPanelProps) 
     <section
       className="funnel-panel"
       data-testid="funnel-panel"
-      aria-label="오늘의 깔때기"
+      aria-label="오늘의 걸러내기"
     >
       <div className="fp-head">
-        <span className="fp-title">오늘의 깔때기</span>
+        <span className="fp-title">오늘의 걸러내기</span>
         {coverage && <span className="fp-cov mono">{coverage}</span>}
       </div>
 

@@ -142,7 +142,7 @@ describe('Board', () => {
     expect(screen.getByTestId('regime-gauge')).toBeInTheDocument();
   });
 
-  it('레일에 오늘의 깔때기·내 전략의 달력 패널을 렌더한다', async () => {
+  it('레일에 오늘의 걸러내기·내 전략의 달력 패널을 렌더한다', async () => {
     setup({
       run_date: '2026-06-30',
       session_type: '정규',

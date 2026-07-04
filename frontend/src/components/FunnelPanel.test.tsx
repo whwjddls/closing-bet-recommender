@@ -18,7 +18,9 @@ const fakeRecs = (n: number) =>
 describe('FunnelPanel', () => {
   it('보드 로딩 전에는 집계 중 placeholder(플로우 없음)', () => {
     render(<FunnelPanel universeCount={null} board={null} />);
-    expect(screen.getByTestId('funnel-panel')).toHaveTextContent('오늘의 깔때기');
+    expect(screen.getByTestId('funnel-panel')).toHaveTextContent(
+      '오늘의 걸러내기',
+    );
     expect(screen.queryByTestId('funnel-flow')).not.toBeInTheDocument();
   });
 
