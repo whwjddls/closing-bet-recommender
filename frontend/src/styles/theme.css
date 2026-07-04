@@ -181,6 +181,21 @@ a {
   border: 0;
 }
 
+/* 숫자 변경 틱(모션②) — 값이 바뀔 때만 짧게 강조. reduced-motion 존중 */
+@media (prefers-reduced-motion: no-preference) {
+  .tick-flash {
+    animation: tick-flash 0.4s ease;
+  }
+}
+@keyframes tick-flash {
+  0% {
+    background: var(--grade-s-bg);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* 콘솔 스켈레톤 로딩(모션③) — "로딩 중…" 텍스트 대체 */
 .skeleton {
   display: flex;

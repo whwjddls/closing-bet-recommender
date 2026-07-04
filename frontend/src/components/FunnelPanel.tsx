@@ -1,4 +1,5 @@
 import type { RecommendationsResponse } from '../api/client';
+import { useFlashOnChange } from '../lib/useFlashOnChange';
 import Skeleton from './Skeleton';
 
 // 오늘의 걸러내기 — 후보 풀에서 최종 추천까지. 추천 0건인 날 "왜"를 숫자로 설명한다.
@@ -29,6 +30,9 @@ export default function FunnelPanel({ universeCount, board }: FunnelPanelProps) 
     }
   }
 
+  // 스캔 완료로 추천 수가 바뀔 때만 짧게 강조(모션② — 매초 시계엔 미적용).
+  const flash = useFlashOnChange(picks);
+
   return (
     <section
       className="funnel-panel"
@@ -44,7 +48,10 @@ export default function FunnelPanel({ universeCount, board }: FunnelPanelProps) 
         <Skeleton lines={2} />
       ) : (
         <>
-          <p className="fp-flow" data-testid="funnel-flow">
+          <p
+            className={`fp-flow${flash ? ' tick-flash' : ''}`}
+            data-testid="funnel-flow"
+          >
             <span className="fp-num mono">{candidates}</span>
             <span className="fp-arrow" aria-hidden="true">
               →

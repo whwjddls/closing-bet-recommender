@@ -24,6 +24,18 @@ describe('FunnelPanel', () => {
     expect(screen.queryByTestId('funnel-flow')).not.toBeInTheDocument();
   });
 
+  it('최초 렌더에는 tick-flash가 없다(값 미변경)', () => {
+    render(
+      <FunnelPanel
+        universeCount={200}
+        board={{ ...boardBase, recommendations: [] }}
+      />,
+    );
+    expect(screen.getByTestId('funnel-flow').className).not.toContain(
+      'tick-flash',
+    );
+  });
+
   it('데이터 미수신이면 후보 N → — + "데이터 없음" 사유', () => {
     render(
       <FunnelPanel
