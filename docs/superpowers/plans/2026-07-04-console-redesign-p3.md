@@ -103,17 +103,7 @@ export default function Skeleton({
   border-radius: 2px;
   background: var(--bg-2);
 }
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
+/* .sr-only 는 theme.css:172~ 에 이미 존재 — 중복 선언 금지(재사용). */
 @media (prefers-reduced-motion: no-preference) {
   .skeleton-line {
     background: linear-gradient(
@@ -303,7 +293,7 @@ it('최초 렌더에는 tick-flash가 없다(값 미변경)', () => {
 **Files:** Modify `theme.css`(필요시), 최종 검수
 
 - [ ] **Step 5-1: 빈 상태 감사** — 빈 상태 문구/스타일 통일 확인(grep `데이터 없음\|기록이 없어요\|추천이 없\|일정 없음`). 콘솔 톤 이탈(색/여백)만 미세 조정 — 문구 변경 금지(정직성 카피 불변).
-- [ ] **Step 5-2: reduced-motion 감사** — 신규 모션(skeleton-shimmer·tick-flash) 전부 `@media (prefers-reduced-motion: no-preference)` 안에 있는지 확인. 기존 card-rise도 이미 가드됨. `blink`(660행)가 가드 밖이면 이 태스크에서 가드 안으로 이동(콘솔 "그 외 모션 최소화" 정신).
+- [ ] **Step 5-2: reduced-motion 감사** — 신규 모션(skeleton-shimmer·tick-flash) 전부 `@media (prefers-reduced-motion: no-preference)` 안에 있는지 확인. 기존 card-rise는 이미 가드됨. 가드 밖 모션 2개 — `blink`(`.gh-countdown.gh-danger` ~660행)·`gh-countdown-pulse`(`.gh-countdown--hot` ~598행) — 를 가드 안으로 넣는다. **주의: `animation:` 선언만** `@media (prefers-reduced-motion: no-preference)` 블록으로 옮기고, 해당 셀렉터의 color/background/border(danger/hot 상태색)는 무조건 유지(reduced-motion 사용자도 상태색은 봐야 함).
 - [ ] **Step 5-3: 전체 게이트** — `npx vitest run` · `npx tsc --noEmit` · `npx vite build` · `.js`=0
 - [ ] **Step 5-4: 이모지 0 검증** — `LC_ALL=C.UTF-8 grep -rnP "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{23FF}]" src --include='*.ts' --include='*.tsx' --include='*.css'` → `✓` 외 0건
 - [ ] **Step 5-5: 샷** — 데스크톱(보드·성과) + 모바일(390px 보드) + reduced-motion(에뮬레이트) 확인.
