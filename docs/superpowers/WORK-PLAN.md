@@ -104,4 +104,5 @@
 - **재료(뉴스) 확인 배지**: TOP3/전 행에 뉴스 유무·건수 표시(인간 최종 필터 — 퀀트가 못 보는 재료). 점수 공식 불변 (2026-07-04)
 - **수동 잡 버튼 2종**: /jobs/prefetch(종목 후보 가져오기)·/jobs/scoring(성과 채점, 10시 이전 거부 가드). 스케줄러 없이 UI로 일일 사이클. schtasks 채점 09:05→10:05 교정 (2026-07-04)
 - **콘솔 UI 리디자인 P1 완료**: A2 터미널 스킨+우리말 보이스. 토큰/폰트(Pretendard·JetBrains Mono) 교체, 이모지 전면 제거(lucide·mood-dot), 상태바 콘솔화, 추천 테이블 개편(TOP3카드 폐지→행마커·복합셀·수급 풀네임·재료 컬럼), 신규 패널 2종(오늘의 깔때기·내 전략의 달력 잔디). 스펙 `specs/2026-07-04-console-redesign-design.md`·플랜 `plans/2026-07-04-console-redesign-p1.md`. 테스트 프론트 207 (2026-07-04)
-- **콘솔 UI 리디자인 P2 완료**: 성과 페이지 월 잔디(MonthlyPerfCalendar — GitHub식 요일정렬 3개월 격자, weekAlignedDates 유틸) + 핵심 숫자 모노화. 종목상세·성과는 P1 토큰으로 이미 콘솔화돼 폴리시 이탈값 0건. 플랜 `plans/2026-07-04-console-redesign-p2.md`. 테스트 프론트 213. 남은 것: P3(모션 3종·빈 상태·모바일 과밀) (2026-07-04)
+- **콘솔 UI 리디자인 P2 완료**: 성과 페이지 월 잔디(MonthlyPerfCalendar — GitHub식 요일정렬 3개월 격자, weekAlignedDates 유틸) + 핵심 숫자 모노화. 종목상세·성과는 P1 토큰으로 이미 콘솔화돼 폴리시 이탈값 0건. 플랜 `plans/2026-07-04-console-redesign-p2.md`. 테스트 프론트 213 (2026-07-04)
+- **콘솔 UI 리디자인 P3 완료(리디자인 전체 종료)**: 스켈레톤 로딩(Skeleton — shimmer, 로딩 표시 10곳 교체) · 숫자 변경 틱(useFlashOnChange — 걸러내기 값) · 모바일 과밀 정리(추천 테이블 가로 스크롤·상단바 줄바꿈) · reduced-motion 감사(blink·pulse·shimmer·tick 전부 가드, 상태색은 무조건 유지). "오늘의 깔때기"→"오늘의 걸러내기" 용어 교체. 플랜 `plans/2026-07-04-console-redesign-p3.md`. 테스트 프론트 218 (2026-07-04)

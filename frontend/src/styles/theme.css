@@ -659,7 +659,13 @@ main > header h1 {
 .gh-countdown--hot {
   color: var(--accent);
   border-color: var(--accent);
-  animation: gh-countdown-pulse 1s ease-in-out infinite;
+}
+
+/* 애니메이션만 reduced-motion 가드 안으로(상태색은 무조건 유지) */
+@media (prefers-reduced-motion: no-preference) {
+  .gh-countdown--hot {
+    animation: gh-countdown-pulse 1s ease-in-out infinite;
+  }
 }
 
 @keyframes gh-countdown-pulse {
@@ -721,7 +727,13 @@ svg.lucide {
   color: #fff;
   background: var(--risk);
   border-color: var(--risk);
-  animation: blink 1s steps(2, start) infinite;
+}
+
+/* 애니메이션만 reduced-motion 가드 안으로(danger 상태색은 무조건 유지) */
+@media (prefers-reduced-motion: no-preference) {
+  .gh-countdown.gh-danger {
+    animation: blink 1s steps(2, start) infinite;
+  }
 }
 
 .gh-countdown.gh-closed {
