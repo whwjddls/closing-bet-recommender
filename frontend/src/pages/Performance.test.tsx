@@ -153,6 +153,15 @@ describe('Performance', () => {
     expect(badge.className).toContain('fail-reason--gap');
   });
 
+  it('월 잔디(성과 달력)를 렌더한다', async () => {
+    vi.spyOn(api, 'fetchPerformance').mockResolvedValue(warm);
+    render(<Performance />);
+    await waitFor(() =>
+      expect(screen.getByTestId('monthly-perf-calendar')).toBeInTheDocument(),
+    );
+    expect(screen.getAllByTestId('mcal-cell').length).toBeGreaterThan(0);
+  });
+
   it('콜드스타트(표본<30)면 누적 중 캡션 + 게이팅(회색) 적용', async () => {
     vi.spyOn(api, 'fetchPerformance').mockResolvedValue(cold);
     render(<Performance />);

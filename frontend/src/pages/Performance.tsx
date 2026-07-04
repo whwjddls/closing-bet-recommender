@@ -11,6 +11,7 @@ import { cachedFetch, invalidateCache } from '../lib/dataCache';
 import { formatPercent } from '../lib/format';
 import JobButton, { type JobToast } from '../components/JobButton';
 import PerfTable from '../components/PerfTable';
+import MonthlyPerfCalendar from '../components/MonthlyPerfCalendar';
 import CumulativeCurve from '../components/CumulativeCurve';
 
 // 채점 잡 완료 상태 → 초보자 친화 토스트. SCORED:n 은 채점 건수.
@@ -119,9 +120,13 @@ export default function Performance() {
         )}
         <div className="agg-grid">
           <span data-testid="agg-hit-rate">
-            성공률(다음날 아침 기준) {pct(a.hit_rate)} (n={a.sample_size})
+            성공률(다음날 아침 기준) <span className="mono">{pct(a.hit_rate)}</span>{' '}
+            <span className="mono">(n={a.sample_size})</span>
           </span>
-          <span>평균 아침 수익률 {formatPercent(a.avg_morning_return)}</span>
+          <span>
+            평균 아침 수익률{' '}
+            <span className="mono">{formatPercent(a.avg_morning_return)}</span>
+          </span>
         </div>
 
         {/* 리스크 지표 줄: 최대 하락폭(적색) · 손익비 · 최대연속손실 */}
@@ -165,7 +170,8 @@ export default function Performance() {
         <div className="by-grade">
           {a.by_grade.map((g) => (
             <span key={g.grade} data-testid={`by-grade-${g.grade}`}>
-              {g.grade} {pct(g.hit_rate)} (n={g.n}){' '}
+              {g.grade} <span className="mono">{pct(g.hit_rate)}</span>{' '}
+              <span className="mono">(n={g.n})</span>{' '}
               <ConfidenceInterval low={g.ci_low} high={g.ci_high} />
             </span>
           ))}
@@ -174,12 +180,18 @@ export default function Performance() {
         <div className="by-regime">
           {a.by_regime.map((r) => (
             <span key={r.regime} data-testid={`by-regime-${r.regime}`}>
-              장분위기 {r.regime} {pct(r.hit_rate)} (n={r.n}){' '}
+              장분위기 {r.regime} <span className="mono">{pct(r.hit_rate)}</span>{' '}
+              <span className="mono">(n={r.n})</span>{' '}
               <ConfidenceInterval low={r.ci_low} high={r.ci_high} />
             </span>
           ))}
         </div>
       </section>
+
+      <MonthlyPerfCalendar
+        curve={a.cumulative_curve}
+        sampleSize={a.sample_size}
+      />
 
       <h2>어제 추천 성적표 (확정 채점)</h2>
       <PerfTable rows={data.picks} />
