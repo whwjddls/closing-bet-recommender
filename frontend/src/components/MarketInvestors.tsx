@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import { fetchMarket, type MarketInvestors as Investors } from '../api/client';
 import { cachedFetch } from '../lib/dataCache';
 import { directionClass } from '../lib/format';
@@ -64,7 +65,7 @@ export default function MarketInvestors() {
         aria-busy="true"
       >
         <h3 className="mi-title">투자자별 수급 · D-1</h3>
-        <p className="mi-loading">로딩 중…</p>
+        <Skeleton lines={2} />
       </aside>
     );
   }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import {
   fetchDisclosures,
   type DisclosuresResponse,
@@ -87,7 +88,7 @@ export default function DisclosuresWidget() {
         aria-busy="true"
       >
         <h3 className="dsc-title">공시 일정</h3>
-        <p className="dsc-loading">로딩 중…</p>
+        <Skeleton lines={3} />
       </aside>
     );
   }

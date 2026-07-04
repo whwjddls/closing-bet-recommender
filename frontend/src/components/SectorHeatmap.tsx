@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import { fetchMarket, type MarketResponse } from '../api/client';
 import { cachedFetch } from '../lib/dataCache';
 import { directionClass } from '../lib/format';
@@ -68,7 +69,7 @@ export default function SectorHeatmap() {
         aria-busy="true"
       >
         <h3 className="sh-title">섹터 히트맵 · 시장폭</h3>
-        <p className="sh-loading">로딩 중…</p>
+        <Skeleton lines={2} />
       </aside>
     );
   }

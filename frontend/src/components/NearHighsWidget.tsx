@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import { Link } from 'react-router-dom';
 import { fetchHighs, type HighItem } from '../api/client';
 import { cachedFetch } from '../lib/dataCache';
@@ -50,7 +51,7 @@ export default function NearHighsWidget() {
         aria-busy="true"
       >
         <h3 className="nh-title">1년 최고가 근접</h3>
-        <p className="nh-loading">로딩 중…</p>
+        <Skeleton lines={3} />
       </aside>
     );
   }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import { Link } from 'react-router-dom';
 import { CircleCheck, CircleX } from 'lucide-react';
 import {
@@ -54,7 +55,7 @@ export default function PerfSummaryCard() {
         aria-busy="true"
       >
         <h3 className="psc-title">어제 성과</h3>
-        <p className="psc-loading">로딩 중…</p>
+        <Skeleton lines={2} />
       </aside>
     );
   }

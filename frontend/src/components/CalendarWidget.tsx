@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import {
   fetchCalendar,
   type CalendarResponse,
@@ -79,7 +80,7 @@ export default function CalendarWidget() {
         aria-busy="true"
       >
         <h3 className="cal-title">거래 캘린더</h3>
-        <p className="cal-loading">로딩 중…</p>
+        <Skeleton lines={2} />
       </aside>
     );
   }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import { fetchNews, type NewsItem } from '../api/client';
 
 // GET /news/{ticker} — "최근 뉴스(재료 확인)" 리스트. 빈/실패는 정직한 placeholder.
@@ -55,7 +56,7 @@ export default function NewsPanel({ ticker }: { ticker: string }) {
         aria-busy="true"
       >
         {title}
-        <p className="news-loading">로딩 중…</p>
+        <Skeleton lines={3} />
       </section>
     );
   }

@@ -1,4 +1,5 @@
 import type { RecommendationsResponse } from '../api/client';
+import Skeleton from './Skeleton';
 
 // 오늘의 걸러내기 — 후보 풀에서 최종 추천까지. 추천 0건인 날 "왜"를 숫자로 설명한다.
 // v1은 가용 데이터만(후보 수·추천 수·커버리지) 사용, 사유는 프론트 파생(스펙 §2.1):
@@ -40,9 +41,7 @@ export default function FunnelPanel({ universeCount, board }: FunnelPanelProps) 
       </div>
 
       {board === null ? (
-        <p className="fp-skeleton" aria-busy="true">
-          집계 중…
-        </p>
+        <Skeleton lines={2} />
       ) : (
         <>
           <p className="fp-flow" data-testid="funnel-flow">

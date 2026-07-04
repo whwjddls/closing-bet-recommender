@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import { Link } from 'react-router-dom';
 import { fetchPerformance, type PerformanceResponse } from '../api/client';
 import { cachedFetch } from '../lib/dataCache';
@@ -66,7 +67,7 @@ export default function PerfHeatmap() {
           아직 기록이 없어요 — 첫 채점부터 채워져요
         </p>
       ) : data === null ? (
-        <p className="ph-empty">로딩 중…</p>
+        <Skeleton lines={2} />
       ) : (
         <div className="ph-grid" aria-hidden="true">
           {cells.map((c) => (

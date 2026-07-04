@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Skeleton from './Skeleton';
 import {
   fetchReminder,
   type ReminderResponse,
@@ -84,7 +85,7 @@ export default function ReminderWidget() {
         aria-busy="true"
       >
         {header}
-        <p className="rmd-loading">로딩 중…</p>
+        <Skeleton lines={3} />
       </aside>
     );
   }
