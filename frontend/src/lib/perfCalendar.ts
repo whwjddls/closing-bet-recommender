@@ -27,3 +27,19 @@ export function deriveHeatmapCells(
     return { date, kind: delta > 0 ? ('win' as const) : ('loss' as const), delta };
   });
 }
+
+const WEEK_DAY_MS = 86_400_000;
+
+// GitHub식 잔디용 날짜열: anchorToday가 속한 주의 토요일에서 끝나고
+// weeks주 거슬러 올라간 일요일에서 시작(길이 weeks×7, 일→토 순).
+// 요일은 UTC 자정 기준으로 TZ 불변 계산.
+export function weekAlignedDates(anchorToday: string, weeks: number): string[] {
+  const anchorMs = Date.parse(anchorToday + 'T00:00:00Z');
+  const dow = new Date(anchorMs).getUTCDay(); // 0=일
+  const endMs = anchorMs + (6 - dow) * WEEK_DAY_MS; // 이번 주 토요일
+  const total = weeks * 7;
+  const startMs = endMs - (total - 1) * WEEK_DAY_MS;
+  return Array.from({ length: total }, (_, i) =>
+    new Date(startMs + i * WEEK_DAY_MS).toISOString().slice(0, 10),
+  );
+}
