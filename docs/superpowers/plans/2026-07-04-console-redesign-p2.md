@@ -67,7 +67,7 @@ describe('weekAlignedDates', () => {
 ```
 
 - [ ] **Step 1-2: 실패 확인** — `npx vitest run src/lib/perfCalendar.test.ts` → `weekAlignedDates` 없음 FAIL
-- [ ] **Step 1-3: 구현** — `perfCalendar.ts`에 추가(파일 상단에 `const DAY_MS = 86_400_000;` 이미 없으면 추가):
+- [ ] **Step 1-3: 구현** — `perfCalendar.ts`에 추가(아래 `WEEK_DAY_MS` 하나만 선언 — `noUnusedLocals: true`라 미사용 상수 추가 금지):
 
 ```ts
 const WEEK_DAY_MS = 86_400_000;
