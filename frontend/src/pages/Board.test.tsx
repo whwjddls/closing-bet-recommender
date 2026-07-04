@@ -90,7 +90,25 @@ function setup(recRes: RecommendationsResponse) {
     ],
   });
   vi.spyOn(api, 'fetchHighs').mockResolvedValue({ items: [] });
-  vi.spyOn(api, 'fetchNews').mockResolvedValue({ items: [] }); // TOP3 재료 배지용
+  vi.spyOn(api, 'fetchNews').mockResolvedValue({ items: [] }); // 재료 배지용
+  // PerfHeatmap/PerfSummaryCard가 mount 시 조회 — 표본 0 픽스처로 결정성 확보.
+  vi.spyOn(api, 'fetchPerformance').mockResolvedValue({
+    eval_date: '',
+    picks: [],
+    aggregate: {
+      sample_size: 0,
+      hit_rate: 0,
+      avg_morning_return: 0,
+      cumulative_curve: [],
+      by_grade: [],
+      by_regime: [],
+      cold_start: true,
+      mdd: 0,
+      payoff_ratio: 0,
+      max_consec_losses: 0,
+      benchmark_curve: [],
+    },
+  });
 }
 
 const wrap = () =>
@@ -122,6 +140,20 @@ describe('Board', () => {
       expect(screen.getAllByTestId('rec-row')).toHaveLength(1),
     );
     expect(screen.getByTestId('regime-gauge')).toBeInTheDocument();
+  });
+
+  it('레일에 오늘의 깔때기·내 전략의 달력 패널을 렌더한다', async () => {
+    setup({
+      run_date: '2026-06-30',
+      session_type: '정규',
+      data_available: true,
+      kis_coverage_pct: 92,
+      regimes: { KOSDAQ: regime({ market: 'KOSDAQ', regime_mult: 1 }) },
+      recommendations: [baseRec({})],
+    });
+    wrap();
+    expect(await screen.findByTestId('funnel-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('perf-heatmap')).toBeInTheDocument();
   });
 
   it('RISK_OFF(모든 레짐 0·빈 보드)이면 배너 + 스캐너 전면 유지', async () => {

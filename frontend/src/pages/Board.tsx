@@ -24,6 +24,8 @@ import DisclosuresWidget from '../components/DisclosuresWidget';
 import PicksTray, { PicksTraySpacer } from '../components/PicksTray';
 import ReminderWidget from '../components/ReminderWidget';
 import PerfSummaryCard from '../components/PerfSummaryCard';
+import PerfHeatmap from '../components/PerfHeatmap';
+import FunnelPanel from '../components/FunnelPanel';
 import Onboarding from '../components/Onboarding';
 import { kstToday } from '../lib/date';
 
@@ -259,7 +261,12 @@ export default function Board() {
           </div>
 
           <aside className="board-rail" aria-label="시장 요약 위젯">
+            <FunnelPanel
+              universeCount={universe ? universe.rows.length : null}
+              board={board}
+            />
             <PerfSummaryCard />
+            <PerfHeatmap />
             <NearHighsWidget />
             <SectorHeatmap />
             <MarketInvestors />
