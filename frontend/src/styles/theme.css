@@ -2362,6 +2362,111 @@ td small {
 }
 
 /* ============================================================================
+   성과 페이지 월 잔디(MonthlyPerfCalendar) — GitHub식 요일정렬 3개월. §2.3
+   ========================================================================== */
+
+.monthly-perf-calendar {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+.monthly-perf-calendar .mcal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.monthly-perf-calendar .mcal-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+.monthly-perf-calendar .mcal-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+.monthly-perf-calendar .mcal-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  margin-left: 6px;
+}
+.mcal-dot--win {
+  background: var(--cell-win);
+}
+.mcal-dot--loss {
+  background: var(--cell-loss);
+}
+.mcal-dot--skip {
+  background: var(--cell-skip);
+}
+.monthly-perf-calendar .mcal-body {
+  display: flex;
+  gap: 6px;
+}
+.monthly-perf-calendar .mcal-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+  padding-top: 16px; /* 월 라벨 높이만큼 정렬 */
+}
+.monthly-perf-calendar .mcal-wd {
+  font-size: 9px;
+  color: var(--text-lo);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.monthly-perf-calendar .mcal-cols {
+  flex: 1;
+  min-width: 0;
+}
+.monthly-perf-calendar .mcal-months {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  height: 14px;
+  margin-bottom: 2px;
+}
+.monthly-perf-calendar .mcal-month {
+  font-size: 9px;
+  color: var(--text-lo);
+}
+.monthly-perf-calendar .mcal-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+}
+.monthly-perf-calendar .mcal-cell {
+  aspect-ratio: 1;
+  border-radius: 1px;
+  background: var(--cell-skip);
+}
+.monthly-perf-calendar .mcal-cell[data-kind='win'] {
+  background: var(--cell-win);
+}
+.monthly-perf-calendar .mcal-cell[data-kind='loss'] {
+  background: var(--cell-loss);
+}
+.monthly-perf-calendar .mcal-empty {
+  margin: 0;
+  color: var(--text-lo);
+  font-size: 12px;
+}
+.monthly-perf-calendar .mcal-count {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  color: var(--text-lo);
+}
+
+/* ============================================================================
    내 전략의 달력(PerfHeatmap) — 성과 잔디 패널. 스펙 2026-07-04 §2.1
    ========================================================================== */
 
