@@ -410,8 +410,11 @@ def health_check(pykrx_module: Any | None = None, *,
     if rows < min_rows:
         return HealthResult(False, latest, rows,
                             f"insufficient rows {rows}<{min_rows}")
+    # 수급은 달력 D-1(주말/휴일일 수 있음)이 아니라 지수 조회가 해소한 '실제 마지막
+    # 거래일'로 조회한다 — 월요일·연휴 다음날 무거래일 조회로 인한 오탐 BLOCKED 방지.
+    supply_day = _yyyymmdd(latest) if latest is not None else d1_s
     try:
-        supply = _net_by_market(px, d1_s, d1_s)         # D-1 외인/기관 수급·거래대금
+        supply = _net_by_market(px, supply_day, supply_day)  # 실 마지막 거래일 외인/기관 수급
     except Exception as exc:                            # noqa: BLE001  (외부 IO)
         return HealthResult(False, latest, rows, f"D-1 수급 조회 실패: {exc}")
     if not supply:

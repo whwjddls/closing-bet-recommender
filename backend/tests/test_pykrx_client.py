@@ -392,6 +392,38 @@ def test_health_check_fail_closed_on_insufficient_rows():
     assert "rows" in res.detail
 
 
+class _PxHealthDateAware:
+    """수급이 조회 날짜(todate)에 따라 달라지는 fake — 주말/휴일 단일일 조회는 빈값."""
+
+    def __init__(self, index_df, supply_by_day, empty_days):
+        self.index_df = index_df
+        self.supply_by_day = supply_by_day
+        self.empty_days = empty_days
+
+    def get_index_ohlcv(self, fromdate, todate, index_code):
+        return self.index_df   # 범위 조회 → 실제 마지막 거래일까지 포함(엔드포인트 무시)
+
+    def get_market_net_purchases_of_equities(self, fromdate, todate, market, investor):
+        if todate in self.empty_days:
+            return pd.DataFrame()          # 무거래일 단일 조회 → 빈 프레임
+        return self.supply_by_day[todate][market]
+
+
+def test_health_check_uses_last_trading_day_for_supply_not_calendar_d1():
+    # 월요일(2026-07-06) 실행: 달력 D-1 = 일요일(07-05, 무거래) → 그 날짜로 수급을 조회하면
+    # 빈값이라 오탐 BLOCKED. 지수 범위 조회가 해소한 실제 마지막 거래일(07-03)로 수급을
+    # 조회해야 정상 통과한다. (월요일·연휴 다음날 fail-closed 오탐 회귀 방지)
+    px = _PxHealthDateAware(
+        index_df=_index_df(130, "20260703"),
+        supply_by_day={"20260703": {"KOSPI": _supply("000660", 8e9),
+                                    "KOSDAQ": _supply("035720", 1e9)}},
+        empty_days={"20260705"},
+    )
+    res = health_check(px, today=dt.date(2026, 7, 6), min_rows=120)
+    assert res.ok is True
+    assert res.latest_trading_day == dt.date(2026, 7, 3)
+
+
 # ── /market: breadth(시장 폭) + sectors(업종 등락) ─────────
 class _FakeMarketPx:
     """market_* 전용 주입 fake — 스냅샷/업종지수/최근거래일 제공."""
