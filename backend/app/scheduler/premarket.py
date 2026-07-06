@@ -37,6 +37,17 @@ def _record_run(db, run_date, *, status, published, reason, session_type, starte
     run.session_type = session_type
 
 
+def _clear_stale_block(db, run_date) -> None:
+    """성공 재실행 시 이전 pre-scan 실패(BLOCKED) 마커를 제거 — /health 오탐 DEGRADED·
+       '수급 결손' 문구 잔존 방지. 발행된(board_published=True) 기록은 15:20 스캔 결과이므로
+       보존한다. 제거하면 /health는 직전 발행분으로 폴백(정상 아침 상태)."""
+    from app.store.models import Run
+
+    run = db.get(Run, run_date)
+    if run is not None and not run.board_published:
+        db.delete(run)
+
+
 def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | None = None,
                   health_check=None, prefetch_final=None, session_factory=None, notify=None):
     """장전 헬스체크 → 통과 시 FINAL prefetch, 실패 시 fail-closed(BLOCKED).
@@ -72,17 +83,19 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
         return "BLOCKED"
 
     bundle = prefetch_final(run_date)
-    if bundle is not None:            # 주입형 no-op fake 는 None → 저장 스킵(실 번들만 영속화)
-        from app.store import final_cache
+    with session_factory() as db:
+        _clear_stale_block(db, run_date)   # 성공 → 이전 pre-scan BLOCKED 마커 제거
+        if bundle is not None:             # 주입형 no-op fake 는 None → 저장 스킵(실 번들만 영속화)
+            from app.store import final_cache
 
-        with session_factory() as db:
             saved = final_cache.persist_prefetch_bundle(db, bundle)
             universe_saved = final_cache.persist_universe_cache(db, bundle)
             db.commit()
-        logger.info("premarket prefetch persisted %d tickers (%d universe rows) for %s",
-                    saved, universe_saved, run_date)
-    else:
-        logger.info("premarket prefetch done for %s", run_date)
+            logger.info("premarket prefetch persisted %d tickers (%d universe rows) for %s",
+                        saved, universe_saved, run_date)
+        else:
+            db.commit()
+            logger.info("premarket prefetch done for %s", run_date)
     return "OK"
 
 

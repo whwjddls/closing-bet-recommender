@@ -112,6 +112,47 @@ def test_premarket_persists_final_bundle_when_health_ok(session_factory):
     assert row.d1_supply_value == 8e9                 # D-1 수급 결합
 
 
+def test_premarket_success_clears_prior_block_record(session_factory):
+    # 실패로 BLOCKED가 남은 뒤 같은 날 성공 재실행하면, stale BLOCKED 마커를 제거해야
+    # /health가 이전 발행분으로 폴백한다(오탐 DEGRADED·수급결손 문구 잔존 방지).
+    run_date = date(2026, 6, 30)
+    premarket.run_premarket(                              # 1) 실패 → BLOCKED 기록
+        run_date, calendar=_cal(),
+        health_check=lambda: SimpleNamespace(ok=False, latest_trading_day=date(2026, 6, 26),
+                                             rows=0, detail="D-1 외인/기관 수급 결손"),
+        prefetch_final=lambda d: None,
+        session_factory=session_factory, notify=lambda t, m: None)
+    with session_factory() as db:
+        assert db.get(Run, run_date).status == "BLOCKED"  # 전제 확인
+
+    rc = premarket.run_premarket(                          # 2) 성공 재실행 → BLOCKED 제거
+        run_date, calendar=_cal(),
+        health_check=lambda: SimpleNamespace(ok=True, latest_trading_day=date(2026, 6, 29),
+                                             rows=2700, detail="ok"),
+        prefetch_final=lambda d: None,
+        session_factory=session_factory, notify=lambda t, m: None)
+    assert rc == "OK"
+    with session_factory() as db:
+        assert db.get(Run, run_date) is None              # stale BLOCKED 제거됨
+
+
+def test_premarket_success_preserves_published_run(session_factory):
+    # 이미 발행된(board_published=True) 기록은 성공 재실행이 지우지 않는다(스캔 결과 보존).
+    run_date = date(2026, 6, 30)
+    with session_factory() as db:
+        db.add(Run(run_date=run_date, status="OK", board_published=True))
+        db.commit()
+    premarket.run_premarket(
+        run_date, calendar=_cal(),
+        health_check=lambda: SimpleNamespace(ok=True, latest_trading_day=date(2026, 6, 29),
+                                             rows=2700, detail="ok"),
+        prefetch_final=lambda d: None,
+        session_factory=session_factory, notify=lambda t, m: None)
+    with session_factory() as db:
+        run = db.get(Run, run_date)
+        assert run is not None and run.board_published is True
+
+
 def test_premarket_skips_non_trading_day(session_factory):
     rc = premarket.run_premarket(
         date(2026, 7, 1), calendar=_cal(),
