@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { Market, UniverseRow } from '../api/client';
 
 type ScanSort = 'value' | 'market';
@@ -29,6 +30,7 @@ export default function Scanner({
   asOf?: string | null;
 }) {
   const [sortKey, setSortKey] = useState<ScanSort>('value');
+  const [collapsed, setCollapsed] = useState(false);
 
   const total = rows.length;
 
@@ -57,49 +59,73 @@ export default function Scanner({
   return (
     <section className="scanner-wrap" data-testid="scanner">
       <div className="scanner-head">
-        <span className="scan-count" data-testid="scan-count">
-          스캔 유니버스 <strong>{total}</strong>종목
-        </span>
-        <div className="scanner-controls">
-          <select
-            data-testid="scan-sort"
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as ScanSort)}
-            aria-label="스캐너 정렬"
-          >
-            <option value="value">거래대금순</option>
-            <option value="market">시장순</option>
-          </select>
-        </div>
+        <button
+          type="button"
+          className="scan-toggle"
+          data-testid="scan-toggle"
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((v) => !v)}
+        >
+          {collapsed ? (
+            <ChevronDown size={15} aria-hidden="true" />
+          ) : (
+            <ChevronUp size={15} aria-hidden="true" />
+          )}
+          <span className="scan-count" data-testid="scan-count">
+            스캔 유니버스 <strong>{total}</strong>종목
+          </span>
+          <span className="scan-toggle-hint" aria-hidden="true">
+            {collapsed ? '펼치기' : '접기'}
+          </span>
+        </button>
+        {!collapsed && (
+          <div className="scanner-controls">
+            <select
+              data-testid="scan-sort"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as ScanSort)}
+              aria-label="스캐너 정렬"
+            >
+              <option value="value">거래대금순</option>
+              <option value="market">시장순</option>
+            </select>
+          </div>
+        )}
       </div>
 
-      <table className="scanner">
-        <caption data-testid="scan-as-of">스캔 기준일 {asOf ?? '-'}</caption>
-        <thead>
-          <tr>
-            <th>종목</th>
-            <th>시장</th>
-            <th className="num">20일 평균 거래대금</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((r) => (
-            <tr key={r.ticker} data-testid="scan-row">
-              <td className="scan-name-cell">
-                {r.name && <span className="scan-name">{r.name}</span>}
-                <small>{r.ticker}</small>
-              </td>
-              <td className="scan-market">{r.market}</td>
-              <td className="num scan-value">{formatValueEok(r.avg_value_20d)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {!collapsed && (
+        <>
+          <table className="scanner">
+            <caption data-testid="scan-as-of">스캔 기준일 {asOf ?? '-'}</caption>
+            <thead>
+              <tr>
+                <th>종목</th>
+                <th>시장</th>
+                <th className="num">20일 평균 거래대금</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.ticker} data-testid="scan-row">
+                  <td className="scan-name-cell">
+                    {r.name && <span className="scan-name">{r.name}</span>}
+                    <small>{r.ticker}</small>
+                  </td>
+                  <td className="scan-market">{r.market}</td>
+                  <td className="num scan-value">
+                    {formatValueEok(r.avg_value_20d)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-      <p className="scan-note" data-testid="scan-note">
-        거래대금 상위 200 후보 · 실제 적격 판정(관리·경고·투자주의 제외)은 15:20
-        스캔에서 이뤄져요.
-      </p>
+          <p className="scan-note" data-testid="scan-note">
+            거래대금 상위 200 후보 · 실제 적격 판정(관리·경고·투자주의 제외)은 15:20
+            스캔에서 이뤄져요.
+          </p>
+        </>
+      )}
     </section>
   );
 }

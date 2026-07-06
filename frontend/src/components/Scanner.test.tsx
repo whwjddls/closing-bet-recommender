@@ -84,6 +84,17 @@ describe('Scanner', () => {
     expect(rows[1]).toHaveTextContent('KQ');
   });
 
+  it('토글로 후보 목록을 접었다 펼 수 있다', async () => {
+    render(<Scanner rows={[row({ ticker: '1' }), row({ ticker: '2' })]} />);
+    expect(screen.getAllByTestId('scan-row')).toHaveLength(2); // 기본 펼침
+    const toggle = screen.getByTestId('scan-toggle');
+    await userEvent.click(toggle); // 접기
+    expect(screen.queryAllByTestId('scan-row')).toHaveLength(0);
+    expect(screen.getByTestId('scan-count')).toHaveTextContent('2종목'); // 카운트는 유지
+    await userEvent.click(toggle); // 다시 펼치기
+    expect(screen.getAllByTestId('scan-row')).toHaveLength(2);
+  });
+
   it('as_of 를 스캔 기준일로 표기한다', () => {
     render(<Scanner rows={[row({})]} asOf="2026-06-30" />);
     expect(screen.getByTestId('scan-as-of')).toHaveTextContent(
