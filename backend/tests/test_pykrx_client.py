@@ -424,6 +424,27 @@ def test_health_check_uses_last_trading_day_for_supply_not_calendar_d1():
     assert res.latest_trading_day == dt.date(2026, 7, 3)
 
 
+def test_stock_names_bulk_maps_ticker_to_name_from_price_change():
+    # get_market_price_change 의 '종목명' 컬럼에서 ticker→종목명 벌크 맵을 만든다
+    # (개별 get_market_ticker_name 200회 회피). KOSPI∪KOSDAQ 2회 조회.
+    from app.data.pykrx_client import pykrx_market_name, Market, stock_names_bulk
+    by_market = {
+        pykrx_market_name(Market.KOSPI): _price_change_df("000660", "SK하이닉스"),
+        pykrx_market_name(Market.KOSDAQ): _price_change_df("086520", "에코프로"),
+    }
+
+    class _PxNames:
+        def get_market_price_change(self, frm, to, market):
+            return by_market.get(market)
+
+    names = stock_names_bulk("20260620", "20260703", pykrx_module=_PxNames())
+    assert names == {"000660": "SK하이닉스", "086520": "에코프로"}
+
+
+def _price_change_df(ticker, name):
+    return pd.DataFrame({"종목명": [name], "거래대금": [1]}, index=[ticker])
+
+
 class _HangingPrefetchPx:
     """prefetch_final용 fake — 특정 티커에서 무한 대기(hang) 모사."""
 

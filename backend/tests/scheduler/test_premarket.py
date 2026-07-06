@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.store.models import Base, Run
+from app.store.models import Base, Run, UniverseCache
 from app.scheduler.calendar import TradingCalendar
 from app.scheduler import premarket
 
@@ -98,11 +98,14 @@ def test_premarket_persists_final_bundle_when_health_ok(session_factory):
         date(2026, 6, 30), calendar=_cal(),
         health_check=lambda: report,
         prefetch_final=lambda d: bundle,
-        session_factory=session_factory, notify=lambda t, m: None)
+        session_factory=session_factory, notify=lambda t, m: None,
+        name_bulk=lambda frm, to: {"000660": "SK하이닉스"})  # 벌크 종목명(오프라인)
     assert rc == "OK"
 
     with session_factory() as db:
         cached = final_cache.load_prefetch(db, date(2026, 6, 30))
+        urow = db.get(UniverseCache, ("000660", date(2026, 6, 30)))
+        assert urow is not None and urow.name == "SK하이닉스"  # 스캐너 종목명 채움
     assert set(cached) == {"000660"}                  # 정적위생 계산 성립 종목만
     row = cached["000660"]
     assert row.h_ref_252 == 24000.0

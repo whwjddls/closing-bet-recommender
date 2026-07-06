@@ -626,3 +626,32 @@ def stock_name(ticker: str, pykrx_module: Any | None = None) -> str | None:
         _NAME_CACHE[ticker] = name
         return name
     return None
+
+
+NAME_COL = "종목명"                                     # get_market_price_change 종목명 컬럼
+
+
+def stock_names_bulk(frm_s: str, to_s: str,
+                     pykrx_module: Any | None = None) -> dict[str, str]:
+    """[frm_s, to_s] 구간 기준 ticker→종목명 벌크 맵(KOSPI∪KOSDAQ). get_market_price_change 2회.
+
+    종목명은 이 응답의 '종목명' 컬럼에서 통째로 얻는다 — 개별 get_market_ticker_name
+    200회(실측 ~108s)를 2회(~1.5s)로 대체(유니버스 스캐너 이름 채움용). 구간 조회라
+    주말/휴일 엔드포인트에도 견고하다. _NAME_CACHE 도 함께 채워 이후 stock_name 무네트워크.
+    조회 실패한 시장은 스킵(부분 허용 — fail-open)."""
+    px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    out: dict[str, str] = {}
+    for market in (Market.KOSPI, Market.KOSDAQ):
+        try:
+            df = px.get_market_price_change(frm_s, to_s, pykrx_market_name(market))
+        except Exception:                               # noqa: BLE001  (외부 IO)
+            continue
+        if df is None or NAME_COL not in getattr(df, "columns", []):
+            continue
+        for ticker, row in df.iterrows():
+            name = row[NAME_COL]
+            if isinstance(name, str) and name:
+                t = str(ticker)
+                out[t] = name
+                _NAME_CACHE[t] = name
+    return out

@@ -40,7 +40,9 @@ def test_universe_writer_upsert_then_endpoint_returns_rows(client, db_session):
         run_date=date(2026, 6, 30), universe=["000660", "035720"],
         market_of={"000660": "KOSPI", "035720": "KOSDAQ"},
         avg_value_20d={"000660": 5e10, "035720": 3e10})
-    saved = final_cache.persist_universe_cache(db_session, bundle)
+    # 벌크 종목명 맵 주입(오프라인). 맵에 없는 종목은 name None 유지.
+    saved = final_cache.persist_universe_cache(
+        db_session, bundle, names={"000660": "SK하이닉스"})
     db_session.commit()
     assert saved == 2
 
@@ -52,4 +54,5 @@ def test_universe_writer_upsert_then_endpoint_returns_rows(client, db_session):
     assert set(rows) == {"000660", "035720"}
     assert rows["000660"]["market"] == "KOSPI"
     assert rows["000660"]["avg_value_20d"] == 5e10
-    assert rows["000660"]["name"] is None              # 미채움 필드 nullable
+    assert rows["000660"]["name"] == "SK하이닉스"       # 벌크 맵으로 채움
+    assert rows["035720"]["name"] is None              # 맵에 없으면 nullable 유지

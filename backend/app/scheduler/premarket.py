@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.scheduler.calendar import TradingCalendar, load_default_calendar
 
@@ -49,7 +49,8 @@ def _clear_stale_block(db, run_date) -> None:
 
 
 def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | None = None,
-                  health_check=None, prefetch_final=None, session_factory=None, notify=None):
+                  health_check=None, prefetch_final=None, session_factory=None, notify=None,
+                  name_bulk=None):
     """장전 헬스체크 → 통과 시 FINAL prefetch, 실패 시 fail-closed(BLOCKED).
 
     비거래일이면 아무것도 하지 않고 ``None`` 을 반환한다. 콜라보레이터 미주입 시
@@ -61,12 +62,14 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
         logger.info("non-trading day %s, premarket skip", run_date)
         return None
 
-    if health_check is None or prefetch_final is None:
+    if health_check is None or prefetch_final is None or name_bulk is None:
         from app.data import pykrx_client
 
         health_check = health_check or pykrx_client.health_check
         # 기본 prefetch = D-1 거래대금 상위 200 유니버스만 산출(15:20 풀 폭주 방지, T1)
         prefetch_final = prefetch_final or pykrx_client.prefetch_top_value
+        # 스캐너 종목명 벌크 맵(개별 200회 회피). (frm, to)→{ticker: name}
+        name_bulk = name_bulk or pykrx_client.stock_names_bulk
     if session_factory is None:
         from app.store.db import SessionLocal as session_factory
     notify = notify or _desktop_notify
@@ -88,8 +91,11 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
         if bundle is not None:             # 주입형 no-op fake 는 None → 저장 스킵(실 번들만 영속화)
             from app.store import final_cache
 
+            frm_s = (run_date - timedelta(days=10)).strftime("%Y%m%d")
+            to_s = (run_date - timedelta(days=1)).strftime("%Y%m%d")
+            names = name_bulk(frm_s, to_s)           # 벌크 종목명 맵(스캐너 표시용)
             saved = final_cache.persist_prefetch_bundle(db, bundle)
-            universe_saved = final_cache.persist_universe_cache(db, bundle)
+            universe_saved = final_cache.persist_universe_cache(db, bundle, names=names)
             db.commit()
             logger.info("premarket prefetch persisted %d tickers (%d universe rows) for %s",
                         saved, universe_saved, run_date)

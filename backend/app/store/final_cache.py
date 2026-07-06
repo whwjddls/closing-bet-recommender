@@ -6,7 +6,7 @@ premarket 이 ``prefetch_final`` 로 산출한 ``PrefetchBundle`` 의 종목별 
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,20 +34,27 @@ def persist_prefetch_bundle(db: Session, bundle) -> int:
     return len(tickers)
 
 
-def persist_universe_cache(db: Session, bundle) -> int:
+def persist_universe_cache(db: Session, bundle, names: dict | None = None) -> int:
     """선정 유니버스(bundle.universe)를 UniverseCache 에 (ticker, as_of) 로 upsert.
 
-    /universe 스캐너용. 모르는 필드(name/sec_type/listing 등)는 None 허용(널-안전).
-    선정된 종목은 eligible=True 로 표시한다. 저장 건수 반환."""
+    /universe 스캐너용. 종목명은 벌크 맵(names)으로 채운다 — 미주입 시 KRX에서 1회
+    벌크 조회(stock_names_bulk, 개별 200회 회피). 선정 종목은 eligible=True. 저장 건수 반환."""
     as_of = bundle.run_date
     market_of = getattr(bundle, "market_of", {}) or {}
     avg_value_of = getattr(bundle, "avg_value_20d", {}) or {}
     universe = list(getattr(bundle, "universe", []) or [])
+    if names is None:
+        from app.data.pykrx_client import stock_names_bulk
+
+        frm_s = (as_of - timedelta(days=10)).strftime("%Y%m%d")
+        to_s = (as_of - timedelta(days=1)).strftime("%Y%m%d")
+        names = stock_names_bulk(frm_s, to_s)
     for ticker in universe:
         row = db.get(UniverseCache, (ticker, as_of))
         if row is None:
             row = UniverseCache(ticker=ticker, as_of=as_of)
             db.add(row)
+        row.name = names.get(ticker) or row.name
         row.market = market_of.get(ticker)
         row.avg_value_20d = avg_value_of.get(ticker)
         row.eligible = True
