@@ -91,10 +91,10 @@ export default function Scanner({
         <caption data-testid="scan-as-of">스캔 기준일 {asOf ?? '-'}</caption>
         <thead>
           <tr>
-            <th>종목/코드</th>
+            <th>종목</th>
             <th>시장</th>
-            <th>20일평균거래대금</th>
-            <th>적격</th>
+            <th className="num">20일 평균 거래대금</th>
+            <th className="col-eligible">적격</th>
           </tr>
         </thead>
         <tbody>
@@ -105,13 +105,19 @@ export default function Scanner({
               data-eligible={r.eligible}
               className={r.eligible ? '' : 'scan-excluded'}
             >
-              <td>
-                {r.name} <small>{r.ticker}</small>
+              <td className="scan-name-cell">
+                {r.name && <span className="scan-name">{r.name}</span>}
+                <small>{r.ticker}</small>
               </td>
-              <td>{r.market}</td>
+              <td className="scan-market">{r.market}</td>
               <td className="num scan-value">{formatValueEok(r.avg_value_20d)}</td>
-              <td>
-                {r.eligible ? '○' : '×'}
+              <td className="col-eligible">
+                <span
+                  className={`scan-elig-mark${r.eligible ? '' : ' scan-elig-no'}`}
+                  aria-label={r.eligible ? '적격' : '제외'}
+                >
+                  {r.eligible ? '○' : '×'}
+                </span>
                 {r.is_managed && <span className="tag">관리</span>}
                 {r.is_warning && <span className="tag">경고</span>}
                 {r.is_caution && <span className="tag">주의</span>}

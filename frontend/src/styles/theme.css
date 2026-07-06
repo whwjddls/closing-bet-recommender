@@ -3088,11 +3088,73 @@ td small {
 }
 
 /* ============================================================================
-   스캐너
+   스캐너 — 쉬어가는 날 후보 목록(콘솔 테이블)
    ========================================================================== */
 
-.scan-row td {
+.scanner {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scanner caption {
+  text-align: left;
+  color: var(--text-lo);
+  font-size: 11px;
+  padding: 2px 0 8px;
+}
+
+.scanner th {
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--text-lo);
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.scanner th.num {
+  text-align: right;
+}
+
+.scanner th.col-eligible,
+.scanner td.col-eligible {
+  text-align: center;
+  width: 84px;
+  white-space: nowrap;
+}
+
+.scanner td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
   color: var(--text-mid);
+}
+
+.scan-name-cell .scan-name {
+  color: var(--text-hi);
+  font-weight: 600;
+}
+
+.scan-name-cell small {
+  color: var(--text-lo);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.scan-market {
+  color: var(--text-lo);
+  font-size: 11.5px;
+}
+
+.scan-elig-mark {
+  color: var(--regime-go);
+  font-weight: 700;
+}
+
+.scan-elig-mark.scan-elig-no {
+  color: var(--text-lo);
 }
 
 .scanner-head {
@@ -3150,6 +3212,10 @@ td small {
 
 .scan-value {
   text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-hi);
+  white-space: nowrap;
 }
 
 .scan-empty {
