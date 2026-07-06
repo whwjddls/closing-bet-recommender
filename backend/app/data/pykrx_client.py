@@ -1,11 +1,47 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
 from app.data.broker_adapter import HealthCheckResult
 from app.data.mapping import Market, pykrx_index_code, pykrx_market_name
+
+logger = logging.getLogger(__name__)
+
+# 장전 프리페치(200종목 순회) 보호값. pykrx가 특정 티커에서 응답 없이 무한 대기할 수
+# 있어(라이브 15:20 파이프라인 실측) 별도 스레드+join(timeout)으로 강제 스킵한다.
+OHLCV_TIMEOUT_SEC = 15.0
+PREFETCH_PROGRESS_EVERY = 50        # N종목마다 진행 로그(장시간 배치 가시성)
+
+
+def _fetch_ohlcv_safe(px: Any, frm: str, to: str, ticker: str,
+                      timeout_sec: float = OHLCV_TIMEOUT_SEC):
+    """px.get_market_ohlcv 를 타임아웃으로 보호. 무응답(hang)/예외 시 None(스킵).
+
+    daemon 스레드에 위임 후 join(timeout)만 한다 — 스레드는 강제 종료할 수 없으므로
+    타임아웃된 호출은 백그라운드에 남아 스스로 끝나거나 프로세스 종료 시 사라진다.
+    메인 루프는 기다리지 않고 다음 티커로 진행(전체 배치가 한 종목에 멈추지 않게)."""
+    result: dict = {}
+
+    def _call() -> None:
+        try:
+            result["df"] = px.get_market_ohlcv(frm, to, ticker)
+        except Exception as exc:                          # noqa: BLE001  (외부 IO)
+            result["error"] = exc
+
+    t = threading.Thread(target=_call, daemon=True)
+    t.start()
+    t.join(timeout=timeout_sec)
+    if t.is_alive():
+        logger.warning("ohlcv 무응답(%.0fs 초과) — 스킵: %s", timeout_sec, ticker)
+        return None
+    if "error" in result:
+        logger.warning("ohlcv 조회 실패 — 스킵: %s (%s)", ticker, result["error"])
+        return None
+    return result.get("df")
 
 COL_OPEN = "시가"
 COL_HIGH = "고가"
@@ -214,8 +250,11 @@ def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None,
     h60: dict[str, float] = {}
     atr: dict[str, float] = {}
     avgv: dict[str, float] = {}
-    for ticker in universe:
-        df = px.get_market_ohlcv(frm_s, d1_s, ticker)   # todate=D-1 (룩어헤드 금지)
+    total = len(universe)
+    for i, ticker in enumerate(universe, start=1):
+        if i % PREFETCH_PROGRESS_EVERY == 0:
+            logger.info("prefetch 진행 %d/%d (완료 %d종목)", i, total, len(h252))
+        df = _fetch_ohlcv_safe(px, frm_s, d1_s, ticker, OHLCV_TIMEOUT_SEC)  # todate=D-1
         if df is None or len(df) == 0:
             continue
         try:

@@ -424,6 +424,44 @@ def test_health_check_uses_last_trading_day_for_supply_not_calendar_d1():
     assert res.latest_trading_day == dt.date(2026, 7, 3)
 
 
+class _HangingPrefetchPx:
+    """prefetch_final용 fake — 특정 티커에서 무한 대기(hang) 모사."""
+
+    def __init__(self, hang_ticker, hang_sec, ohlcv_df):
+        self.hang_ticker = hang_ticker
+        self.hang_sec = hang_sec
+        self.ohlcv_df = ohlcv_df
+
+    def get_market_ohlcv(self, frm, to, ticker):
+        if ticker == self.hang_ticker:
+            import time
+            time.sleep(self.hang_sec)          # 응답 없는 종목 모사
+        return self.ohlcv_df
+
+    def get_market_net_purchases_of_equities(self, frm, to, market, investor):
+        return _supply("000660", 8e9)
+
+    def get_index_ohlcv(self, frm, to, index_code):
+        return self.ohlcv_df
+
+
+def test_prefetch_final_skips_hanging_ticker_without_blocking(monkeypatch):
+    # 200종목 순회 중 한 종목이 응답 없이 멈춰도 전체 배치가 그 종목에 갇히지 않고
+    # 타임아웃 스킵 후 진행해야 한다(장전 프리페치 무한 대기 회귀 방지).
+    import time
+    good = _ohlcv(["1", "2", "3"], [100, 200, 150],
+                  [90, 180, 140], [95, 190, 145], [1, 1, 1])
+    px = _HangingPrefetchPx(hang_ticker="HANG", hang_sec=5.0, ohlcv_df=good)
+    monkeypatch.setattr(pykrx_client, "OHLCV_TIMEOUT_SEC", 0.2)
+    t0 = time.monotonic()
+    bundle = prefetch_final(dt.date(2026, 7, 6), pykrx_module=px,
+                            universe=["HANG", "000660"])
+    elapsed = time.monotonic() - t0
+    assert elapsed < 3.0                       # 5초 hang을 기다리지 않고 스킵
+    assert "HANG" not in bundle.h_ref_252      # 무응답 종목은 제외
+    assert "000660" in bundle.h_ref_252        # 정상 종목은 포함
+
+
 # ── /market: breadth(시장 폭) + sectors(업종 등락) ─────────
 class _FakeMarketPx:
     """market_* 전용 주입 fake — 스냅샷/업종지수/최근거래일 제공."""
