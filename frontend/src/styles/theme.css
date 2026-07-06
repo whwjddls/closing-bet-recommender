@@ -3118,13 +3118,6 @@ td small {
   text-align: right;
 }
 
-.scanner th.col-eligible,
-.scanner td.col-eligible {
-  text-align: center;
-  width: 84px;
-  white-space: nowrap;
-}
-
 .scanner td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
@@ -3148,13 +3141,10 @@ td small {
   font-size: 11.5px;
 }
 
-.scan-elig-mark {
-  color: var(--regime-go);
-  font-weight: 700;
-}
-
-.scan-elig-mark.scan-elig-no {
+.scan-note {
+  margin: 8px 0 0;
   color: var(--text-lo);
+  font-size: 11px;
 }
 
 .scanner-head {

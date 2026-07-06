@@ -18,6 +18,9 @@ function byValueDesc(a: UniverseRow, b: UniverseRow): number {
   return (b.avg_value_20d ?? -Infinity) - (a.avg_value_20d ?? -Infinity);
 }
 
+// 쉬어가는 날 후보 목록(참고용). D-1 거래대금 상위 200.
+// 적격(관리·경고·투자주의 제외) 판정은 장전 프리페치(pykrx)엔 재료가 없어 못 하고,
+// 15:20 스캔에서 KIS 실시간 플래그로 이뤄진다 — 그래서 여기선 판정을 표시하지 않는다.
 export default function Scanner({
   rows,
   asOf = null,
@@ -26,17 +29,11 @@ export default function Scanner({
   asOf?: string | null;
 }) {
   const [sortKey, setSortKey] = useState<ScanSort>('value');
-  const [eligibleOnly, setEligibleOnly] = useState(false);
 
   const total = rows.length;
-  const eligibleCount = useMemo(
-    () => rows.filter((r) => r.eligible).length,
-    [rows],
-  );
 
   const visible = useMemo(() => {
-    let r = eligibleOnly ? rows.filter((x) => x.eligible) : [...rows];
-    r = [...r].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       if (sortKey === 'market') {
         const m =
           (MARKET_ORDER[a.market as Market] ?? 9) -
@@ -46,8 +43,7 @@ export default function Scanner({
       }
       return byValueDesc(a, b);
     });
-    return r;
-  }, [rows, sortKey, eligibleOnly]);
+  }, [rows, sortKey]);
 
   // 장전 프리페치 전(유니버스 미적재)이면 정직한 안내.
   if (total === 0) {
@@ -63,7 +59,6 @@ export default function Scanner({
       <div className="scanner-head">
         <span className="scan-count" data-testid="scan-count">
           스캔 유니버스 <strong>{total}</strong>종목
-          <span className="scan-count-eligible"> · 적격 {eligibleCount}</span>
         </span>
         <div className="scanner-controls">
           <select
@@ -75,15 +70,6 @@ export default function Scanner({
             <option value="value">거래대금순</option>
             <option value="market">시장순</option>
           </select>
-          <label>
-            <input
-              data-testid="scan-eligible-only"
-              type="checkbox"
-              checked={eligibleOnly}
-              onChange={(e) => setEligibleOnly(e.target.checked)}
-            />
-            적격만
-          </label>
         </div>
       </div>
 
@@ -94,38 +80,26 @@ export default function Scanner({
             <th>종목</th>
             <th>시장</th>
             <th className="num">20일 평균 거래대금</th>
-            <th className="col-eligible">적격</th>
           </tr>
         </thead>
         <tbody>
           {visible.map((r) => (
-            <tr
-              key={r.ticker}
-              data-testid="scan-row"
-              data-eligible={r.eligible}
-              className={r.eligible ? '' : 'scan-excluded'}
-            >
+            <tr key={r.ticker} data-testid="scan-row">
               <td className="scan-name-cell">
                 {r.name && <span className="scan-name">{r.name}</span>}
                 <small>{r.ticker}</small>
               </td>
               <td className="scan-market">{r.market}</td>
               <td className="num scan-value">{formatValueEok(r.avg_value_20d)}</td>
-              <td className="col-eligible">
-                <span
-                  className={`scan-elig-mark${r.eligible ? '' : ' scan-elig-no'}`}
-                  aria-label={r.eligible ? '적격' : '제외'}
-                >
-                  {r.eligible ? '○' : '×'}
-                </span>
-                {r.is_managed && <span className="tag">관리</span>}
-                {r.is_warning && <span className="tag">경고</span>}
-                {r.is_caution && <span className="tag">주의</span>}
-              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      <p className="scan-note" data-testid="scan-note">
+        거래대금 상위 200 후보 · 실제 적격 판정(관리·경고·투자주의 제외)은 15:20
+        스캔에서 이뤄져요.
+      </p>
     </section>
   );
 }

@@ -20,18 +20,23 @@ function row(p: Partial<UniverseRow>): UniverseRow {
 }
 
 describe('Scanner', () => {
-  it('유니버스 행을 렌더하고 부적격 행을 표시한다', () => {
+  it('유니버스 행을 종목명+코드로 렌더한다', () => {
     render(
       <Scanner
         rows={[
-          row({ ticker: '000660', name: 'A' }),
-          row({ ticker: '005930', name: 'B', eligible: false, is_managed: true }),
+          row({ ticker: '000660', name: 'SK하이닉스' }),
+          row({ ticker: '005930', name: '삼성전자' }),
         ]}
       />,
     );
     expect(screen.getAllByTestId('scan-row')).toHaveLength(2);
-    const rows = screen.getAllByTestId('scan-row');
-    expect(rows[1]).toHaveAttribute('data-eligible', 'false');
+    expect(screen.getAllByTestId('scan-row')[0]).toHaveTextContent('SK하이닉스');
+    expect(screen.getAllByTestId('scan-row')[0]).toHaveTextContent('000660');
+  });
+
+  it('적격 판정은 15:20 스캔에서 이뤄진다는 각주를 보여준다', () => {
+    render(<Scanner rows={[row({})]} />);
+    expect(screen.getByTestId('scan-note')).toHaveTextContent('15:20');
   });
 
   it('빈 유니버스는 "장전 프리페치 전" 안내', () => {
@@ -39,19 +44,14 @@ describe('Scanner', () => {
     expect(screen.getByTestId('scan-empty')).toHaveTextContent('장전 프리페치 전');
   });
 
-  it('스캔 유니버스 종목 수(총/적격)를 카운트한다', () => {
+  it('스캔 유니버스 종목 수를 카운트한다', () => {
     render(
       <Scanner
-        rows={[
-          row({ ticker: '1', eligible: true }),
-          row({ ticker: '2', eligible: true }),
-          row({ ticker: '3', eligible: false }),
-        ]}
+        rows={[row({ ticker: '1' }), row({ ticker: '2' }), row({ ticker: '3' })]}
       />,
     );
     const count = screen.getByTestId('scan-count');
     expect(count).toHaveTextContent('스캔 유니버스 3종목');
-    expect(count).toHaveTextContent('적격 2');
   });
 
   it('거래대금(억)순 내림차순 정렬이 기본', () => {
@@ -82,22 +82,6 @@ describe('Scanner', () => {
     const rows = screen.getAllByTestId('scan-row');
     expect(rows[0]).toHaveTextContent('KP');
     expect(rows[1]).toHaveTextContent('KQ');
-  });
-
-  it('적격만 토글: 부적격 행을 숨긴다', async () => {
-    render(
-      <Scanner
-        rows={[
-          row({ ticker: 'OK', name: 'OK', eligible: true }),
-          row({ ticker: 'NG', name: 'NG', eligible: false }),
-        ]}
-      />,
-    );
-    expect(screen.getAllByTestId('scan-row')).toHaveLength(2);
-    await userEvent.click(screen.getByTestId('scan-eligible-only'));
-    const rows = screen.getAllByTestId('scan-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveTextContent('OK');
   });
 
   it('as_of 를 스캔 기준일로 표기한다', () => {
