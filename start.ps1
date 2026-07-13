@@ -40,7 +40,9 @@ if ($Tunnel) {
     }
   }
   if ($url) {
-    Set-Content -Path $urlFile -Value $url -Encoding utf8 -NoNewline
+    # Set-Content -Encoding utf8 은 BOM 을 붙여 URL 이 "﻿https://..." 로 깨진다.
+    # WriteAllText 는 BOM 없는 UTF-8 로 쓴다.
+    [System.IO.File]::WriteAllText($urlFile, $url)
     Write-Host "  [3/3] 폰 터널  $url" -ForegroundColor Green
     Write-Host "         (알림 링크용으로 state/public_url.txt 에 저장했습니다)" -ForegroundColor DarkGray
   } else {

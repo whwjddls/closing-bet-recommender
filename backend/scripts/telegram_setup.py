@@ -18,6 +18,10 @@ from pathlib import Path
 
 import requests
 
+# Windows 콘솔 기본 코덱(cp949)은 em-dash 등을 못 찍어 UnicodeEncodeError 로 죽는다.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = BACKEND_ROOT / ".env"
 API = "https://api.telegram.org/bot{token}/{method}"

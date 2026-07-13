@@ -65,6 +65,16 @@ def test_public_board_url_reads_tunnel_file(monkeypatch, tmp_path):
     assert public_board_url() == "https://abc.trycloudflare.com"
 
 
+def test_public_board_url_strips_bom_from_powershell_written_file(monkeypatch, tmp_path):
+    # PowerShell 의 `Set-Content -Encoding utf8` 은 BOM 을 붙인다. BOM 이 남으면
+    # URL 이 "﻿https://..." 가 되어 텔레그램에서 링크가 깨진다.
+    monkeypatch.delenv("CBR_PUBLIC_URL", raising=False)
+    monkeypatch.setenv("CBR_STATE_DIR", str(tmp_path))
+    (tmp_path / "public_url.txt").write_text(
+        "https://abc.trycloudflare.com", encoding="utf-8-sig")   # BOM 포함
+    assert public_board_url() == "https://abc.trycloudflare.com"
+
+
 def test_public_board_url_none_when_unset(monkeypatch, tmp_path):
     monkeypatch.delenv("CBR_PUBLIC_URL", raising=False)
     monkeypatch.setenv("CBR_STATE_DIR", str(tmp_path))       # 파일 없음

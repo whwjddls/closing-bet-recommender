@@ -39,7 +39,9 @@ def public_board_url() -> str | None:
         return env_url.strip().rstrip("/")
     path = get_settings().state_dir / PUBLIC_URL_FILE
     try:
-        url = path.read_text(encoding="utf-8").strip()
+        # utf-8-sig: PowerShell 의 `Set-Content -Encoding utf8` 은 BOM 을 붙인다.
+        # BOM 이 남으면 URL 이 "﻿https://..." 가 되어 링크가 깨진다.
+        url = path.read_text(encoding="utf-8-sig").strip()
     except OSError:
         return None
     return url.rstrip("/") or None
