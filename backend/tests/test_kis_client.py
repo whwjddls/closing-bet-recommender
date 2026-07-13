@@ -253,24 +253,65 @@ def test_get_provisional_flows_graceful_on_error(fake_clock):
 
 
 def test_get_stock_basic_info_parses_flags(fake_clock):
+    # 실측 KIS 응답: 보통주 stck_kind_cd=101, mrkt_warn_cls_code 는 None 로 오기도 한다.
     t = RecordingTransport()
     t.token_responses = [_token()]
     t.tr_responses["CTPF1002R"] = [{"output": {
         "prdt_abrv_name": "SK하이닉스", "admn_item_yn": "N",
-        "mrkt_warn_cls_code": "00", "stck_kind_cd": "0"}}]
+        "mrkt_warn_cls_code": None, "stck_kind_cd": "101"}}]
     info = _client(t, fake_clock).get_stock_basic_info("000660")
     assert t.calls[-1]["headers"]["tr_id"] == "CTPF1002R"
     assert t.calls[-1]["params"]["PDNO"] == "000660"
     assert info["name"] == "SK하이닉스"
     assert info["is_managed"] is False
+    assert info["is_preferred"] is False        # 101=보통주 (우선주 오판 → 보드 전멸 회귀 방지)
     assert info["is_ineligible"] is False
+
+
+@pytest.mark.parametrize("kind,name", [
+    ("201", "삼성전자우"),        # 우선주(구형)
+    ("202", "현대차2우B"),        # 우선주(신형)
+])
+def test_get_stock_basic_info_flags_preferred_by_kind_code(fake_clock, kind, name):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTPF1002R"] = [{"output": {
+        "prdt_abrv_name": name, "admn_item_yn": "N",
+        "mrkt_warn_cls_code": "00", "stck_kind_cd": kind}}]
+    info = _client(t, fake_clock).get_stock_basic_info("005935")
+    assert info["is_preferred"] is True
+    assert info["is_ineligible"] is True
+
+
+@pytest.mark.parametrize("name", ["우리금융지주", "한국항공우주", "대우건설"])
+def test_get_stock_basic_info_common_stock_with_woo_in_name_not_preferred(fake_clock, name):
+    # 이름에 '우'가 들어가는 보통주(kind=101) 를 우선주로 오탐하면 안 된다.
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTPF1002R"] = [{"output": {
+        "prdt_abrv_name": name, "admn_item_yn": "N",
+        "mrkt_warn_cls_code": "00", "stck_kind_cd": "101"}}]
+    info = _client(t, fake_clock).get_stock_basic_info("316140")
+    assert info["is_preferred"] is False
+    assert info["is_ineligible"] is False
+
+
+def test_get_stock_basic_info_preferred_by_name_when_kind_missing(fake_clock):
+    # 코드 결측 시 종목명 접미사('...우'/'...우B') 폴백으로 우선주 판정.
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["CTPF1002R"] = [{"output": {
+        "prdt_abrv_name": "S-Oil우", "admn_item_yn": "N"}}]
+    info = _client(t, fake_clock).get_stock_basic_info("010955")
+    assert info["is_preferred"] is True
+    assert info["is_ineligible"] is True
 
 
 def test_get_stock_basic_info_flags_managed_ineligible(fake_clock):
     t = RecordingTransport()
     t.token_responses = [_token()]
     t.tr_responses["CTPF1002R"] = [{"output": {
-        "prdt_abrv_name": "관리주", "admn_item_yn": "Y"}}]
+        "prdt_abrv_name": "관리주", "admn_item_yn": "Y", "stck_kind_cd": "101"}}]
     info = _client(t, fake_clock).get_stock_basic_info("123450")
     assert info["is_managed"] is True
     assert info["is_ineligible"] is True

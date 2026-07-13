@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -27,6 +28,13 @@ TOKEN_PATH = "/oauth2/tokenP"
 # 응답 목 기반 유연 파싱용 종목코드 후보 키(TR마다 mksc_/stck_ 혼재)
 _TICKER_KEYS = ("mksc_shrn_iscd", "stck_shrn_iscd")
 OVERHEAT_PCT = 20.0
+
+# 주식종류코드(stck_kind_cd) — 실측: 101=보통주, 201=우선주(구형), 202=우선주(신형).
+# 보통주를 우선주로 오판하면 최종 위생이 추천을 전멸시키므로 2xx 만 우선주로 본다.
+PREFERRED_KIND_PREFIX = "2"
+# 종목명 폴백(코드 결측 대비) — 우선주는 접미사('삼성전자우', '현대차2우B').
+# 'in name' 매칭은 '우리금융지주'·'한국항공우주'·'대우건설'을 오탐하므로 끝자리로만 판정.
+_PREFERRED_NAME_SUFFIX = re.compile(r"우[A-Z]?$")
 LIMIT_UP_PCT = 29.5                  # 상한가 best-effort 임계(±30% 근접)
 RANKING_TOP_N = 30
 
@@ -344,12 +352,13 @@ class KisClient:
         except Exception:                                  # noqa: BLE001  (외부 IO — graceful)
             return {}
         out = resp.get("output", {}) or {}
-        name = _first(out, ("prdt_abrv_name", "prdt_name", "hts_kor_isnm"), "")
+        name = str(_first(out, ("prdt_abrv_name", "prdt_name", "hts_kor_isnm"), ""))
         is_managed = str(_first(out, ("admn_item_yn",), "N")).upper() == "Y"
         warn_code = str(_first(out, ("mrkt_warn_cls_code",), "00"))
         is_warning = warn_code not in ("", "00", "0")
-        kind = str(_first(out, ("stck_kind_cd",), "0"))
-        is_preferred = kind not in ("", "0", "00") or "우" in str(name)
+        kind = str(_first(out, ("stck_kind_cd",), ""))
+        is_preferred = (kind.startswith(PREFERRED_KIND_PREFIX)
+                        or bool(_PREFERRED_NAME_SUFFIX.search(name)))
         return {"ticker": ticker, "name": name, "is_managed": is_managed,
                 "is_warning": is_warning, "is_preferred": is_preferred,
                 "is_ineligible": bool(is_managed or is_warning or is_preferred)}
