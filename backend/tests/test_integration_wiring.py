@@ -131,7 +131,8 @@ def test_daily_run_to_recommendations_roundtrip():
         run_date, calendar=TradingCalendar(holidays=set(), early_close={}),
         run_pipeline=lambda d, s: result, session_factory=factory,
         notify=lambda t, m: None,
-        snapshots=type("S", (), {"write_snapshot": staticmethod(lambda d, p: None)})())
+        snapshots=type("S", (), {"write_snapshot": staticmethod(lambda d, p: None)})(),
+        now=datetime(2026, 6, 30, 15, 20))          # 발행 창(15:15–15:30) 안
     assert rc == "OK"
 
     app = create_app()

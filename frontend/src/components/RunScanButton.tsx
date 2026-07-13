@@ -41,6 +41,14 @@ function resultToast(status: RunStatusResponse): Toast {
   if (status.last_result === 'SKIPPED') {
     return { tone: 'warn', message: '오늘은 휴장일이에요' };
   }
+  // 발행 창(15:15–15:30) 밖 실행은 백엔드가 차단한다 — 그 시각 누적거래량이 '15:20
+  // 스냅샷'으로 저장되면 RVOL 분모(20세션 평균)가 오염되기 때문(daily_run 가드).
+  if (status.last_result === 'OUTSIDE_WINDOW') {
+    return {
+      tone: 'warn',
+      message: '스캔은 15:15~15:30에만 실행할 수 있어요 (거래량 데이터 보호)',
+    };
+  }
   return { tone: 'ok', message: status.last_result ?? '스캔 완료' };
 }
 

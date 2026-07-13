@@ -133,6 +133,31 @@ describe('RunScanButton', () => {
     );
   });
 
+  it('OUTSIDE_WINDOW 결과면 발행 창 안내 경고 토스트 — 창 밖 스캔은 백엔드가 차단한다', async () => {
+    vi.spyOn(api, 'triggerRun').mockResolvedValue({ status: 'started' });
+    vi.spyOn(api, 'fetchRunStatus')
+      .mockResolvedValueOnce(idle)
+      .mockResolvedValue({
+        running: false,
+        last_result: 'OUTSIDE_WINDOW',
+        last_error: null,
+        finished_at: '2026-07-13T15:50:00+09:00',
+        started_at: null,
+        elapsed_sec: null,
+      });
+    render(<RunScanButton />);
+    await click(screen.getByTestId('run-scan-btn'));
+    await tick();
+
+    expect(screen.getByTestId('run-scan-toast')).toHaveTextContent(
+      '15:15~15:30에만 실행할 수 있어요',
+    );
+    expect(screen.getByTestId('run-scan-toast')).toHaveAttribute(
+      'data-tone',
+      'warn',
+    );
+  });
+
   it('already_running 응답이면 "이미 실행 중" 안내 후 폴링 합류', async () => {
     vi.spyOn(api, 'triggerRun').mockResolvedValue({
       status: 'already_running',

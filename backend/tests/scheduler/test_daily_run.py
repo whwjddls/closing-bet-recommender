@@ -37,6 +37,9 @@ def _cal(early=None):
     return TradingCalendar(holidays={date(2026, 7, 1)}, early_close=early or {})
 
 
+IN_WINDOW = datetime(2026, 6, 30, 15, 20)      # 정규 발행 창(15:15–15:30) 안
+
+
 def test_daily_run_publishes_and_persists_top3(session_factory):
     captured_snapshot_at = {}
     notify_calls = []
@@ -53,6 +56,7 @@ def test_daily_run_publishes_and_persists_top3(session_factory):
         run_pipeline=fake_pipeline, session_factory=session_factory,
         notify=lambda t, m: notify_calls.append((t, m)),
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: snap_calls.append((d, p))),
+        now=IN_WINDOW,
     )
     assert rc == "OK"
     # 스냅샷 시각 = 정규일 15:20 (15:20–15:30 창)
@@ -77,6 +81,7 @@ def test_daily_run_unpublished_when_coverage_below_floor(session_factory):
         run_pipeline=lambda d, s: _result(coverage=65.0, recs=[_rec_row(1, "000660", "SK")]),
         session_factory=session_factory, notify=lambda t, m: None,
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: snap_calls.append(d)),
+        now=IN_WINDOW,
     )
     assert rc == "UNPUBLISHED"
     with session_factory() as db:
@@ -93,6 +98,7 @@ def test_daily_run_unpublished_when_kis_fully_down(session_factory):
         run_pipeline=lambda d, s: _result(data_available=False, coverage=0.0),
         session_factory=session_factory, notify=lambda t, m: None,
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=IN_WINDOW,
     )
     assert rc == "UNPUBLISHED"
     with session_factory() as db:
@@ -111,6 +117,7 @@ def test_daily_run_special_session_snapshot_minus_10(session_factory):
         run_pipeline=fake_pipeline,
         session_factory=session_factory, notify=lambda t, m: None,
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=datetime(2026, 9, 29, 13, 50),          # 조기폐장 창(13:45–14:00) 안
     )
     assert cap["t"] == datetime(2026, 9, 29, 13, 50)            # 마감14:00 − 10분
     with session_factory() as db:
@@ -125,3 +132,58 @@ def test_daily_run_skips_non_trading_day(session_factory):
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
     )
     assert rc is None
+
+
+# ── 발행 창 가드(15:15–15:30) — 창 밖 실행은 어떤 쓰기도 하지 않는다 ────────
+def _boom(d, s):
+    raise AssertionError("발행 창 밖에서는 파이프라인을 호출하면 안 된다")
+
+
+@pytest.mark.parametrize("moment,why", [
+    (datetime(2026, 6, 30, 14, 0), "장중 조기 실행 — 부분 누적거래량이 15:20 스냅샷을 오염"),
+    (datetime(2026, 6, 30, 15, 14), "창 시작 1분 전"),
+    (datetime(2026, 6, 30, 15, 31), "마감 후 — 동시호가 포함 종일 거래량으로 오염"),
+    (datetime(2026, 6, 30, 20, 0), "장 마감 한참 후"),
+])
+def test_daily_run_blocks_outside_publish_window(session_factory, moment, why):
+    snap_calls = []
+    rc = daily_run.run_daily(
+        date(2026, 6, 30), calendar=_cal(),
+        run_pipeline=_boom,                      # 호출되면 AssertionError
+        session_factory=session_factory, notify=lambda t, m: None,
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: snap_calls.append(d)),
+        now=moment,
+    )
+    assert rc == "OUTSIDE_WINDOW", why
+    assert snap_calls == []                      # JSON 스냅샷 미작성
+    with session_factory() as db:                # runs/recommendations 무기록
+        assert db.get(Run, date(2026, 6, 30)) is None
+        assert db.scalars(select(Recommendation)).all() == []
+
+
+@pytest.mark.parametrize("moment", [
+    datetime(2026, 6, 30, 15, 15),               # 창 시작(경계 포함)
+    datetime(2026, 6, 30, 15, 18),               # 스케줄러 기동 시각
+    datetime(2026, 6, 30, 15, 30),               # 마감(경계 포함)
+])
+def test_daily_run_allows_inside_publish_window(session_factory, moment):
+    rc = daily_run.run_daily(
+        date(2026, 6, 30), calendar=_cal(),
+        run_pipeline=lambda d, s: _result(recs=[_rec_row(1, "000660", "SK하이닉스")]),
+        session_factory=session_factory, notify=lambda t, m: None,
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=moment,
+    )
+    assert rc == "OK"
+
+
+def test_daily_run_allow_outside_window_escape_hatch(session_factory):
+    # 백필/디버깅 전용 탈출구 — 명시적으로 켤 때만 창 밖 실행 허용.
+    rc = daily_run.run_daily(
+        date(2026, 6, 30), calendar=_cal(),
+        run_pipeline=lambda d, s: _result(recs=[_rec_row(1, "000660", "SK하이닉스")]),
+        session_factory=session_factory, notify=lambda t, m: None,
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=datetime(2026, 6, 30, 20, 0), allow_outside_window=True,
+    )
+    assert rc == "OK"

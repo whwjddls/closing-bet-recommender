@@ -106,8 +106,15 @@ def _notify_top3(result, notify):
 
 
 def run_daily(run_date: date | None = None, *, calendar: TradingCalendar | None = None,
-              run_pipeline=None, session_factory=None, notify=None, snapshots=None):
+              run_pipeline=None, session_factory=None, notify=None, snapshots=None,
+              now: datetime | None = None, allow_outside_window: bool = False):
     """15:20 런 파이프라인. 비거래일이면 아무것도 하지 않고 ``None`` 을 반환한다.
+
+    발행 창(정규 15:15–15:30) 밖 실행은 ``OUTSIDE_WINDOW`` 로 즉시 중단한다 — 라이브
+    조회조차 하지 않으므로 어떤 쓰기도 발생하지 않는다. 창 밖에서 파이프라인을 돌리면
+    그 시점 누적거래량이 '15:20 스냅샷'으로 upsert 되어 MODELED RVOL 분모(20세션
+    이동평균)를 오염시키고, 살 수 없는 픽이 익일 채점 대상으로 남는다.
+    ``allow_outside_window=True`` 는 백필/디버깅 전용 탈출구.
 
     ``run_pipeline`` 은 ``(run_date, snapshot_at) -> RunResult``(00 §3) 콜라보레이터로,
     미주입 시 라이브 ``orchestrate_run`` seam 을 바인딩한다(테스트는 모두 주입).
@@ -117,6 +124,14 @@ def run_daily(run_date: date | None = None, *, calendar: TradingCalendar | None 
     if not calendar.is_trading_day(run_date):
         logger.info("non-trading day %s, daily_run skip", run_date)
         return None
+
+    now = now or datetime.now()
+    if not allow_outside_window and not calendar.in_publish_window(now, run_date):
+        start, end = calendar.publish_window(run_date)
+        logger.warning("발행 창 밖 실행 차단(%s) — 창 %s~%s, 현재 %s. 거래량 스냅샷 오염 방지.",
+                       run_date, start.strftime("%H:%M"), end.strftime("%H:%M"),
+                       now.strftime("%H:%M"))
+        return "OUTSIDE_WINDOW"
 
     run_pipeline = run_pipeline or _default_run_pipeline
     if session_factory is None:

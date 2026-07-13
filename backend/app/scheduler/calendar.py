@@ -5,6 +5,8 @@ from datetime import date, datetime, time, timedelta
 
 REGULAR_CLOSE: time = time(15, 30)                   # 정규장 마감
 SNAPSHOT_OFFSET: timedelta = timedelta(minutes=10)   # 스냅샷 = 마감−10분
+# 발행 창 = [스냅샷−5분, 마감]. 스케줄러가 스냅샷 직전(마감−12분)에 기동하므로 5분 여유.
+PUBLISH_WINDOW_SLACK: timedelta = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,19 @@ class TradingCalendar:
 
     def snapshot_at(self, d: date) -> datetime:
         return datetime.combine(d, self.close_time(d)) - SNAPSHOT_OFFSET
+
+    def publish_window(self, d: date) -> tuple[datetime, datetime]:
+        """15:20 스냅샷으로 인정되는 실행 창 = [스냅샷−5분, 마감] (정규 15:15–15:30).
+
+        창 밖 실행은 그 시점의 누적거래량을 '15:20 스냅샷'으로 영속화해 MODELED RVOL
+        분모(20세션 이동평균)를 오염시킨다 — 장중 조기 실행은 과소, 마감 후 실행은
+        동시호가까지 포함해 과대 계상된다."""
+        snapshot = self.snapshot_at(d)
+        return snapshot - PUBLISH_WINDOW_SLACK, datetime.combine(d, self.close_time(d))
+
+    def in_publish_window(self, moment: datetime, d: date) -> bool:
+        start, end = self.publish_window(d)
+        return start <= moment <= end
 
     def session_type(self, d: date) -> str:
         return "특수" if d in self.early_close else "정규"

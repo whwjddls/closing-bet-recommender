@@ -40,7 +40,8 @@ def test_gate_coverage_floor_blocks_publish(session_factory):
             run_date=d, session_type="정규", data_available=True, kis_coverage_pct=69.9,
             recommendations=[], regimes={}),
         session_factory=session_factory, notify=lambda t, m: None,
-        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None))
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=datetime(2026, 6, 30, 15, 20))          # 발행 창(15:15–15:30) 안
     assert rc == "UNPUBLISHED"
     with session_factory() as db:
         assert db.get(Run, date(2026, 6, 30)).board_published is False
