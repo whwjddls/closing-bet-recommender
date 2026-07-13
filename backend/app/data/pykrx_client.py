@@ -124,6 +124,10 @@ class PykrxClient:
         # 시장별 1회 = 총 2회, 순매수거래대금(value) 컬럼 (per-ticker 금지)
         return _net_by_market(self._px, fromdate, todate)
 
+    def last_trading_day(self, run_date: dt.date) -> dt.date:
+        """run_date 직전 실 거래일(D-1) — 월요일·연휴 다음날 무거래일 조회 방지."""
+        return resolve_last_trading_day(self._px, run_date)
+
     def health_check(self, df: Any, expected_last_date: str | None) -> HealthCheckResult:
         if df is None or len(df) == 0:
             return HealthCheckResult(False, None, 0, "no rows")
@@ -157,6 +161,28 @@ def _parse_day(value: Any) -> dt.date | None:
         return dt.datetime.strptime(str(value), "%Y%m%d").date()
     except ValueError:
         return None
+
+
+LAST_TRADING_DAY_LOOKBACK = 14   # 연휴(최장 ~5거래일) 넘겨 실 거래일 1건 확보용 달력 룩백
+
+
+def resolve_last_trading_day(px: Any, run_date: dt.date) -> dt.date:
+    """run_date 직전의 **실제 거래일**(D-1).
+
+    달력 -1일은 월요일·연휴 다음날에 무거래일을 가리킨다. 그 날짜로 조회하면 pykrx 는
+    거래대금 0 인 전 종목 표(→ 상위 200 랭킹이 임의 순서로 붕괴)와 빈 수급 표(→ 수급 축
+    중립화)를 돌려주므로, 지수 OHLCV 범위 조회의 마지막 행으로 실 거래일을 해소한다
+    (health_check 과 동일 기법). 조회 실패 시 달력 D-1 로 폴백."""
+    fallback = run_date - dt.timedelta(days=1)
+    frm = run_date - dt.timedelta(days=LAST_TRADING_DAY_LOOKBACK)
+    try:
+        idx = px.get_index_ohlcv(_yyyymmdd(frm), _yyyymmdd(fallback),
+                                 pykrx_index_code(Market.KOSPI))
+    except Exception:                                   # noqa: BLE001  (외부 IO — 폴백)
+        return fallback
+    if idx is None or len(idx) == 0:
+        return fallback
+    return _parse_day(idx.index[-1]) or fallback
 
 
 def _net_by_market(px: Any, fromdate: str, todate: str) -> dict[str, float]:
@@ -227,7 +253,7 @@ def prefetch_top_value(run_date: dt.date, pykrx_module: Any | None = None,
 
     전 종목 스캔(수천 콜) 대신 top200 만 OHLCV 조회해 15:20 풀 폭주를 막는다(00 §2/T1)."""
     px = pykrx_module if pykrx_module is not None else _load_pykrx()
-    d1 = run_date - dt.timedelta(days=1)
+    d1 = resolve_last_trading_day(px, run_date)   # 달력 -1일 금지(월요일=거래대금 0 → 랭킹 붕괴)
     universe, market_of = select_top_value_universe(px, _yyyymmdd(d1), top_n)
     return prefetch_final(run_date, px, universe=universe, market_of=market_of)
 
@@ -240,7 +266,7 @@ def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None,
 
        universe 주입 시 그 목록만 순회(top200 등), 미주입 시 전 종목(하위호환)."""
     px = pykrx_module if pykrx_module is not None else _load_pykrx()
-    d1 = run_date - dt.timedelta(days=1)
+    d1 = resolve_last_trading_day(px, run_date)   # 실 거래일 D-1 (수급/유니버스 결손 방지)
     frm = run_date - dt.timedelta(days=LOOKBACK_DAYS)
     d1_s, frm_s = _yyyymmdd(d1), _yyyymmdd(frm)
     if universe is None:

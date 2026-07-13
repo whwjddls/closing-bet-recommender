@@ -183,6 +183,11 @@ class _FakePykrx:
     def get_index_ohlcv(self, index_code, fromdate, todate):
         return _index_df()
 
+    def last_trading_day(self, run_date):
+        from datetime import timedelta
+
+        return run_date - timedelta(days=1)
+
 
 class _FakeKis:
     def get_value_ranking(self, market):

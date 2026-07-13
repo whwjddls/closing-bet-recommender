@@ -784,3 +784,59 @@ def test_stock_name_resolves_and_none_for_unlisted():
     assert pykrx_client.stock_name(
         "005930", pykrx_module=_FakePykrxListing(boom=True)) == "삼성전자"
     _clear_listing_caches()
+
+
+# ── D-1 = 실 거래일 해소(월요일·연휴 다음날 무거래일 조회 금지) ─────────
+class _FakeD1IndexPx:
+    """resolve_last_trading_day 전용 — 지수 OHLCV 범위 조회만 응답."""
+
+    def __init__(self, index_rows, raises=False):
+        self.index_rows = index_rows
+        self.raises = raises
+        self.calls: list[tuple] = []
+
+    def get_index_ohlcv(self, frm, to, code):
+        self.calls.append((frm, to, code))
+        if self.raises:
+            raise ConnectionError("pykrx down")
+        return _ohlcv(self.index_rows, [1] * len(self.index_rows), [1] * len(self.index_rows),
+                      [1] * len(self.index_rows), [1] * len(self.index_rows))
+
+
+def test_resolve_last_trading_day_skips_weekend_for_monday_run():
+    from app.data.pykrx_client import resolve_last_trading_day
+
+    px = _FakeD1IndexPx(["20260709", "20260710"])          # 목·금 (주말 없음)
+    # 월요일 런 → 달력 D-1 은 일요일(20260712) 이지만 실 거래일은 금요일(20260710)
+    assert resolve_last_trading_day(px, dt.date(2026, 7, 13)) == dt.date(2026, 7, 10)
+
+
+def test_resolve_last_trading_day_returns_calendar_d1_on_normal_weekday():
+    from app.data.pykrx_client import resolve_last_trading_day
+
+    px = _FakeD1IndexPx(["20260708", "20260709"])
+    assert resolve_last_trading_day(px, dt.date(2026, 7, 10)) == dt.date(2026, 7, 9)
+
+
+@pytest.mark.parametrize("px", [_FakeD1IndexPx([], raises=True), _FakeD1IndexPx([])])
+def test_resolve_last_trading_day_falls_back_to_calendar_d1(px):
+    from app.data.pykrx_client import resolve_last_trading_day
+
+    # 조회 실패/빈 결과 → 달력 D-1 폴백(예외 전파 금지)
+    assert resolve_last_trading_day(px, dt.date(2026, 7, 13)) == dt.date(2026, 7, 12)
+
+
+def test_prefetch_top_value_selects_universe_on_last_trading_day():
+    # 월요일 런에서 유니버스(거래대금 상위)를 일요일로 조회하면 전 종목 거래대금 0 →
+    # 랭킹이 임의 순서로 붕괴한다. 실 거래일(금요일)로 조회해야 한다.
+    px = _FakeByTickerPx({
+        "KOSPI": _by_ticker_df([("000660", 900)]),
+        "KOSDAQ": _by_ticker_df([("035720", 800)]),
+    })
+    px.ohlcv = _ohlcv(["20260709", "20260710"], [100, 120], [90, 110], [95, 115], [10, 20])
+    px.get_market_ohlcv = lambda frm, to, ticker: px.ohlcv
+    px.get_market_net_purchases_of_equities = lambda frm, to, mkt, inv: _supply("000660", 8e9)
+    px.get_index_ohlcv = lambda frm, to, code: px.ohlcv        # 마지막 행 = 20260710(금)
+
+    prefetch_top_value(dt.date(2026, 7, 13), px, top_n=200)    # 월요일 런
+    assert {c[0] for c in px.calls} == {"20260710"}            # 일요일(20260712) 조회 없음

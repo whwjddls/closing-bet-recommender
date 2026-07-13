@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import pytest
 
 from app.data.broker_adapter import (
@@ -17,12 +19,18 @@ class FakePykrxClient:
         self.universe = ["000660"]
         self.net = {"000660": 8e9}
         self.health = HealthCheckResult(True, "20260629", 252)
+        self.net_calls: list[tuple[str, str]] = []
+        self.last_trading = None          # 주입 시 그 날짜를 D-1 로 사용
     def get_universe(self, date): return self.universe
     def get_ohlcv(self, ticker, fromdate, todate): return ("ohlcv", ticker)
-    def get_net_purchases(self, fromdate, todate): return self.net
+    def get_net_purchases(self, fromdate, todate):
+        self.net_calls.append((fromdate, todate))
+        return self.net
     def get_index_ohlcv(self, index_code, fromdate, todate):
         return ("index", index_code)
     def health_check(self, df, expected_last_date): return self.health
+    def last_trading_day(self, run_date):
+        return self.last_trading or (run_date - timedelta(days=1))
 
 
 class FakeKisClient:
@@ -136,6 +144,22 @@ def test_build_candidates_prefetch_union_no_ohlcv_refetch():
     assert by["035720"].market == "KOSDAQ"    # 캐시 저장 market 사용
     assert by["035720"].high_60 == 95000.0
     assert by["000660"].market == "KOSPI"     # 라이브 랭킹 market 우선
+
+
+def test_build_candidates_queries_supply_on_last_trading_day_not_calendar_d1():
+    # 월요일(run_date) 의 달력 D-1 은 일요일 — 그 날짜로 수급을 조회하면 전 종목 0 이 되어
+    # supply_tilt 가 통째로 중립(1.0)이 된다. 실 거래일(금요일)로 조회해야 한다.
+    from datetime import date, datetime
+    from types import SimpleNamespace
+
+    adapter = _adapter()
+    adapter._pykrx.last_trading = date(2026, 7, 10)      # 금요일
+    prefetch = {"000660": SimpleNamespace(h_ref_252=24000.0, h_ref_60=23500.0, atr20=300.0,
+                                          avg_value_20d=5e10, d1_supply_value=None,
+                                          market="KOSPI")}
+    adapter.build_candidates(date(2026, 7, 13),          # 월요일
+                             datetime(2026, 7, 13, 15, 20), prefetch=prefetch)
+    assert adapter._pykrx.net_calls == [("20260710", "20260710")]   # 일요일(20260712) 아님
 
 
 def test_build_candidates_falls_back_to_ohlcv_without_prefetch():

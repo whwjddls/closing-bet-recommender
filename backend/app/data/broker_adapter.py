@@ -266,7 +266,8 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         from datetime import timedelta as _td
 
         prefetch = prefetch or {}
-        d1 = run_date - _td(days=1)
+        # 달력 -1일 금지 — 월요일·연휴 다음날엔 무거래일을 가리켜 수급이 전 종목 0이 된다.
+        d1 = self._pykrx.last_trading_day(run_date)
         frm = run_date - _td(days=LOOKBACK_DAYS)
         d1_s, frm_s = _yyyymmdd(d1), _yyyymmdd(frm)
         net = self.get_net_purchases(d1_s, d1_s)                # D-1 외인+기관 순매수액
