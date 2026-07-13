@@ -74,9 +74,33 @@ def test_premarket_prefetches_when_health_ok(session_factory):
         prefetch_final=lambda d: prefetch_calls.append(d),
         session_factory=session_factory,
         notify=lambda t, m: None,
+        refresh_corp_map=lambda db: 3900,
     )
     assert rc == "OK"
     assert prefetch_calls == [date(2026, 6, 30)]
+
+
+def test_premarket_blocks_when_corp_map_empty(session_factory):
+    # corp_code_map 이 비면 전 종목 veto=0(fail-closed) → 보드 영구 공백이므로
+    # 시딩 후에도 매핑 0 이면 prefetch 없이 차단(BLOCKED)해야 한다.
+    prefetch_calls = []
+    notify_calls = []
+    report = SimpleNamespace(ok=True, latest_trading_day=date(2026, 6, 29), rows=2700, detail="ok")
+    rc = premarket.run_premarket(
+        date(2026, 6, 30), calendar=_cal(),
+        health_check=lambda: report,
+        prefetch_final=lambda d: prefetch_calls.append(d),
+        session_factory=session_factory,
+        notify=lambda t, m: notify_calls.append((t, m)),
+        refresh_corp_map=lambda db: 0,
+    )
+    assert rc == "BLOCKED"
+    assert prefetch_calls == []                       # fail-closed: prefetch 미실행
+    assert notify_calls and "corp_code_map" in notify_calls[0][1]
+    with session_factory() as db:
+        run = db.get(Run, date(2026, 6, 30))
+        assert run.status == "BLOCKED" and run.board_published is False
+        assert "corp_code_map" in run.reason
 
 
 def test_premarket_persists_final_bundle_when_health_ok(session_factory):
@@ -99,7 +123,8 @@ def test_premarket_persists_final_bundle_when_health_ok(session_factory):
         health_check=lambda: report,
         prefetch_final=lambda d: bundle,
         session_factory=session_factory, notify=lambda t, m: None,
-        name_bulk=lambda frm, to: {"000660": "SK하이닉스"})  # 벌크 종목명(오프라인)
+        name_bulk=lambda frm, to: {"000660": "SK하이닉스"},  # 벌크 종목명(오프라인)
+        refresh_corp_map=lambda db: 3900)
     assert rc == "OK"
 
     with session_factory() as db:
@@ -133,7 +158,8 @@ def test_premarket_success_clears_prior_block_record(session_factory):
         health_check=lambda: SimpleNamespace(ok=True, latest_trading_day=date(2026, 6, 29),
                                              rows=2700, detail="ok"),
         prefetch_final=lambda d: None,
-        session_factory=session_factory, notify=lambda t, m: None)
+        session_factory=session_factory, notify=lambda t, m: None,
+        refresh_corp_map=lambda db: 3900)
     assert rc == "OK"
     with session_factory() as db:
         assert db.get(Run, run_date) is None              # stale BLOCKED 제거됨
@@ -150,7 +176,8 @@ def test_premarket_success_preserves_published_run(session_factory):
         health_check=lambda: SimpleNamespace(ok=True, latest_trading_day=date(2026, 6, 29),
                                              rows=2700, detail="ok"),
         prefetch_final=lambda d: None,
-        session_factory=session_factory, notify=lambda t, m: None)
+        session_factory=session_factory, notify=lambda t, m: None,
+        refresh_corp_map=lambda db: 3900)
     with session_factory() as db:
         run = db.get(Run, run_date)
         assert run is not None and run.board_published is True

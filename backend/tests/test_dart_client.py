@@ -186,3 +186,83 @@ def test_module_recent_disclosures_delegates_to_injected_client():
     rows = recent_disclosures("20260620", client=dart)      # 기본 kinds 사용
     assert rows[0]["kind"] == "배당"
     assert rows[0]["title"] == "주식배당"
+
+
+# ── corp_code_map 시딩(corpCode.xml → upsert) ────────────────────────────
+SAMPLE_CORP_XML = """<result>
+  <list><corp_code>00126380</corp_code><corp_name>삼성전자</corp_name><stock_code>005930</stock_code></list>
+  <list><corp_code>00164742</corp_code><corp_name>현대자동차</corp_name><stock_code>005380</stock_code></list>
+  <list><corp_code>99999999</corp_code><corp_name>비상장사</corp_name><stock_code> </stock_code></list>
+</result>"""
+
+
+@pytest.fixture
+def db_session():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.store.models import Base
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as session:
+        yield session
+
+
+def test_fetch_corp_code_xml_unzips_inner_xml():
+    import io
+    import zipfile
+
+    from app.data.dart_client import DART_CORP_CODE_URL, fetch_corp_code_xml
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("CORPCODE.xml", SAMPLE_CORP_XML)
+    calls = []
+
+    def http_get(url, params):
+        calls.append((url, params))
+        return buf.getvalue()
+
+    xml_text = fetch_corp_code_xml("K", http_get=http_get)
+    assert "00126380" in xml_text
+    assert calls == [(DART_CORP_CODE_URL, {"crtfc_key": "K"})]
+
+
+def test_refresh_corp_code_map_upserts_listed_only(db_session):
+    from app.data.dart_client import refresh_corp_code_map
+    from app.store.models import CorpCodeMap
+
+    mapped = refresh_corp_code_map(db_session, api_key="K",
+                                   fetch_xml=lambda key: SAMPLE_CORP_XML)
+    assert mapped == 2                                 # 비상장(종목코드 공란) 제외
+    row = db_session.get(CorpCodeMap, "00126380")
+    assert row.ticker == "005930" and row.name == "삼성전자"
+    assert row.updated_at is not None
+
+    # 멱등: 재실행해도 매핑 수 불변(merge-upsert)
+    assert refresh_corp_code_map(db_session, api_key="K",
+                                 fetch_xml=lambda key: SAMPLE_CORP_XML) == 2
+
+
+def test_refresh_corp_code_map_failure_preserves_existing(db_session):
+    # 다운로드 실패 시 기존 맵 보존 — 반환 = 기존 매핑 수(축소 금지, 0 만 차단 사유)
+    from app.data.dart_client import refresh_corp_code_map
+    from app.store.models import CorpCodeMap
+
+    db_session.add(CorpCodeMap(corp_code="00126380", ticker="005930", name="삼성전자"))
+    db_session.commit()
+
+    def boom(key):
+        raise ConnectionError("DART down")
+
+    assert refresh_corp_code_map(db_session, api_key="K", fetch_xml=boom) == 1
+
+
+def test_refresh_corp_code_map_empty_db_and_failure_returns_zero(db_session):
+    from app.data.dart_client import refresh_corp_code_map
+
+    def boom(key):
+        raise ConnectionError("DART down")
+
+    assert refresh_corp_code_map(db_session, api_key="K", fetch_xml=boom) == 0

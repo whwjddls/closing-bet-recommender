@@ -2,7 +2,11 @@
 
 무인자 ``health_check()->HealthResult(ok, latest_trading_day, rows, detail)`` 를 소비한다.
 이 헬스체크는 지수 OHLCV뿐 아니라 **D-1 외인/기관 수급·거래대금** 조회 성공도 검증하므로,
-수급 결손 시 ``ok=False`` 가 되어 런을 차단(BLOCKED)한다. 콜라보레이터는 모두 주입.
+수급 결손 시 ``ok=False`` 가 되어 런을 차단(BLOCKED)한다.
+
+헬스체크 통과 후 **corp_code_map 시딩**(DART corpCode.xml → upsert)을 수행한다 —
+빈 맵은 전 종목 veto=0(fail-closed) → 보드 영구 공백이므로, 시딩 후에도 매핑이
+0 이면 런을 차단(BLOCKED)한다. 콜라보레이터는 모두 주입.
 """
 from __future__ import annotations
 
@@ -50,11 +54,13 @@ def _clear_stale_block(db, run_date) -> None:
 
 def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | None = None,
                   health_check=None, prefetch_final=None, session_factory=None, notify=None,
-                  name_bulk=None):
-    """장전 헬스체크 → 통과 시 FINAL prefetch, 실패 시 fail-closed(BLOCKED).
+                  name_bulk=None, refresh_corp_map=None):
+    """장전 헬스체크 → corp_code_map 시딩 → 통과 시 FINAL prefetch. 실패는 fail-closed(BLOCKED).
 
-    비거래일이면 아무것도 하지 않고 ``None`` 을 반환한다. 콜라보레이터 미주입 시
-    실제 모듈을 지연 바인딩한다(테스트는 모두 주입).
+    ``refresh_corp_map(db)->int`` 는 corpCode.xml 시딩 후 매핑 수를 반환하는
+    콜라보레이터 — 0 이면 전 종목 veto=0 이므로 차단한다. 비거래일이면 아무것도
+    하지 않고 ``None`` 을 반환한다. 콜라보레이터 미주입 시 실제 모듈을 지연
+    바인딩한다(테스트는 모두 주입).
     """
     calendar = calendar or load_default_calendar()
     run_date = run_date or datetime.now().date()
@@ -70,6 +76,8 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
         prefetch_final = prefetch_final or pykrx_client.prefetch_top_value
         # 스캐너 종목명 벌크 맵(개별 200회 회피). (frm, to)→{ticker: name}
         name_bulk = name_bulk or pykrx_client.stock_names_bulk
+    if refresh_corp_map is None:
+        from app.data.dart_client import refresh_corp_code_map as refresh_corp_map
     if session_factory is None:
         from app.store.db import SessionLocal as session_factory
     notify = notify or _desktop_notify
@@ -84,6 +92,19 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
             db.commit()
         notify("종가베팅 프리오픈 실패(fail-closed)", report.detail)
         return "BLOCKED"
+
+    with session_factory() as db:   # corp_code_map 시딩 — 빈 맵 = 전 종목 veto=0 → 차단
+        mapped = refresh_corp_map(db)
+        db.commit()
+    if mapped == 0:
+        detail = "corp_code_map 비어있음(DART corpCode 시딩 실패) — 전 종목 veto=0 방지"
+        with session_factory() as db:
+            _record_run(db, run_date, status="BLOCKED", published=False, reason=detail,
+                        session_type=calendar.session_type(run_date), started=started)
+            db.commit()
+        notify("종가베팅 프리오픈 실패(fail-closed)", detail)
+        return "BLOCKED"
+    logger.info("corp_code_map seeded: %d mappings", mapped)
 
     bundle = prefetch_final(run_date)
     with session_factory() as db:

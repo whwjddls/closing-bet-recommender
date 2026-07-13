@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Callable, MutableMapping
+
+logger = logging.getLogger(__name__)
 
 # 희석 화이트리스트(아키텍처 §2 재 veto) → veto=0(차단). substring 매칭(정정 변형 포착)
 DILUTION_WHITELIST: tuple[str, ...] = (
@@ -233,6 +236,49 @@ def build_default_client() -> DartClient:
     """운영 기본 DartClient — env api_key + DB corp_code_map + 실 transport 조립."""
     return DartClient(_default_transport, _load_corp_code_map(),
                       api_key=_api_key_from_env())
+
+
+# ── corp_code_map 시딩(장전 스케줄러 기본 바인딩) ──────────────────────────
+DART_CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml"
+
+
+def _default_zip_get(url: str, params: dict) -> bytes:
+    import requests
+
+    resp = requests.get(url, params=params, timeout=30)
+    resp.raise_for_status()
+    return resp.content
+
+
+def fetch_corp_code_xml(api_key: str, http_get=None) -> str:
+    """DART corpCode.xml(ZIP 바이너리) 다운로드 → 내부 XML 텍스트.
+
+    ``http_get(url, params) -> bytes`` 주입으로 오프라인 테스트."""
+    import io
+    import zipfile
+
+    raw = (http_get or _default_zip_get)(DART_CORP_CODE_URL, {"crtfc_key": api_key})
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        name = next(n for n in zf.namelist() if n.lower().endswith(".xml"))
+        return zf.read(name).decode("utf-8")
+
+
+def refresh_corp_code_map(db, *, api_key: str | None = None, fetch_xml=None) -> int:
+    """corpCode.xml 다운로드·파싱 → corp_code_map upsert. 갱신 후 매핑 수 반환.
+
+    빈 corp_code_map 은 전 종목 veto=0(fail-closed) → 보드 영구 공백이므로
+    premarket 이 매일 호출한다. 다운로드/파싱 실패 시 기존 맵을 보존하고
+    기존 매핑 수를 반환한다 — 반환 0 만이 차단(BLOCKED) 사유."""
+    from app.store.corp_codes import count_mapped, upsert_corp_code_map
+
+    try:
+        xml_text = (fetch_xml or fetch_corp_code_xml)(api_key or _api_key_from_env())
+        entries = parse_corp_code_xml(xml_text)
+        if entries:
+            upsert_corp_code_map(db, entries)
+    except Exception as exc:                        # noqa: BLE001  (외부 IO 방어)
+        logger.warning("corp_code_map 갱신 실패(기존 맵 유지): %s", exc)
+    return count_mapped(db)
 
 
 def overnight_scan(ticker: str, since: dt.datetime, until: dt.datetime,
