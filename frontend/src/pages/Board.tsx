@@ -3,10 +3,12 @@ import {
   fetchRecommendations,
   fetchUniverse,
   fetchHealth,
+  fetchRunToday,
   type RecommendationsResponse,
   type UniverseResponse,
   type HealthResponse,
   type RegimeInfo,
+  type RunTodayResponse,
 } from '../api/client';
 import { notifyTop3 } from '../lib/notify';
 import { REFETCH_EVENT } from '../lib/events';
@@ -47,6 +49,8 @@ export default function Board() {
   const [board, setBoard] = useState<RecommendationsResponse | null>(null);
   const [universe, setUniverse] = useState<UniverseResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  // 오늘 런의 단계별 생존 수(/run/today) — 추천 0건인 날 '왜'를 숫자로 보여준다.
+  const [runToday, setRunToday] = useState<RunTodayResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 담은 픽 티커 집합(클라이언트 전용 상태 — 신규 API 없음).
   const [pickedTickers, setPickedTickers] = useState<Set<string>>(
@@ -69,11 +73,13 @@ export default function Board() {
       // 후보 풀은 캐시 경유 — 스캔이 자원을 점유해 재조회가 실패해도 직전 값 유지.
       cachedFetch('universe', fetchUniverse),
       fetchHealth(),
+      fetchRunToday().catch(() => null), // 퍼널은 부가정보 — 실패해도 보드는 뜬다
     ])
-      .then(([b, u, h]) => {
+      .then(([b, u, h, r]) => {
         setBoard(b);
         setUniverse(u);
         setHealth(h);
+        setRunToday(r);
         notifyTop3(b.recommendations);
       })
       .catch((e) => setError(String(e)));
@@ -89,7 +95,7 @@ export default function Board() {
     loadBoard();
   }, [loadBoard]);
 
-  // 스캔 실행 완료(RunScanButton) → 보드 데이터 재조회.
+  // 잡 실행 완료(프리페치 등) → 보드 데이터 재조회.
   useEffect(() => {
     const handler = () => loadBoard();
     window.addEventListener(REFETCH_EVENT, handler);
@@ -266,6 +272,7 @@ export default function Board() {
             <FunnelPanel
               universeCount={universe ? universe.rows.length : null}
               board={board}
+              funnel={runToday?.funnel ?? null}
             />
             <PerfSummaryCard />
             <PerfHeatmap />

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, time
 
+from app.config import load_env
 from app.scheduler.calendar import TradingCalendar, load_default_calendar
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,7 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    load_env()          # 작업스케줄러 실행 경로 — main.py 를 거치지 않아 여기서 .env 주입
     run_scoring()
 
 

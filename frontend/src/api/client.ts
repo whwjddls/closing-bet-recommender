@@ -295,6 +295,16 @@ export interface RunTriggerResponse {
 // GET /run/status — 실행 상태 폴링(3초 주기). running=false 로 떨어지면 종료.
 // last_result: 'OK'(추천 발행) | 'UNPUBLISHED'(오늘은 못 만듦) 등 백엔드 문자열.
 // started_at/elapsed_sec: 장시간 스캔(장전 캐시 없으면 3~10분)의 경과 표시용.
+export interface RunTodayResponse {
+  ran: boolean; // 오늘 런 기록 존재 여부
+  status: string | null; // OK / UNPUBLISHED / BLOCKED
+  board_published: boolean;
+  finished_at: string | null;
+  reason: string | null; // OK / RISK_OFF / 커버리지 부족 등
+  published_count: number;
+  funnel: Record<string, number> | null; // 단계별 생존 수(빈 보드 진단)
+}
+
 export interface RunStatusResponse {
   running: boolean;
   last_result: string | null;
@@ -357,6 +367,9 @@ export const fetchReminder = () => getJson<ReminderResponse>(`/reminder`);
 export const fetchHighs = () => getJson<HighsResponse>(`/highs`);
 export const triggerRun = () => postJson<RunTriggerResponse>(`/run`);
 export const fetchRunStatus = () => getJson<RunStatusResponse>(`/run/status`);
+// 오늘 런 기록(DB) — 작업스케줄러(별도 프로세스) 실행도 보인다. /run/status 는 웹서버
+// 프로세스 내부 상태라 스케줄러 런을 못 본다(항상 '오늘 스캔 전'으로 보임).
+export const fetchRunToday = () => getJson<RunTodayResponse>(`/run/today`);
 // 수동 잡 2종 — 종목 후보 가져오기(프리페치) / 성과 채점. 상태 응답은 /run/status 와 동일 형태.
 export const triggerPrefetch = () => postJson<JobTriggerResponse>(`/jobs/prefetch`);
 export const fetchPrefetchStatus = () =>

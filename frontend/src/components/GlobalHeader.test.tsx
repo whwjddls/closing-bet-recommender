@@ -15,18 +15,18 @@ vi.mock('../api/client', () => ({
       recommendations: [],
     }),
   ),
-  // RunScanButton mount 동기화 + 헤더 스캔 상태 칩이 함께 쓴다. 기본은 "오늘 스캔 전".
-  fetchRunStatus: vi.fn(() =>
+  // 헤더 스캔 상태 칩 — DB의 오늘 런 기록(/run/today). 기본은 런 없음(스케줄러 대기).
+  fetchRunToday: vi.fn(() =>
     Promise.resolve({
-      running: false,
-      last_result: null,
-      last_error: null,
+      ran: false,
+      status: null,
+      board_published: false,
       finished_at: null,
-      started_at: null,
-      elapsed_sec: null,
+      reason: null,
+      published_count: 0,
+      funnel: null,
     }),
   ),
-  triggerRun: vi.fn(() => Promise.resolve({ status: 'started' })),
   // 프리페치(종목 후보 가져오기) 버튼 — 기본은 미실행.
   triggerPrefetch: vi.fn(() =>
     Promise.resolve({ status: 'started', reason: null }),
@@ -93,66 +93,59 @@ describe('GlobalHeader', () => {
   });
 
   describe('스캔 상태 칩', () => {
-    it('아직 안 돌렸으면 "오늘 스캔 전"', async () => {
+    it('스케줄러가 아직 안 돌렸으면 "오늘 15:20 스캔 대기"', async () => {
       render(<GlobalHeader />);
       expect(await screen.findByTestId('scan-status')).toHaveTextContent(
-        '오늘 스캔 전',
+        '오늘 15:20 스캔 대기',
       );
     });
 
-    it('오늘 완료(OK)면 완료 시각 + ✓', async () => {
-      vi.mocked(api.fetchRunStatus).mockResolvedValue({
-        running: false,
-        last_result: 'OK',
-        last_error: null,
-        finished_at: `${kstToday()}T14:02:00+09:00`,
-        started_at: null,
-        elapsed_sec: null,
+    it('발행 성공이면 완료 시각 + ✓ + 종목 수 (스케줄러 런도 DB로 보인다)', async () => {
+      vi.mocked(api.fetchRunToday).mockResolvedValue({
+        ran: true,
+        status: 'OK',
+        board_published: true,
+        finished_at: `${kstToday()}T15:23:00+09:00`,
+        reason: 'OK',
+        published_count: 12,
+        funnel: null,
       });
       render(<GlobalHeader />);
       expect(await screen.findByTestId('scan-status')).toHaveTextContent(
-        '스캔 14:02 완료 ✓',
+        '스캔 15:23 완료 ✓ 12종목',
       );
     });
 
-    it('어제 완료 기록은 "오늘 스캔 전"으로 취급한다', async () => {
-      vi.mocked(api.fetchRunStatus).mockResolvedValue({
-        running: false,
-        last_result: 'OK',
-        last_error: null,
-        finished_at: '2020-01-02T15:25:00+09:00', // 과거 날짜
-        started_at: null,
-        elapsed_sec: null,
+    it('돌았지만 추천 0종목이면 성공처럼 보이지 않게 표기한다', async () => {
+      vi.mocked(api.fetchRunToday).mockResolvedValue({
+        ran: true,
+        status: 'OK',
+        board_published: true,
+        finished_at: `${kstToday()}T15:23:00+09:00`,
+        reason: 'RISK_OFF',
+        published_count: 0,
+        funnel: null,
       });
       render(<GlobalHeader />);
       expect(await screen.findByTestId('scan-status')).toHaveTextContent(
-        '오늘 스캔 전',
+        '추천 0종목',
       );
     });
 
-    it('실행 중이면 "스캔 진행 중"', async () => {
-      vi.mocked(api.fetchRunStatus).mockResolvedValue({
-        running: true,
-        last_result: null,
-        last_error: null,
-        finished_at: null,
-        started_at: `${kstToday()}T15:20:00+09:00`,
-        elapsed_sec: 42,
+    it('미발행이면 사유를 노출한다', async () => {
+      vi.mocked(api.fetchRunToday).mockResolvedValue({
+        ran: true,
+        status: 'UNPUBLISHED',
+        board_published: false,
+        finished_at: `${kstToday()}T15:23:00+09:00`,
+        reason: '커버리지 65% < 70%',
+        published_count: 0,
+        funnel: null,
       });
       render(<GlobalHeader />);
       expect(await screen.findByTestId('scan-status')).toHaveTextContent(
-        '스캔 진행 중',
+        '미발행 · 커버리지 65% < 70%',
       );
-    });
-
-    it('상태 조회가 실패하면 칩을 숨긴다(가짜 정보 금지)', async () => {
-      vi.mocked(api.fetchRunStatus).mockRejectedValue(new Error('down'));
-      render(<GlobalHeader />);
-      // mount 동기화 promise들이 처리될 때까지 flush 후에도 칩은 없어야 한다.
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(screen.queryByTestId('scan-status')).not.toBeInTheDocument();
     });
   });
 

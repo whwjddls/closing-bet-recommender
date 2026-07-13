@@ -2432,6 +2432,15 @@ td small {
   color: var(--text-lo);
 }
 
+/* 단계별 탈락 수(백엔드 퍼널) — 추천 0건인 날 어느 게이트가 죽였는지 한 줄로. */
+.funnel-panel .fp-drops {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-lo);
+  word-break: keep-all;
+}
+
 .funnel-panel .fp-reason {
   margin: 7px 0 0;
   padding-top: 7px;

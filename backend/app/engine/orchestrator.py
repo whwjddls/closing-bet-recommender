@@ -80,6 +80,7 @@ class RunResult:
     recommendations: list
     regimes: dict
     reason: str | None = None
+    funnel: dict | None = None         # 단계별 생존 수 — 빈 보드 원인 진단용(계측)
 
 
 def compute_modeled_avg(trailing_values, min_sessions: int = 20):
@@ -194,13 +195,20 @@ def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
 
     # ⑥'' 최종 위생: emit된 top-N만 종목정보 조회로 관리/경고/우선주 부적격 제외.
     #      조회 실패는 '통과(스킵하되 로그)' — fail-open 아님(보조 필터).
+    before_hygiene = len(recs)
     recs = _apply_final_hygiene(adapter, recs)
 
     # ⑦ 커버리지는 파이프라인 자체 coverage_pct × 100 (계약 §3.6)
+    pr_funnel = getattr(pr, "funnel", None)  # 주입 seam(구형 fake)은 퍼널이 없을 수 있다
+    funnel = pr_funnel.to_dict() if pr_funnel is not None else {}
+    funnel["final_hygiene_dropped"] = before_hygiene - len(recs)
+    funnel["published"] = len(recs)          # 최종 위생 반영 실 발행 수
+    logger.info("funnel %s reason=%s", funnel, pr.reason)
     return RunResult(run_date=run_date, session_type=session_type,
                      data_available=bool(quotes),
                      kis_coverage_pct=round(pr.coverage_pct * 100, 1),
-                     recommendations=recs, regimes=regimes, reason=pr.reason)
+                     recommendations=recs, regimes=regimes, reason=pr.reason,
+                     funnel=funnel)
 
 
 def _apply_final_hygiene(adapter, recs):

@@ -78,3 +78,43 @@ describe('FunnelPanel', () => {
     expect(screen.getByTestId('funnel-flow')).toHaveTextContent('—');
   });
 });
+
+describe('백엔드 퍼널(단계별 탈락 수)', () => {
+  const board = {
+    run_date: '2026-07-14',
+    session_type: '정규',
+    data_available: true,
+    kis_coverage_pct: 100,
+    regimes: {},
+    recommendations: [],
+  };
+
+  it('추천 0건인 날 어느 게이트가 죽였는지 숫자로 보여준다', () => {
+    render(
+      <FunnelPanel
+        universeCount={200}
+        board={board}
+        funnel={{
+          candidates: 200,
+          static_ok: 187,
+          quotes: 187,
+          dynamic_ok: 180,
+          shin_zero: 165,
+          veto_blocked: 3,
+          regime_zero: 0,
+          final_hygiene_dropped: 12,
+        }}
+      />,
+    );
+    const drops = screen.getByTestId('funnel-drops');
+    expect(drops).toHaveTextContent('돌파 미달 165');
+    expect(drops).toHaveTextContent('공시 veto 3');
+    expect(drops).toHaveTextContent('최종 위생 12');
+    expect(drops).not.toHaveTextContent('리스크오프'); // 0 인 항목은 감춘다
+  });
+
+  it('퍼널이 없으면(구 런 기록) 탈락 줄을 렌더하지 않는다', () => {
+    render(<FunnelPanel universeCount={200} board={board} funnel={null} />);
+    expect(screen.queryByTestId('funnel-drops')).not.toBeInTheDocument();
+  });
+});

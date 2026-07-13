@@ -190,3 +190,32 @@ def test_ensure_columns_adds_missing_nullable_columns(tmp_path):
     assert "exp_close" in cols and "supply_today" in cols     # 누락 컬럼 자동 추가
     assert "spark" in cols and "base_flag" in cols            # 과거 추가분도 커버
     _ensure_columns(eng)                                      # 멱등(재실행 무해)
+
+
+def test_persist_prefetch_bundle_replaces_prior_rows_for_same_date(session):
+    # 같은 날 재실행(유니버스 변경) 시 옛 행이 남으면 15:20 후보풀이 신·구 합집합으로
+    # 부풀고, 잘못된 D-1 로 계산된 stale 행(수급 0)이 그대로 흘러든다 → 교체 저장.
+    import datetime as dt
+
+    from app.data.pykrx_client import PrefetchBundle
+    from app.store import final_cache
+    from app.store.models import FinalPrefetch
+
+    run_date = dt.date(2026, 7, 13)
+    stale = PrefetchBundle(
+        run_date=run_date, universe=["000001"], h_ref_252={}, h_ref_60={"000001": 10.0},
+        atr20={"000001": 1.0}, avg_value_20d={"000001": 1e10},
+        net_purchases={}, index_ma5={})           # 수급 결손(잘못된 D-1)
+    final_cache.persist_prefetch_bundle(session, stale)
+    session.commit()
+
+    fresh = PrefetchBundle(
+        run_date=run_date, universe=["000660"], h_ref_252={}, h_ref_60={"000660": 20.0},
+        atr20={"000660": 2.0}, avg_value_20d={"000660": 5e10},
+        net_purchases={"000660": 8e9}, index_ma5={})
+    final_cache.persist_prefetch_bundle(session, fresh)
+    session.commit()
+
+    rows = session.query(FinalPrefetch).filter(FinalPrefetch.run_date == run_date).all()
+    assert [r.ticker for r in rows] == ["000660"]      # 옛 행 잔존 금지
+    assert rows[0].d1_supply_value == 8e9

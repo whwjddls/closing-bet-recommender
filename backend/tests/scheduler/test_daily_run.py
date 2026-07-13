@@ -25,12 +25,13 @@ def _rec_row(rank, ticker, name, grade="S"):
                            provisional_flag=True)
 
 
-def _result(coverage=90.0, data_available=True, recs=None):
+def _result(coverage=90.0, data_available=True, recs=None, reason="OK", funnel=None):
     regimes = {"KOSPI": SimpleNamespace(market="KOSPI", index_level=2700.0, ma5=2680.0,
                                         ma5_prev=2670.0, cond_a=True, cond_b=True, regime_mult=1.0)}
     return SimpleNamespace(run_date=date(2026, 6, 30), session_type="정규",
                            data_available=data_available, kis_coverage_pct=coverage,
-                           recommendations=recs if recs is not None else [], regimes=regimes)
+                           recommendations=recs if recs is not None else [], regimes=regimes,
+                           reason=reason, funnel=funnel)
 
 
 def _cal(early=None):
@@ -67,10 +68,10 @@ def test_daily_run_publishes_and_persists_top3(session_factory):
         saved = db.scalars(select(Recommendation).order_by(Recommendation.rank)).all()
         assert [r.ticker for r in saved] == ["000660", "005930", "035720", "068270"]
         assert db.scalars(select(RegimeSnapshot)).first().market == "KOSPI"
-    # top3만 알림
+    # 알림 1회 — 폰(텔레그램) 메시지는 상위 5종목까지 담는다(4종목이면 전부).
     assert len(notify_calls) == 1
     msg = notify_calls[0][1]
-    assert "셀트리온" not in msg and "SK하이닉스" in msg
+    assert "SK하이닉스" in msg and "셀트리온" in msg
     assert snap_calls and snap_calls[0][0] == date(2026, 6, 30)
 
 
@@ -187,3 +188,39 @@ def test_daily_run_allow_outside_window_escape_hatch(session_factory):
         now=datetime(2026, 6, 30, 20, 0), allow_outside_window=True,
     )
     assert rc == "OK"
+
+
+# ── P0.5 계측: 빈 보드의 사유·퍼널이 DB에 남아야 한다 ─────────────────────
+def test_daily_run_persists_reason_and_funnel(session_factory):
+    # 과거엔 발행 성공 시 reason=None 을 하드코딩해 '왜 비었는지'가 유실됐고,
+    # veto 전멸·우선주 오판 버그를 수동 재구성해야 했다. 그 재발을 막는다.
+    funnel = {"candidates": 200, "static_ok": 187, "quotes": 187, "dynamic_ok": 180,
+              "shin_zero": 165, "veto_blocked": 3, "regime_zero": 0,
+              "final_hygiene_dropped": 12, "published": 0}
+    rc = daily_run.run_daily(
+        date(2026, 6, 30), calendar=_cal(),
+        run_pipeline=lambda d, s: _result(recs=[], reason="RISK_OFF", funnel=funnel),
+        session_factory=session_factory, notify=lambda t, m: None,
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=IN_WINDOW,
+    )
+    assert rc == "OK"
+    with session_factory() as db:
+        run = db.get(Run, date(2026, 6, 30))
+        assert run.reason == "RISK_OFF"                 # 빈 보드 사유 보존
+        assert run.funnel["shin_zero"] == 165           # 단계별 탈락 수 보존
+        assert run.funnel["final_hygiene_dropped"] == 12
+
+
+def test_daily_run_notifies_even_when_board_empty(session_factory):
+    # "알림이 안 왔다"와 "오늘은 추천이 없다"를 구분할 수 있어야 한다 — 빈 보드도 알린다.
+    sent = []
+    daily_run.run_daily(
+        date(2026, 6, 30), calendar=_cal(),
+        run_pipeline=lambda d, s: _result(recs=[], reason="RISK_OFF",
+                                          funnel={"candidates": 200, "shin_zero": 200}),
+        session_factory=session_factory, notify=lambda t, m: sent.append(m),
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=IN_WINDOW,
+    )
+    assert sent and "추천 없음" in sent[0] and "RISK_OFF" in sent[0]

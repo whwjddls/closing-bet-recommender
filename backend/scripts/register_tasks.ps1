@@ -1,11 +1,22 @@
 # 종가베팅 추천 시스템 — Windows 작업스케줄러 3잡 등록
-# 사용: 관리자 PowerShell에서  .\register_tasks.ps1 -PythonExe "C:\Python314\python.exe" -BackendDir "D:\work\git\closing-bet-recommender\backend"
+# 사용:  .\register_tasks.ps1              (기본: backend\.venv 파이썬 사용)
+#        .\register_tasks.ps1 -PythonExe "C:\Python314\python.exe"
 param(
-    [string]$PythonExe = "python",
+    [string]$PythonExe = "",
     [string]$BackendDir = "$PSScriptRoot\.."
 )
 
 $BackendDir = (Resolve-Path $BackendDir).Path
+
+# 기본 파이썬 = backend\.venv — 시스템 python 은 pykrx/KIS 의존성이 없어 잡이 즉시 죽는다.
+if (-not $PythonExe) {
+    $venvPython = Join-Path $BackendDir ".venv\Scripts\python.exe"
+    if (-not (Test-Path $venvPython)) {
+        throw "가상환경 파이썬을 찾을 수 없습니다: $venvPython  (-PythonExe 로 직접 지정하세요)"
+    }
+    $PythonExe = $venvPython
+}
+Write-Host "python: $PythonExe" -ForegroundColor DarkGray
 
 function Register-OneTask {
     param([string]$Name, [string]$Module, [string]$Time)

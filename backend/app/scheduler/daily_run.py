@@ -11,12 +11,12 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime
 
+from app.config import load_env
 from app.scheduler.calendar import TradingCalendar, load_default_calendar
 
 logger = logging.getLogger(__name__)
 
 MIN_COVERAGE_PCT = 70.0     # 발행 게이트 바닥 (아키텍처 §5)
-TOP_N_NOTIFY = 3
 
 
 def _desktop_notify(title: str, message: str) -> None:
@@ -40,7 +40,8 @@ def _default_run_pipeline(run_date: date, snapshot_at: datetime):
     return build_live_run_pipeline()(run_date, snapshot_at)
 
 
-def _upsert_run(db, run_date, *, status, published, coverage, session_type, reason, started):
+def _upsert_run(db, run_date, *, status, published, coverage, session_type, reason, started,
+                funnel=None):
     from app.store.models import Run
 
     run = db.get(Run, run_date)
@@ -53,6 +54,7 @@ def _upsert_run(db, run_date, *, status, published, coverage, session_type, reas
     run.kis_coverage_pct = coverage
     run.session_type = session_type
     run.reason = reason
+    run.funnel = funnel
 
 
 def _persist_recs(db, run_date, result):
@@ -97,12 +99,12 @@ def _payload(run_date, session_type, result):
     }
 
 
-def _notify_top3(result, notify):
-    top = sorted(result.recommendations, key=lambda r: r.rank)[:TOP_N_NOTIFY]
-    if not top:
-        return
-    body = ", ".join(f"{r.name}({r.ticker}) {r.grade}" for r in top)
-    notify("종가베팅 추천 발행", body)
+def _notify_run(result, run_date, session_type, notify):
+    """텔레그램(폰) 우선 + 데스크톱 폴백. 빈 보드여도 사유·퍼널을 보낸다 —
+    '알림이 안 왔다'와 '오늘은 추천이 없다'를 구분할 수 있어야 한다."""
+    from app.notify import notify_run
+
+    notify_run(result, run_date=run_date, session_type=session_type, notify=notify)
 
 
 def run_daily(run_date: date | None = None, *, calendar: TradingCalendar | None = None,
@@ -145,33 +147,38 @@ def run_daily(run_date: date | None = None, *, calendar: TradingCalendar | None 
     started = datetime.now()
     result = run_pipeline(run_date, snapshot_at)         # 00 §3 orchestrate_run → RunResult
 
+    funnel = getattr(result, "funnel", None)
     with session_factory() as db:
         if not result.data_available:
             _upsert_run(db, run_date, status="UNPUBLISHED", published=False,
                         coverage=result.kis_coverage_pct, session_type=session_type,
-                        reason="KIS 데이터 미수신(EOD 프록시 금지)", started=started)
+                        reason="KIS 데이터 미수신(EOD 프록시 금지)", started=started, funnel=funnel)
             db.commit()
             return "UNPUBLISHED"
         if result.kis_coverage_pct < MIN_COVERAGE_PCT:
             _upsert_run(db, run_date, status="UNPUBLISHED", published=False,
                         coverage=result.kis_coverage_pct, session_type=session_type,
                         reason=f"커버리지 {result.kis_coverage_pct:.0f}% < {MIN_COVERAGE_PCT:.0f}%",
-                        started=started)
+                        started=started, funnel=funnel)
             db.commit()
             return "UNPUBLISHED"
         _persist_recs(db, run_date, result)
         _persist_regimes(db, run_date, result)
+        # reason 은 파이프라인 사유(OK/RISK_OFF)를 그대로 보존 — 과거 None 하드코딩 탓에
+        # 빈 보드의 원인이 DB에 남지 않아 사후 재구성이 필요했다.
         _upsert_run(db, run_date, status="OK", published=True, coverage=result.kis_coverage_pct,
-                    session_type=session_type, reason=None, started=started)
+                    session_type=session_type, reason=result.reason, started=started,
+                    funnel=funnel)
         db.commit()
 
     snapshots.write_snapshot(run_date, _payload(run_date, session_type, result))
-    _notify_top3(result, notify)
+    _notify_run(result, run_date, session_type, notify)
     return "OK"
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    load_env()          # 작업스케줄러 실행 경로 — main.py 를 거치지 않아 여기서 .env 주입
     run_daily()
 
 

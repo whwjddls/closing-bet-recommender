@@ -265,6 +265,18 @@ class RunTriggerResponse(BaseModel):    # POST /run — 수동 실행 트리거 
     status: str                         # "started" | "already_running"
 
 
+class RunTodayResponse(BaseModel):      # GET /run/today — DB 기반 오늘 런 기록
+    """작업스케줄러(별도 프로세스) 실행도 반영한다 — ``/run/status`` 는 웹서버 프로세스
+    내부 상태라 스케줄러 런을 볼 수 없어 항상 '오늘 스캔 전'으로 보인다."""
+    ran: bool                           # 오늘 런 기록 존재 여부
+    status: str | None = None           # OK / UNPUBLISHED / BLOCKED
+    board_published: bool = False
+    finished_at: str | None = None      # ISO; 미완료 None
+    reason: str | None = None           # OK / RISK_OFF / 커버리지 부족 등
+    published_count: int = 0            # 발행 종목 수
+    funnel: dict | None = None          # 단계별 생존 수(빈 보드 진단)
+
+
 class RunStatusResponse(BaseModel):     # GET /run/status — 백그라운드 런 상태
     running: bool
     last_result: str | None = None      # "OK"/"UNPUBLISHED"/"SKIPPED" 등; 미실행 None

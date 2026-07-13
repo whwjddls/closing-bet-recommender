@@ -2,17 +2,17 @@ import { useEffect, useState } from 'react';
 import { Download, Moon, Sun, Timer, TriangleAlert } from 'lucide-react';
 import {
   fetchRecommendations,
-  fetchRunStatus,
+  fetchRunToday,
   fetchPrefetchStatus,
   triggerPrefetch,
   type RegimeInfo,
   type RunStatusResponse,
+  type RunTodayResponse,
 } from '../api/client';
 import { kstToday } from '../lib/date';
 import { REFETCH_EVENT, emitRefetch } from '../lib/events';
 import { getStoredTheme, toggleTheme, type Theme } from '../lib/theme';
 import JobButton, { type JobToast } from './JobButton';
-import RunScanButton from './RunScanButton';
 
 type Verdict = 'GO' | 'CAUTION' | 'RISK_OFF';
 
@@ -47,29 +47,24 @@ function formatCountdown(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-// ISO 시각 → KST 'YYYY-MM-DD' / 'HH:MM' (kstToday 와 같은 오프셋 방식).
-function kstDateOf(iso: string): string {
-  return new Date(new Date(iso).getTime() + 9 * 3600 * 1000)
-    .toISOString()
-    .slice(0, 10);
-}
-
+// ISO 시각 → KST 'HH:MM' (kstToday 와 같은 오프셋 방식).
 function kstHmOf(iso: string): string {
   return new Date(new Date(iso).getTime() + 9 * 3600 * 1000)
     .toISOString()
     .slice(11, 16);
 }
 
-// 스캔 상태 칩 라벨 — 기존 "기준 HH:MM:SS · N초 전"(브라우저 수신 시각이라
-// 사실상 무의미)을 대체하는 진짜 정보. 오늘 완료 여부는 KST 날짜로 판정하고,
-// 발행 성공(OK)일 때만 ✓를 붙인다(UNPUBLISHED 완료를 성공처럼 안 보이게).
-function scanChipLabel(status: RunStatusResponse): string {
-  if (status.running) return '스캔 진행 중…';
-  if (status.finished_at && kstDateOf(status.finished_at) === kstToday()) {
-    const check = status.last_result === 'OK' ? ' ✓' : '';
-    return `스캔 ${kstHmOf(status.finished_at)} 완료${check}`;
+// 스캔 상태 칩 라벨 — DB의 오늘 런 기록(/run/today) 기반이라 작업스케줄러가
+// 별도 프로세스로 돌린 15:20 런도 그대로 보인다. 발행 성공일 때만 ✓·종목 수를 붙이고,
+// 빈 보드/미발행은 사유를 노출한다(성공처럼 보이지 않게).
+function scanChipLabel(run: RunTodayResponse): string {
+  if (!run.ran) return '오늘 15:20 스캔 대기';
+  const at = run.finished_at ? kstHmOf(run.finished_at) : '';
+  if (run.board_published && run.published_count > 0) {
+    return `스캔 ${at} 완료 ✓ ${run.published_count}종목`;
   }
-  return '오늘 스캔 전';
+  if (run.board_published) return `스캔 ${at} 완료 · 추천 0종목`;
+  return `스캔 ${at} 미발행${run.reason ? ` · ${run.reason}` : ''}`;
 }
 
 // 15:00 KST(마감 30분 전)부터 카운트다운 강조 — "결전 시간" 시각 신호(스펙 §2.1).
@@ -104,8 +99,8 @@ export default function GlobalHeader() {
     msUntilClose(new Date()),
   );
   const [verdict, setVerdict] = useState<Verdict | null>(null);
-  // 오늘 스캔 실행 상태(/run/status). 조회 실패면 null → 칩 숨김(가짜 정보 금지).
-  const [scanStatus, setScanStatus] = useState<RunStatusResponse | null>(null);
+  // 오늘 런 기록(/run/today, DB 기반). 조회 실패면 null → 칩 숨김(가짜 정보 금지).
+  const [scanStatus, setScanStatus] = useState<RunTodayResponse | null>(null);
   // 현재 테마(문서엔 main.tsx initTheme에서 이미 적용됨 — 여기선 아이콘 상태만 추적).
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme());
 
@@ -134,11 +129,11 @@ export default function GlobalHeader() {
     };
   }, []);
 
-  // 스캔 상태 칩: mount 1회 + 스캔 완료 이벤트(REFETCH_EVENT) 때 갱신 — 추가 폴링 없음.
+  // 스캔 상태 칩: mount 1회 + 잡 완료 이벤트(REFETCH_EVENT) 때 갱신 — 추가 폴링 없음.
   useEffect(() => {
     let alive = true;
     const load = () => {
-      fetchRunStatus()
+      fetchRunToday()
         .then((s) => {
           if (alive) setScanStatus(s);
         })
@@ -240,7 +235,6 @@ export default function GlobalHeader() {
           onDone={emitRefetch}
           testId="job-prefetch"
         />
-        <RunScanButton />
       </div>
     </div>
   );

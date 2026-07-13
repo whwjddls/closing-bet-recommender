@@ -7,11 +7,15 @@
 from __future__ import annotations
 
 import threading
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from app.api.schemas import RunStatusResponse, RunTriggerResponse
+from app.api.schemas import RunStatusResponse, RunTodayResponse, RunTriggerResponse
+from app.store.db import get_db
+from app.store.models import Recommendation, Run
 
 router = APIRouter(tags=["run"])
 
@@ -61,6 +65,20 @@ def trigger_run() -> RunTriggerResponse:
     thread = threading.Thread(target=_execute, daemon=True)
     thread.start()
     return RunTriggerResponse(status="started")
+
+
+@router.get("/run/today", response_model=RunTodayResponse)
+def get_run_today(db: Session = Depends(get_db)) -> RunTodayResponse:
+    """오늘 런 기록(DB) — 작업스케줄러가 별도 프로세스로 돌린 런도 보인다."""
+    run = db.get(Run, date.today())
+    if run is None:
+        return RunTodayResponse(ran=False)
+    count = db.scalar(select(func.count()).select_from(Recommendation)
+                      .where(Recommendation.run_date == run.run_date)) or 0
+    return RunTodayResponse(
+        ran=True, status=run.status, board_published=bool(run.board_published),
+        finished_at=run.finished_at.isoformat() if run.finished_at else None,
+        reason=run.reason, published_count=count, funnel=run.funnel)
 
 
 @router.get("/run/status", response_model=RunStatusResponse)

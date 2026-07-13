@@ -157,3 +157,6 @@ class Run(Base):
     board_published: Mapped[bool | None] = mapped_column(Boolean)
     session_type: Mapped[str | None] = mapped_column(String)
     reason: Mapped[str | None] = mapped_column(String)
+    # 단계별 생존 수(후보풀→정적위생→시세→동적위생→emit→최종위생). 빈 보드가 전략 탓인지
+    # 버그 탓인지 사후 재구성 없이 바로 읽기 위한 계측.
+    funnel: Mapped[dict | None] = mapped_column(JSON)

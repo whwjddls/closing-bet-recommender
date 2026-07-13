@@ -161,3 +161,41 @@ def test_emit_caps_at_max_emit():
         max_emit=30,
     )
     assert len(res.rows) == 30
+
+
+# ── 퍼널 계측: 빈 보드의 원인을 단계별 생존 수로 남긴다 ────────────────────
+def test_funnel_counts_survivors_at_each_stage():
+    # 3종목: A=정상발행, B=돌파미달(s_신=0), C=공시veto
+    cands = [_cand("A", market="KOSPI", high_60=100.0, high_252=100.0),
+             _cand("B", market="KOSPI", high_60=100.0, high_252=100.0),
+             _cand("C", market="KOSPI", high_60=100.0, high_252=100.0)]
+    quotes = {"A": _quote(p_now=100.0), "B": _quote(p_now=50.0),   # B: near=0.5 → s_신=0
+              "C": _quote(p_now=100.0)}
+    res = run_pipeline(cands, lambda ts: quotes, {"KOSPI": 1.0},
+                       {t: None for t in "ABC"},
+                       {"A": 1, "B": 1, "C": 0})                   # C: veto 차단
+    f = res.funnel
+    assert f.candidates == 3 and f.static_ok == 3 and f.quotes == 3
+    assert f.dynamic_ok == 3
+    assert f.shin_zero == 1                                        # B
+    assert f.veto_blocked == 1                                     # C
+    assert f.regime_zero == 0
+    assert f.emitted == 1 and f.published == 1                     # A만 발행
+    assert [r.ticker for r in res.rows] == ["A"]
+
+
+def test_funnel_marks_risk_off_when_regime_zero_kills_all():
+    cands = [_cand("A", market="KOSPI", high_60=100.0, high_252=100.0)]
+    res = run_pipeline(cands, lambda ts: {"A": _quote(p_now=100.0)},
+                       {"KOSPI": 0.0},                             # 리스크오프
+                       {"A": None}, {"A": 1})
+    assert res.reason == "RISK_OFF" and res.rows == []
+    assert res.funnel.regime_zero == 1 and res.funnel.emitted == 0
+    assert res.funnel.shin_zero == 0                               # 돌파는 정상 — 시장이 죽인 것
+
+
+def test_funnel_records_static_hygiene_wipeout():
+    cands = [_cand("A", market="KOSPI", avg_value_20d=1.0)]                        # 유동성 바닥 미달
+    res = run_pipeline(cands, lambda ts: {}, {"KOSPI": 1.0}, {}, {})
+    assert res.reason == "EMPTY_UNIVERSE"
+    assert res.funnel.candidates == 1 and res.funnel.static_ok == 0
