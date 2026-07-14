@@ -178,6 +178,17 @@ def _tray_image():
     return image
 
 
+def _existing_instance_alive() -> bool:
+    """이미 떠 있는 인스턴스 감지 — :8010 /api/health 응답 여부."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"{LOCAL_URL}/api/health", timeout=2) as resp:
+            return resp.status == 200
+    except Exception:                               # noqa: BLE001  (미기동 = 정상 경로)
+        return False
+
+
 def _status_text(scheduler, tunnel: Tunnel) -> str:
     from app.scheduler.service import next_run_times
 
@@ -205,6 +216,13 @@ def main() -> int:
     settings = get_settings()
     settings.state_dir.mkdir(parents=True, exist_ok=True)
     _setup_logging(settings.state_dir)
+
+    # 단일 인스턴스 — 이미 떠 있으면 보드만 열고 빠진다. 이 가드가 없으면 두 번째
+    # 실행은 포트 충돌로 ~20초 뒤 소리 없이 죽어 '실행했는데 아무 일도 없음'이 된다.
+    if _existing_instance_alive():
+        logger.info("이미 실행 중인 인스턴스 감지 — 보드만 열고 종료")
+        webbrowser.open(LOCAL_URL)
+        return 0
 
     from app.store.db import init_db
 

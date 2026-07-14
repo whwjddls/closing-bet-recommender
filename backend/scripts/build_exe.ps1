@@ -24,6 +24,14 @@ if (-not (Test-Path (Join-Path $dist "index.html"))) {
     throw "프론트 dist 없음: $dist  (npm run build 먼저)"
 }
 
+# 실행 중인 EXE 는 파일 잠금 때문에 덮어쓸 수 없다 — 먼저 내린다.
+$running = Get-Process ClosingBet -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host "실행 중인 ClosingBet 종료(빌드를 위해)..." -ForegroundColor Yellow
+    $running | Stop-Process -Force
+    Start-Sleep -Seconds 2
+}
+
 # 2) PyInstaller — dist 를 frontend_dist 로 번들(app/desktop.py 가 _MEIPASS 에서 찾는다)
 Write-Host "[2/2] EXE 빌드... (수 분 걸립니다)" -ForegroundColor Yellow
 Push-Location $backend
