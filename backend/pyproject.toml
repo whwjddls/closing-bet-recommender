@@ -2,10 +2,10 @@
 name = "closing-bet-recommender-backend"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = ["fastapi", "uvicorn", "pykrx", "pandas", "requests", "sqlalchemy>=2.0", "pydantic>=2", "numpy", "plyer", "python-dotenv"]
+dependencies = ["fastapi", "uvicorn", "pykrx", "pandas", "requests", "sqlalchemy>=2.0", "pydantic>=2", "numpy", "plyer", "python-dotenv", "apscheduler", "pystray", "pillow"]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx"]
+dev = ["pytest", "httpx", "pyinstaller"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

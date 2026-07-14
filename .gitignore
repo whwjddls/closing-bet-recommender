@@ -17,3 +17,6 @@ frontend/src/**/*.js
 frontend/src/**/*.js.map
 frontend/*.tsbuildinfo
 .superpowers/
+ClosingBet.exe
+*.spec
+frontend/.env.local.bak

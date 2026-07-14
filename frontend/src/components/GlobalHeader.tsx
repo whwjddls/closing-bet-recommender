@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Moon, Sun, Timer, TriangleAlert } from 'lucide-react';
 import {
   fetchRecommendations,
@@ -94,6 +94,9 @@ function deriveVerdict(regimes: RegimeInfo[]): Verdict | null {
   return 'CAUTION';
 }
 
+// 백그라운드 스캔 완료를 감지하는 폴링 주기. DB 한 행 + count 라 비용이 거의 없다.
+const RUN_POLL_MS = 30_000;
+
 export default function GlobalHeader() {
   const [remaining, setRemaining] = useState<number>(() =>
     msUntilClose(new Date()),
@@ -101,6 +104,9 @@ export default function GlobalHeader() {
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   // 오늘 런 기록(/run/today, DB 기반). 조회 실패면 null → 칩 숨김(가짜 정보 금지).
   const [scanStatus, setScanStatus] = useState<RunTodayResponse | null>(null);
+  // 직전 폴링의 finished_at — 값이 바뀌면 스캔이 새로 끝난 것.
+  // undefined = 아직 첫 로드 전(기준점 미확보), null = 오늘 런 없음.
+  const lastFinishedRef = useRef<string | null | undefined>(undefined);
   // 현재 테마(문서엔 main.tsx initTheme에서 이미 적용됨 — 여기선 아이콘 상태만 추적).
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme());
 
@@ -129,22 +135,34 @@ export default function GlobalHeader() {
     };
   }, []);
 
-  // 스캔 상태 칩: mount 1회 + 잡 완료 이벤트(REFETCH_EVENT) 때 갱신 — 추가 폴링 없음.
+  // 스캔 상태 칩 + 자동 갱신 폴링.
+  // 스캔은 백그라운드 스케줄러(별도 실행 경로)가 돌리므로 UI 는 완료를 통보받을 방법이
+  // 없다 — /run/today 를 주기 폴링해 finished_at 이 바뀌면 보드 재조회를 브로드캐스트한다.
+  // (이게 없으면 15:20에 스캔이 끝나도 화면이 그대로라 수동 새로고침이 필요하다.)
   useEffect(() => {
     let alive = true;
     const load = () => {
       fetchRunToday()
         .then((s) => {
-          if (alive) setScanStatus(s);
+          if (!alive) return;
+          setScanStatus(s);
+          const previous = lastFinishedRef.current;
+          lastFinishedRef.current = s.finished_at;
+          // 첫 로드는 기준점만 잡는다(마운트마다 재조회가 터지지 않게).
+          if (previous !== undefined && s.finished_at !== previous) {
+            emitRefetch();
+          }
         })
         .catch(() => {
           if (alive) setScanStatus(null);
         });
     };
     load();
+    const id = window.setInterval(load, RUN_POLL_MS);
     window.addEventListener(REFETCH_EVENT, load);
     return () => {
       alive = false;
+      window.clearInterval(id);
       window.removeEventListener(REFETCH_EVENT, load);
     };
   }, []);

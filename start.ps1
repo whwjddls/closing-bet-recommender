@@ -1,4 +1,4 @@
-# closing-bet-recommender 로컬 실행 — 백엔드 + 프론트 + (선택)폰 터널
+﻿# closing-bet-recommender 로컬 실행 — 백엔드 + 프론트 + (선택)폰 터널
 # 사용법:  우클릭 > PowerShell로 실행   또는   PowerShell에서:  .\start.ps1
 #          폰 터널까지:  .\start.ps1 -Tunnel
 param([switch]$Tunnel)

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import GlobalHeader from './GlobalHeader';
 import * as api from '../api/client';
 import { kstToday } from '../lib/date';
+import { REFETCH_EVENT } from '../lib/events';
 
 vi.mock('../api/client', () => ({
   fetchRecommendations: vi.fn(() =>
@@ -174,3 +175,75 @@ describe('GlobalHeader', () => {
     });
   });
 });
+
+// 스캔은 백그라운드 스케줄러가 돌리므로 UI 는 완료를 통보받을 수 없다 → 폴링으로 감지.
+describe('백그라운드 스캔 자동 감지(폴링)', () => {
+  it('finished_at 이 바뀌면 보드 재조회 이벤트를 브로드캐스트한다', async () => {
+    vi.mocked(api.fetchRunToday)
+      .mockResolvedValueOnce({
+        ran: false,
+        status: null,
+        board_published: false,
+        finished_at: null,
+        reason: null,
+        published_count: 0,
+        funnel: null,
+      })
+      .mockResolvedValue({
+        ran: true,
+        status: 'OK',
+        board_published: true,
+        finished_at: `${kstToday()}T15:23:00+09:00`,
+        reason: 'OK',
+        published_count: 12,
+        funnel: null,
+      });
+
+    const refetch = vi.fn();
+    window.addEventListener(REFETCH_EVENT, refetch);
+    vi.useFakeTimers();
+    render(<GlobalHeader />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(refetch).not.toHaveBeenCalled(); // 첫 로드는 기준점만 잡는다
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000); // 다음 폴링 → 스캔 완료 감지
+      await Promise.resolve();
+    });
+    expect(refetch).toHaveBeenCalled();
+
+    vi.useRealTimers();
+    window.removeEventListener(REFETCH_EVENT, refetch);
+  });
+
+  it('변화가 없으면 재조회를 쏘지 않는다(무한 루프 방지)', async () => {
+    vi.mocked(api.fetchRunToday).mockResolvedValue({
+      ran: true,
+      status: 'OK',
+      board_published: true,
+      finished_at: `${kstToday()}T15:23:00+09:00`,
+      reason: 'OK',
+      published_count: 12,
+      funnel: null,
+    });
+
+    const refetch = vi.fn();
+    window.addEventListener(REFETCH_EVENT, refetch);
+    vi.useFakeTimers();
+    render(<GlobalHeader />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(90_000); // 3회 폴링 — 값 동일
+      await Promise.resolve();
+    });
+    expect(refetch).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+    window.removeEventListener(REFETCH_EVENT, refetch);
+  });
+});
+

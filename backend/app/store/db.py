@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
@@ -15,6 +15,23 @@ ENGINE_URL = f"sqlite:///{_DB_PATH.as_posix()}"
 engine = create_engine(ENGINE_URL, future=True)
 SessionLocal = sessionmaker(
     bind=engine, autoflush=False, expire_on_commit=False, future=True)
+
+BUSY_TIMEOUT_MS = 5000
+
+
+@event.listens_for(engine, "connect")
+def _sqlite_concurrency_pragmas(dbapi_connection, _record) -> None:
+    """WAL + busy_timeout — 스캔(쓰기)과 UI 조회(읽기)가 동시에 일어난다.
+
+    기본 저널 모드에서는 쓰기 트랜잭션이 읽기를 막아 UI 가 'database is locked' 로
+    깨질 수 있다. WAL 은 읽기와 쓰기를 동시에 허용한다(스케줄러 잡이 도는 동안에도
+    보드가 열려야 한다)."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+    finally:
+        cursor.close()
 
 
 def get_db() -> Iterator[Session]:

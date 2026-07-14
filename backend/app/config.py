@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+
+def _app_root() -> Path:
+    """.env·state 의 기준 디렉터리.
+
+    PyInstaller onefile 로 얼리면 ``__file__`` 이 **임시 추출 폴더**(_MEIPASS)를 가리켜,
+    그대로 두면 .env 를 못 찾고 DB 가 매 실행마다 임시폴더에 새로 생겼다가 사라진다.
+    얼린 경우엔 EXE 위치를 기준으로 삼되, 레포 안에 둔 EXE(개발 레이아웃)는 옆의
+    ``backend/`` 를 그대로 쓰게 해 기존 .env·DB 를 이어받는다."""
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        sibling_backend = exe_dir / "backend"
+        return sibling_backend if (sibling_backend / ".env").exists() else exe_dir
+    return Path(__file__).resolve().parent.parent
+
+
+_BACKEND_ROOT = _app_root()
 ENV_PATH = _BACKEND_ROOT / ".env"
 
 

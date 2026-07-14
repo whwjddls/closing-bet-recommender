@@ -1,4 +1,4 @@
-# 종가베팅 추천 시스템 — Windows 작업스케줄러 3잡 등록
+﻿# 종가베팅 추천 시스템 — Windows 작업스케줄러 3잡 등록
 # 사용:  .\register_tasks.ps1              (기본: backend\.venv 파이썬 사용)
 #        .\register_tasks.ps1 -PythonExe "C:\Python314\python.exe"
 param(
