@@ -121,24 +121,78 @@ def test_get_quote_limit_up_and_halted_flags(fake_clock):
     assert q.is_vi is True          # 상한가 → 과열 폴백
 
 
+# 분봉 TR(FHKST03010200) 실측 계약(2026-07-17 실호출로 확인):
+# - FID_PW_DATA_INCU_YN 누락 시 rt_cd='2' 반려(ERROR INPUT FIELD NOT FOUND)
+# - 호출당 최대 30봉 → 09:00–10:00 전체는 HOUR_1=093000/100000 2회 필요
+# - 날짜 파라미터 없음(당일 전용) — 휴장일엔 직전 세션 봉이 stck_bsop_date 에 그대로 옴
+def _minute_bar(bsop_date, hhmmss, price, vol):
+    return {"stck_bsop_date": bsop_date, "stck_cntg_hour": hhmmss,
+            "stck_prpr": price, "cntg_vol": vol}
+
+
 def test_fetch_morning_vwap_filters_0900_1000_and_weights(fake_clock):
     t = RecordingTransport()
     t.token_responses = [_token()]
-    t.tr_responses["FHKST03010200"] = [{"output2": [
-        {"stck_cntg_hour": "090100", "stck_prpr": "100", "cntg_vol": "10"},
-        {"stck_cntg_hour": "095900", "stck_prpr": "110", "cntg_vol": "30"},
-        {"stck_cntg_hour": "101500", "stck_prpr": "999", "cntg_vol": "100"},  # 윈도우 밖
-    ]}]
+    t.tr_responses["FHKST03010200"] = [
+        {"rt_cd": "0", "output2": [
+            _minute_bar("20260701", "090100", "100", "10"),
+            _minute_bar("20260701", "085900", "999", "100"),   # 윈도우 밖(개장 전)
+        ]},
+        {"rt_cd": "0", "output2": [
+            _minute_bar("20260701", "095900", "110", "30"),
+            _minute_bar("20260701", "101500", "999", "100"),   # 윈도우 밖
+        ]},
+    ]
     vwap = _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
-    assert t.calls[-1]["headers"]["tr_id"] == "FHKST03010200"
-    # (100*10 + 110*30)/40 = 4300/40 = 107.5
+    # (100*10 + 110*30)/40 = 4300/40 = 107.5 — 두 윈도우 봉이 모두 합산돼야 한다
     assert vwap == pytest.approx(107.5)
+
+
+def test_fetch_morning_vwap_requests_both_windows_with_required_field(fake_clock):
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST03010200"] = [
+        {"rt_cd": "0", "output2": [_minute_bar("20260701", "091000", "100", "10")]},
+        {"rt_cd": "0", "output2": [_minute_bar("20260701", "094000", "100", "10")]},
+    ]
+    _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
+    minute_calls = [c for c in t.calls if c["headers"].get("tr_id") == "FHKST03010200"]
+    assert len(minute_calls) == 2                       # 30봉 한계 → 반쪽 창 2회
+    hours = {c["params"]["FID_INPUT_HOUR_1"] for c in minute_calls}
+    assert hours == {"093000", "100000"}
+    assert all(c["params"]["FID_PW_DATA_INCU_YN"] == "Y" for c in minute_calls)
+
+
+def test_fetch_morning_vwap_drops_stale_session_bars(fake_clock):
+    # 실측(2026-07-17 제헌절): 휴장일 호출 → 전 봉이 stck_bsop_date=20260716.
+    # 대상일 봉이 아니면 버려야 한다 — 직전 세션으로 채점하는 룩어헤드 오염 방지.
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST03010200"] = [
+        {"rt_cd": "0", "output2": [_minute_bar("20260716", "093000", "692000", "500")]},
+        {"rt_cd": "0", "output2": [_minute_bar("20260716", "100000", "692000", "500")]},
+    ]
+    vwap = _client(t, fake_clock).fetch_morning_vwap("000810", dt.date(2026, 7, 17))
+    assert vwap is None
+
+
+def test_fetch_morning_vwap_raises_on_error_rt_cd(fake_clock):
+    # 실측: 필수 필드 누락 시 rt_cd='2' — 조용한 None 은 NA 영구 잠금으로 이어졌다.
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST03010200"] = [
+        {"rt_cd": "2", "msg1": "ERROR INPUT FIELD NOT FOUND [FID_PW_DATA_INCU_YN]",
+         "output2": []},
+    ]
+    with pytest.raises(RuntimeError, match="FID_PW_DATA_INCU_YN"):
+        _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
 
 
 def test_fetch_morning_vwap_returns_none_when_empty(fake_clock):
     t = RecordingTransport()
     t.token_responses = [_token()]
-    t.tr_responses["FHKST03010200"] = [{"output2": []}]
+    t.tr_responses["FHKST03010200"] = [{"rt_cd": "0", "output2": []},
+                                       {"rt_cd": "0", "output2": []}]
     vwap = _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
     assert vwap is None
 
@@ -147,13 +201,16 @@ def test_value_ranking_tr_id_and_parsing(fake_clock):
     t = RecordingTransport()
     t.token_responses = [_token()]
     t.tr_responses["FHPST01710000"] = [{"output": [
-        {"mksc_shrn_iscd": "000660", "acml_tr_pbmn": "1000", "data_rank": "1"},
-        {"mksc_shrn_iscd": "005930", "acml_tr_pbmn": "900", "data_rank": "2"}]}]
+        {"mksc_shrn_iscd": "000660", "hts_kor_isnm": "SK하이닉스",
+         "acml_tr_pbmn": "1000", "data_rank": "1"},
+        {"mksc_shrn_iscd": "005930", "hts_kor_isnm": "삼성전자",
+         "acml_tr_pbmn": "900", "data_rank": "2"}]}]
     entries = _client(t, fake_clock).get_value_ranking(Market.KOSPI)
     assert t.calls[-1]["headers"]["tr_id"] == "FHPST01710000"
     assert entries[0].ticker == "000660"
     assert entries[0].value == 1000.0
     assert entries[0].rank == 1
+    assert entries[0].name == "SK하이닉스"    # 종목명 — 코드만 표기되는 UX 결함 방지
 
 
 def test_index_level_tr_id_and_parsing(fake_clock):

@@ -218,6 +218,57 @@ def test_orchestrate_final_hygiene_excludes_ineligible_and_reranks():
     assert [r.rank for r in res.recommendations] == list(range(1, len(res.recommendations) + 1))
 
 
+class CodeNamedAdapter(FakeAdapter):
+    """프리페치 경로 증상 재현 — 후보 name 이 티커 그대로(이름원 없음)."""
+
+    def build_candidates(self, run_date, snapshot_at):
+        from dataclasses import replace
+
+        return [replace(_cand("005930", "KOSPI"), name="005930")]
+
+
+class NamesStore(DictStore):
+    """universe_cache 종목명 맵(load_names)을 노출하는 store 페이크."""
+
+    def load_names(self, run_date):
+        return {"005930": "삼성전자"}
+
+
+def test_orchestrate_overlays_universe_names_for_code_named_candidates():
+    """name==ticker 후보는 store 의 universe_cache 이름으로 오버레이돼야 한다 —
+    보드/리마인더/텔레그램에 종목명 대신 코드가 찍히는 UX 결함 방지."""
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=CodeNamedAdapter(), store=NamesStore(),
+                          run_pipeline_fn=fake_run_pipeline)
+    by = {r.ticker: r for r in res.recommendations}
+    assert by["005930"].name == "삼성전자"
+
+
+def test_orchestrator_store_load_names_latest_as_of_not_after_run_date():
+    """실 OrchestratorStore.load_names — run_date 이하 최신 as_of 의 이름 맵.
+    빈 이름/티커와 동일한 이름은 제외(오버레이 무의미)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.store.models import Base, UniverseCache
+    from app.store.orchestrator_store import OrchestratorStore
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    with Session() as db:
+        db.add(UniverseCache(ticker="005930", as_of=date(2026, 6, 29), name="삼성전자(옛)"))
+        db.add(UniverseCache(ticker="005930", as_of=date(2026, 6, 30), name="삼성전자"))
+        db.add(UniverseCache(ticker="000660", as_of=date(2026, 6, 30), name="000660"))
+        db.add(UniverseCache(ticker="035720", as_of=date(2026, 7, 2), name="카카오"))  # 미래 as_of
+        db.commit()
+
+    with Session() as db:
+        names = OrchestratorStore(db).load_names(date(2026, 7, 1))
+    assert names == {"005930": "삼성전자"}
+
+
 def test_orchestrate_uses_real_orchestrator_store_prefetch_end_to_end():
     """운영 seam: 실 OrchestratorStore.load_prefetch(final_cache)로 DB 영속화된 FINAL
     번들이 orchestrate_run 후보에 반영되어야 한다(load_prefetch 미소비 회귀 방지)."""

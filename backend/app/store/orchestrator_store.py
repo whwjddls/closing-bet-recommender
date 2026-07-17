@@ -55,3 +55,20 @@ class OrchestratorStore:
         from app.store import final_cache
 
         return final_cache.load_prefetch(self._db, run_date)
+
+    def load_names(self, run_date: date) -> dict[str, str]:
+        """run_date 이하 최신 as_of 의 universe_cache 종목명 맵(ticker→name).
+
+        프리페치 경로 후보는 이름원이 없어 name 이 티커로 남는다 — orchestrate_run 이
+        이 맵으로 오버레이한다. 빈 이름/티커와 동일한 이름은 제외."""
+        from sqlalchemy import func
+
+        from app.store.models import UniverseCache
+
+        latest = self._db.scalar(select(func.max(UniverseCache.as_of))
+                                 .where(UniverseCache.as_of <= run_date))
+        if latest is None:
+            return {}
+        rows = self._db.scalars(
+            select(UniverseCache).where(UniverseCache.as_of == latest)).all()
+        return {r.ticker: r.name for r in rows if r.name and r.name != r.ticker}

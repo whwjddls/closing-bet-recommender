@@ -131,6 +131,16 @@ def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
         prefetch = load_prefetch(run_date) or {}
     # ① 후보풀 = 실 StaticCandidate 리스트 (캐시 유니버스 ∪ 라이브 톱30×2)
     candidates = list(_build_candidates(adapter, run_date, snapshot_at, prefetch))
+    # ①''' 이름원이 없어 name==ticker 로 남은 후보는 universe_cache 이름으로 오버레이
+    # (프리페치 경로 후보 — 코드만 표기되는 보드/알림 UX 결함 방지)
+    load_names = getattr(store, "load_names", None)
+    if load_names is not None:
+        names = load_names(run_date) or {}
+        if names:
+            candidates = [
+                replace(c, name=names[c.ticker])
+                if c.name == c.ticker and c.ticker in names else c
+                for c in candidates]
     # ①'' 캐시값을 후보에 오버레이(라이브 폴백으로 구성된 종목의 FINAL 지표 대체·정합)
     if prefetch:
         candidates = [

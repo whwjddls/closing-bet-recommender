@@ -162,6 +162,29 @@ def test_build_candidates_queries_supply_on_last_trading_day_not_calendar_d1():
     assert adapter._pykrx.net_calls == [("20260710", "20260710")]   # 일요일(20260712) 아님
 
 
+def test_build_candidates_carries_live_ranking_names():
+    # 랭킹 응답의 종목명을 후보에 실어야 보드/알림이 코드 대신 이름을 보여준다.
+    # 랭킹 밖 캐시 종목은 이름원이 없어 티커 유지 — 오케스트레이터가 universe_cache 로 오버레이.
+    from datetime import date, datetime
+    from types import SimpleNamespace
+
+    adapter = _adapter()
+    adapter._kis.get_value_ranking = lambda m: (
+        [ValueRankEntry("000660", 1e11, 1, name="SK하이닉스")]
+        if m == Market.KOSPI else [])
+    prefetch = {
+        "000660": SimpleNamespace(h_ref_252=24000.0, h_ref_60=23500.0, atr20=300.0,
+                                  avg_value_20d=5e10, d1_supply_value=8e9, market="KOSPI"),
+        "035720": SimpleNamespace(h_ref_252=98000.0, h_ref_60=95000.0, atr20=1500.0,
+                                  avg_value_20d=3e10, d1_supply_value=1e9, market="KOSDAQ"),
+    }
+    cands = adapter.build_candidates(
+        date(2026, 6, 30), datetime(2026, 6, 30, 15, 20), prefetch=prefetch)
+    by = {c.ticker: c for c in cands}
+    assert by["000660"].name == "SK하이닉스"
+    assert by["035720"].name == "035720"
+
+
 def test_build_candidates_falls_back_to_ohlcv_without_prefetch():
     import pandas as pd
     from datetime import date, datetime

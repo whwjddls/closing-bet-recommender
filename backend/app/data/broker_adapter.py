@@ -26,6 +26,7 @@ class ValueRankEntry:
     ticker: str
     value: float
     rank: int
+    name: str = ""              # 랭킹 응답 종목명 — 비면 후보 name 이 티커로 남는다
 
 
 @dataclass(slots=True)
@@ -83,7 +84,8 @@ PREFETCH_LISTING_DAYS = 250
 
 def _candidate_from_prefetch(ticker: str, row, live_market: str | None,
                              live_d1_value: float | None,
-                             net: "Mapping[str, float]") -> "StaticCandidate":
+                             net: "Mapping[str, float]",
+                             name: str | None = None) -> "StaticCandidate":
     """FINAL 캐시 행(FinalPrefetch)으로 StaticCandidate 구성(OHLCV 재조회 없음).
 
     캐시에 없는 필드(recent_closes 등)는 안전한 기본값을 쓴다. market 은 라이브 랭킹 →
@@ -100,7 +102,7 @@ def _candidate_from_prefetch(ticker: str, row, live_market: str | None,
     market = live_market or getattr(row, "market", None) or Market.KOSPI.value
     d1_value = live_d1_value if live_d1_value is not None else avg_value_20d
     return StaticCandidate(
-        ticker=ticker, name=ticker, market=market, sec_type="COMMON",
+        ticker=ticker, name=name or ticker, market=market, sec_type="COMMON",
         avg_value_20d=float(avg_value_20d), is_managed=False, is_warning=False,
         is_caution=False, listing_days=PREFETCH_LISTING_DAYS,
         high_60=float(high_60) if high_60 is not None else 0.0,
@@ -274,6 +276,7 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
 
         market_of: dict[str, str] = {}
         d1_value_of: dict[str, float] = {}
+        name_of: dict[str, str] = {}
         pool: list[str] = []
         for market in (Market.KOSPI, Market.KOSDAQ):
             for entry in self.get_value_ranking(market)[:live_top]:
@@ -281,6 +284,8 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
                     continue
                 market_of[entry.ticker] = market.value
                 d1_value_of[entry.ticker] = float(entry.value)
+                if getattr(entry, "name", ""):
+                    name_of[entry.ticker] = entry.name
                 pool.append(entry.ticker)
         for ticker in prefetch:                                  # 캐시 유니버스 union(라이브 밖 종목 포함)
             if ticker not in market_of:
@@ -291,7 +296,8 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
             row = prefetch.get(ticker)
             if row is not None:                                 # 캐시 종목 — OHLCV 재조회 금지
                 candidates.append(_candidate_from_prefetch(
-                    ticker, row, market_of.get(ticker), d1_value_of.get(ticker), net))
+                    ticker, row, market_of.get(ticker), d1_value_of.get(ticker), net,
+                    name=name_of.get(ticker)))
                 continue
             df = self.get_ohlcv(ticker, frm_s, d1_s)            # 라이브-only 폴백
             if df is None or len(df) == 0:
@@ -307,7 +313,8 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
             d1_value = d1_value_of.get(ticker) or (
                 float(df[COL_VALUE].iloc[-1]) if COL_VALUE in df else 0.0)
             candidates.append(StaticCandidate(
-                ticker=ticker, name=ticker, market=market_of[ticker], sec_type="COMMON",
+                ticker=ticker, name=name_of.get(ticker) or ticker,
+                market=market_of[ticker], sec_type="COMMON",
                 avg_value_20d=avg_value_20d, is_managed=False, is_warning=False,
                 is_caution=False, listing_days=len(df), high_60=high_60, high_252=high_252,
                 prev_high=high_60, atr20=atr20, d1_supply_value=float(net.get(ticker, 0.0)),

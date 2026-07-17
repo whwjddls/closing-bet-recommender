@@ -201,7 +201,8 @@ class KisClient:
             entries.append(ValueRankEntry(
                 ticker=normalize_ticker(row.get("mksc_shrn_iscd", "0")),
                 value=float(row.get("acml_tr_pbmn", 0) or 0),
-                rank=int(float(row.get("data_rank", 0) or 0))))
+                rank=int(float(row.get("data_rank", 0) or 0)),
+                name=str(_first(row, ("hts_kor_isnm", "prdt_name"), "") or "")))
         return entries
 
     def get_index_level(self, market: Market) -> IndexLevel:
@@ -213,26 +214,44 @@ class KisClient:
         out = resp.get("output", {})
         return IndexLevel(market, float(out.get("bstp_nmix_prpr", 0) or 0))
 
+    # 분봉 TR 은 호출당 최대 30봉 — 09:00–10:00 전체는 반쪽 창 2회로 나눠 받는다.
+    _MORNING_WINDOW_ENDS = ("093000", "100000")
+
     def fetch_morning_vwap(self, ticker: str, d: date) -> float | None:
-        """익일 09:00–10:00 VWAP(분봉, TR FHKST03010200). 거래 결측 시 None."""
+        """익일 09:00–10:00 VWAP(분봉, TR FHKST03010200). 거래 결측 시 None.
+
+        이 TR 은 당일 전용(날짜 파라미터 없음)이라 휴장일엔 직전 세션 봉이 오므로,
+        ``stck_bsop_date != d`` 봉은 버린다 — 전 세션 데이터로 채점하는 룩어헤드 오염 방지.
+        API 반려(rt_cd != 0)는 조용한 None 대신 예외 — None 은 NA 채점으로 영구
+        고착되지만 예외는 배치 중단 후 재시도가 가능하다.
+        """
         ticker = normalize_ticker(ticker)
-        resp = self._tr_request(
-            TR_MINUTE,
-            "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
-            {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker,
-             "FID_INPUT_DATE_1": d.strftime("%Y%m%d"),
-             "FID_INPUT_HOUR_1": "100000"})
-        rows = resp.get("output2") or resp.get("output") or []
+        target = d.strftime("%Y%m%d")
         num = 0.0
         den = 0.0
-        for row in rows:
-            hhmmss = str(row.get("stck_cntg_hour", "000000"))
-            if not ("090000" <= hhmmss <= "100000"):      # 09:00–10:00 윈도우만
-                continue
-            price = float(row.get("stck_prpr", 0) or 0)
-            vol = float(row.get("cntg_vol", 0) or 0)
-            num += price * vol
-            den += vol
+        for window_end in self._MORNING_WINDOW_ENDS:
+            resp = self._tr_request(
+                TR_MINUTE,
+                "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+                {"FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": "J",
+                 "FID_INPUT_ISCD": ticker, "FID_INPUT_HOUR_1": window_end,
+                 "FID_PW_DATA_INCU_YN": "Y"})
+            rt_cd = str(resp.get("rt_cd", "0"))
+            if rt_cd != "0":
+                raise RuntimeError(
+                    f"분봉 TR 반려(rt_cd={rt_cd}): {resp.get('msg1', '')} "
+                    f"— ticker={ticker} window={window_end}")
+            rows = resp.get("output2") or resp.get("output") or []
+            for row in rows:
+                if str(row.get("stck_bsop_date", "")) != target:
+                    continue                              # 직전 세션 봉(휴장일 등) 제외
+                hhmmss = str(row.get("stck_cntg_hour", "000000"))
+                if not ("090000" <= hhmmss <= "100000"):  # 09:00–10:00 윈도우만
+                    continue
+                price = float(row.get("stck_prpr", 0) or 0)
+                vol = float(row.get("cntg_vol", 0) or 0)
+                num += price * vol
+                den += vol
         if den == 0:
             return None                                   # 거래 결측 → None
         return num / den
