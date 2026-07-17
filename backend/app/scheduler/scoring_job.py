@@ -51,8 +51,10 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
     with session_factory() as db:
         recs = db.scalars(select(Recommendation).where(Recommendation.run_date == run_date)).all()
         for rec in recs:
-            if db.scalar(select(Performance).where(Performance.rec_id == rec.id)):
-                continue   # 멱등: 이미 채점됨
+            existing = db.scalar(select(Performance).where(Performance.rec_id == rec.id))
+            if existing is not None and existing.outcome != "NA":
+                continue   # 멱등: 정상 채점(SUCCESS/FAIL) 완료분만 — NA 는 채점 실패이므로
+                           # 재채점 허용(일시 장애가 영구 유실로 고착되는 것 방지)
 
             try:
                 close_t = fetch_confirmed_close(rec.ticker, run_date)  # close[t] (확정)
@@ -74,9 +76,18 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
             flag = overnight_scan(rec.ticker,
                                   datetime.combine(run_date, time(15, 20)),
                                   datetime.combine(eval_date, time(9, 0)))
-            db.add(Performance(rec_id=rec.id, eval_date=eval_date, buy_price_final=close_t,
-                               vwap_0900_1000=vwap, morning_return=ret, outcome=outcome,
-                               dart_overnight_flag=flag, scored_at=datetime.now()))
+            if existing is not None:                 # NA 재채점 — 제자리 갱신
+                existing.eval_date = eval_date
+                existing.buy_price_final = close_t
+                existing.vwap_0900_1000 = vwap
+                existing.morning_return = ret
+                existing.outcome = outcome
+                existing.dart_overnight_flag = flag
+                existing.scored_at = datetime.now()
+            else:
+                db.add(Performance(rec_id=rec.id, eval_date=eval_date, buy_price_final=close_t,
+                                   vwap_0900_1000=vwap, morning_return=ret, outcome=outcome,
+                                   dart_overnight_flag=flag, scored_at=datetime.now()))
             scored += 1
         db.commit()
     logger.info("scored %d picks for run_date=%s eval_date=%s", scored, run_date, eval_date)

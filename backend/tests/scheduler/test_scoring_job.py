@@ -115,3 +115,27 @@ def test_scoring_is_idempotent(session_factory):
     scoring_job.run_scoring(date(2026, 6, 30), **kw)   # 재실행
     with session_factory() as db:
         assert len(db.scalars(select(Performance)).all()) == 1   # 중복 채점 금지
+
+
+def test_scoring_rescores_na_rows_in_place(session_factory):
+    # 2026-07-17 사고: VWAP 장애로 전 픽이 NA 로 찍힌 뒤 멱등 가드에 영구 잠김.
+    # NA 는 '채점 실패'지 '채점 완료'가 아니다 — 다음 런이 제자리 갱신해야 한다.
+    with session_factory() as db:
+        _rec(db, 1, "AAA")
+        db.add(Performance(rec_id=1, eval_date=date(2026, 7, 17), buy_price_final=10.0,
+                           vwap_0900_1000=None, morning_return=None, outcome="NA",
+                           dart_overnight_flag=False, scored_at=datetime.now()))
+        db.commit()
+    scored = scoring_job.run_scoring(
+        date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
+        fetch_confirmed_close=lambda t, d: 10.0,
+        fetch_morning_vwap=lambda t, d: 10.6,
+        overnight_scan=lambda t, s, u: False,
+    )
+    assert scored == 1
+    with session_factory() as db:
+        perfs = db.scalars(select(Performance).where(Performance.rec_id == 1)).all()
+        assert len(perfs) == 1                        # 새 행 추가가 아니라 제자리 갱신
+        assert perfs[0].outcome == "SUCCESS"
+        assert perfs[0].eval_date == date(2026, 6, 30)   # 잘못 박힌 휴장일 eval 도 교정
+        assert perfs[0].morning_return == pytest.approx(0.06)

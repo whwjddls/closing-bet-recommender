@@ -190,3 +190,21 @@ def test_premarket_skips_non_trading_day(session_factory):
         prefetch_final=lambda d: None, session_factory=session_factory, notify=lambda t, m: None,
     )
     assert rc is None
+
+
+def test_premarket_refreshes_holidays_before_trading_day_check(monkeypatch):
+    # 달력 미주입(운영 경로)이면 거래일 판정 **전에** 휴일 표부터 갱신해야 한다 —
+    # 갱신 없이는 오늘이 휴장인지조차 모른다(2026-07-17 제헌절 사고 회귀).
+    calls = []
+    monkeypatch.setattr(premarket, "refresh_holidays_file",
+                        lambda: calls.append("refreshed"))
+    monkeypatch.setattr(premarket, "load_default_calendar",
+                        lambda: TradingCalendar(holidays={date(2026, 7, 17)},
+                                                early_close={}))
+    rc = premarket.run_premarket(
+        date(2026, 7, 17),
+        health_check=lambda: (_ for _ in ()).throw(AssertionError("health 호출 금지")),
+        prefetch_final=lambda d: None, session_factory=None, notify=lambda t, m: None,
+    )
+    assert calls == ["refreshed"]     # 갱신이 먼저
+    assert rc is None                 # 갱신된 표로 휴장 판정 → 스킵

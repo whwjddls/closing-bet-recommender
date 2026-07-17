@@ -14,7 +14,8 @@ import logging
 from datetime import date, datetime, timedelta
 
 from app.config import load_env
-from app.scheduler.calendar import TradingCalendar, load_default_calendar
+from app.scheduler.calendar import (TradingCalendar, load_default_calendar,
+                                    refresh_holidays_file)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,9 @@ def run_premarket(run_date: date | None = None, *, calendar: TradingCalendar | N
     하지 않고 ``None`` 을 반환한다. 콜라보레이터 미주입 시 실제 모듈을 지연
     바인딩한다(테스트는 모두 주입).
     """
-    calendar = calendar or load_default_calendar()
+    if calendar is None:                # 운영 경로 — 거래일 판정 전에 휴일 표부터 갱신
+        refresh_holidays_file()         # (갱신 없이는 오늘이 휴장인지조차 모른다)
+        calendar = load_default_calendar()
     run_date = run_date or datetime.now().date()
     if not calendar.is_trading_day(run_date):
         logger.info("non-trading day %s, premarket skip", run_date)

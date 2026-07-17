@@ -1,6 +1,8 @@
+import json
 from datetime import date, datetime, time
 
-from app.scheduler.calendar import REGULAR_CLOSE, SNAPSHOT_OFFSET, TradingCalendar
+from app.scheduler.calendar import (REGULAR_CLOSE, SNAPSHOT_OFFSET, TradingCalendar,
+                                    load_default_calendar, refresh_holidays_file)
 
 # 2026-06-30(화) 정상, 2026-07-01(수) 휴장 가정, 2026-09-29(화) 조기폐장 14:00(반일),
 # 2026-11-19(목) 수능일=지연개장이지만 마감 15:30 유지(특수 아님)
@@ -53,3 +55,53 @@ def test_next_and_prev_trading_day_skip_holiday_and_weekend():
     # 2026-07-02(목) → prev = 06-30(화)
     assert cal.prev_trading_day(date(2026, 7, 2)) == date(2026, 6, 30)
     assert SNAPSHOT_OFFSET == __import__("datetime").timedelta(minutes=10)
+
+
+# ── 운영 휴일 표(holidays.json) — 2026-07-17 제헌절 사고의 근본 원인 회귀 ──
+# 빈 표 운영 달력은 모든 공휴일을 거래일로 판정 → 휴장일에 스캔·채점이 돌았다.
+
+def _write_holidays(path, dates):
+    path.write_text(json.dumps({"holidays": dates}), encoding="utf-8")
+
+
+def test_load_default_calendar_reads_holidays_file(tmp_path):
+    path = tmp_path / "holidays.json"
+    _write_holidays(path, ["2026-07-17"])
+    cal = load_default_calendar(holidays_path=path)
+    assert cal.is_trading_day(date(2026, 7, 17)) is False           # 제헌절
+    # 월요일 채점의 역매핑이 금요일 휴장을 건너뛰어 목요일 픽을 찾아야 한다
+    assert cal.prev_trading_day(date(2026, 7, 20)) == date(2026, 7, 16)
+
+
+def test_load_default_calendar_tolerates_missing_or_corrupt_file(tmp_path):
+    cal = load_default_calendar(holidays_path=tmp_path / "missing.json")
+    assert cal.is_trading_day(date(2026, 7, 17)) is True            # 결측 → 빈 표(기존 동작)
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert load_default_calendar(holidays_path=bad).is_trading_day(date(2026, 7, 17)) is True
+
+
+def test_refresh_holidays_file_merges_and_prunes(tmp_path):
+    # KIS chk-holiday 는 from_date 이후만 반환 — 과거 휴일은 union 병합으로 보존해야
+    # 월요일 prev_trading_day 가 지난 금요일 휴장을 안다. 보존창 밖 항목은 프루닝.
+    path = tmp_path / "holidays.json"
+    _write_holidays(path, ["2026-07-17", "2025-01-01"])             # 후자: 보존창 밖
+    count = refresh_holidays_file(
+        fetch_holidays=lambda frm: [date(2026, 9, 24), date(2026, 9, 25)],
+        holidays_path=path, today=date(2026, 7, 20))
+    saved = json.loads(path.read_text(encoding="utf-8"))["holidays"]
+    assert set(saved) == {"2026-07-17", "2026-09-24", "2026-09-25"}
+    assert count == 3
+
+
+def test_refresh_holidays_file_keeps_existing_on_fetch_failure(tmp_path):
+    path = tmp_path / "holidays.json"
+    _write_holidays(path, ["2026-07-17"])
+
+    def boom(frm):
+        raise ConnectionError("KIS down")
+
+    count = refresh_holidays_file(fetch_holidays=boom, holidays_path=path,
+                                  today=date(2026, 7, 20))
+    assert json.loads(path.read_text(encoding="utf-8"))["holidays"] == ["2026-07-17"]
+    assert count == 1
