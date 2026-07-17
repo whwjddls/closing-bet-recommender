@@ -8,7 +8,7 @@ import {
 import { cachedFetch } from '../lib/dataCache';
 
 // 전략의 나머지 절반 — 매수만큼 청산도 규칙. 어제 픽들의 익일 오전 매도 관리 뷰.
-// morning_vwap 이 null 이면 KIS 분봉 미연동으로 청산 기준을 아직 추정 못함(정직 표기).
+// morning_vwap 이 null 이면 아직 미채점(다음 거래일 10:05 채점 잡이 채움) — 정직 표기.
 
 type OutcomeTone = 'success' | 'fail' | 'na';
 
@@ -143,9 +143,9 @@ export default function ReminderWidget() {
                   <span
                     className="rmd-vwap-pending"
                     data-testid="reminder-vwap-pending"
-                    title="KIS 분봉 미연동으로 오전 VWAP 추정 불가"
+                    title="다음 거래일 오전 10시 5분 채점 후 아침 평균가가 채워집니다"
                   >
-                    추정 미연동(KIS)
+                    채점 대기
                   </span>
                 ) : (
                   <span className="rmd-exit-known">

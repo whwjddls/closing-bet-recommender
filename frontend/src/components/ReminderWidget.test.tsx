@@ -57,7 +57,7 @@ describe('ReminderWidget', () => {
     );
   });
 
-  it('morning_vwap 이 있으면 값 + outcome 배지, 없으면 "추정 미연동(KIS)" 배지', async () => {
+  it('morning_vwap 이 있으면 값 + outcome 배지, 없으면 "채점 대기" 배지', async () => {
     vi.spyOn(api, 'fetchReminder').mockResolvedValue(reminder);
     render(<ReminderWidget />);
 
@@ -73,10 +73,10 @@ describe('ReminderWidget', () => {
     expect(outcome).toHaveTextContent('성공');
     expect(outcome).toHaveAttribute('data-outcome', 'success');
 
-    // 2번째 픽: 미연동 회색 배지(정직 표기), outcome 배지 없음
+    // 2번째 픽: 채점 대기 회색 배지(정직 표기), outcome 배지 없음
     expect(rows[1]).toHaveAttribute('data-pending', 'true');
     const pending = screen.getByTestId('reminder-vwap-pending');
-    expect(pending).toHaveTextContent('추정 미연동(KIS)');
+    expect(pending).toHaveTextContent('채점 대기');
   });
 
   it('빈 목록이면 "어제 추천이 없습니다" placeholder', async () => {
