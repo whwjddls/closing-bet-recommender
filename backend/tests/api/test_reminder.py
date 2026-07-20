@@ -16,8 +16,8 @@ def _rec(rid, run_date=date(2026, 6, 30), grade="S", ticker="000660",
 
 def _perf(rid, outcome="SUCCESS", vwap=10.6, eval_date=date(2026, 7, 1)):
     return Performance(rec_id=rid, eval_date=eval_date, buy_price_final=10.0,
-                       vwap_0900_1000=vwap, morning_return=0.01, outcome=outcome,
-                       dart_overnight_flag=False, scored_at=datetime.now())
+                       vwap_0900_0920=vwap, vwap_0900_1000=vwap, morning_return=0.01,
+                       outcome=outcome, dart_overnight_flag=False, scored_at=datetime.now())
 
 
 def test_reminder_empty_when_no_recommendations(client):

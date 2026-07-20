@@ -24,8 +24,8 @@ def _rec(rid, grade="S", regime=1.0, ticker="000660"):
 
 def _perf(rid, outcome, ret, vwap=10.0, flag=False, bpf=10.0, eval_date=date(2026, 6, 30)):
     return Performance(rec_id=rid, eval_date=eval_date, buy_price_final=bpf,
-                       vwap_0900_1000=vwap, morning_return=ret, outcome=outcome,
-                       dart_overnight_flag=flag, scored_at=datetime.now())
+                       vwap_0900_0920=vwap, vwap_0900_1000=vwap, morning_return=ret,
+                       outcome=outcome, dart_overnight_flag=flag, scored_at=datetime.now())
 
 
 def test_performance_aggregate_arrays_and_excludes_na(client, db_session):
