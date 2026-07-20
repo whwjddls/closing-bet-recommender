@@ -304,10 +304,14 @@ def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None,
 
 def fetch_confirmed_close(ticker: str, d: dt.date,
                           pykrx_module: Any | None = None) -> float:
-    """익일 채점용 15:30 확정 종가(00 §2). 채점일 d는 과거 확정일 — 룩어헤드 아님."""
+    """익일 채점용 15:30 확정 종가(00 §2). 채점일 d는 과거 확정일 — 룩어헤드 아님.
+
+    KRX 무응답(hang)은 타임아웃 가드로 잘라낸다 — 맨몸 호출이면 채점 배치 전체가
+    한 종목에 영구 블록된다(2026-07-20 실측). 결측/무응답 → ValueError, 채점 잡이
+    해당 픽만 NA 처리 후 계속(NA 는 재채점 대상)."""
     px = pykrx_module if pykrx_module is not None else _load_pykrx()
     d_s = _yyyymmdd(d)
-    df = px.get_market_ohlcv(d_s, d_s, ticker)
+    df = _fetch_ohlcv_safe(px, d_s, d_s, ticker, timeout_sec=OHLCV_TIMEOUT_SEC)
     if df is None or len(df) == 0:
         raise ValueError(f"no confirmed close for {ticker} on {d_s}")
     return float(df[COL_CLOSE].iloc[-1])

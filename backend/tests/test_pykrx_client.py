@@ -185,6 +185,27 @@ def test_fetch_confirmed_close_reads_single_day_close():
     assert px.calls[-1] == ("ohlcv", "20260701", "20260701", "000660")
 
 
+def test_fetch_confirmed_close_gives_up_fast_on_hanging_krx(monkeypatch):
+    # 2026-07-20 실측: KRX 무응답 시 채점 배치 전체가 첫 종목에서 영구 블록(무로그 20분+).
+    # 타임아웃 가드 경유 → 무응답이면 빠르게 ValueError(채점 잡이 해당 픽만 NA 후 계속,
+    # NA 는 재채점 대상이라 다음 런이 치유).
+    import time
+
+    from app.data import pykrx_client
+
+    monkeypatch.setattr(pykrx_client, "OHLCV_TIMEOUT_SEC", 0.2)
+
+    class HangingPykrx:
+        def get_market_ohlcv(self, frm, to, ticker):
+            time.sleep(2.0)                       # KRX 무응답 재현
+            return None
+
+    started = time.monotonic()
+    with pytest.raises(ValueError):
+        fetch_confirmed_close("000660", dt.date(2026, 7, 17), HangingPykrx())
+    assert time.monotonic() - started < 1.0       # 행에 끌려가지 않고 즉시 포기
+
+
 def test_prefetch_final_no_lookahead_todate_is_d_minus_1():
     px = FakePykrx()
     px.ticker_list = ["000660"]
