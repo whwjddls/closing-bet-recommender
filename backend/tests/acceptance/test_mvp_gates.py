@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from app.data.kis_client import MorningVwap
 from app.store.models import Base, Run, Recommendation
 from app.scheduler.calendar import TradingCalendar
 from app.scheduler import daily_run, scoring_job
@@ -60,7 +61,7 @@ def test_gate_scoring_lookahead_guard(session_factory):
     scoring_job.run_scoring(
         date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
         fetch_confirmed_close=lambda t, d: seen.__setitem__("close", d) or 10.0,
-        fetch_morning_vwap=lambda t, d: seen.__setitem__("vwap", d) or 10.5,
+        fetch_morning_vwaps=lambda t, d: seen.__setitem__("vwap", d) or MorningVwap(10.5, 10.5),
         overnight_scan=lambda t, s, u: False)
     assert seen["close"] == date(2026, 6, 29)   # t
     assert seen["vwap"] == date(2026, 6, 30)    # t+1 (미래 정보로 진입가 산정 안 함)

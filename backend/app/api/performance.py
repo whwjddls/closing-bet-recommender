@@ -108,7 +108,7 @@ def get_performance(db: Session = Depends(get_db),
     for perf, rec in pairs:
         picks.append(PickResult(
             ticker=rec.ticker, name=rec.name or "", grade=rec.grade or "",
-            buy_price_final=perf.buy_price_final, vwap_0900_1000=perf.vwap_0900_1000,
+            buy_price_final=perf.buy_price_final, vwap_0900_0920=perf.vwap_0900_0920,
             morning_return=perf.morning_return, outcome=perf.outcome,
             dart_overnight_flag=perf.dart_overnight_flag,
             fail_reason=classify_fail_reason(perf.outcome, perf.morning_return),

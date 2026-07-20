@@ -35,7 +35,7 @@ def get_reminder(db: Session = Depends(get_db)) -> ReminderResponse:
             target_price=rec.target_price,
             stop_price=rec.stop_price,
             outcome=perf.outcome if perf is not None else None,
-            morning_vwap=perf.vwap_0900_1000 if perf is not None else None,
+            morning_vwap=perf.vwap_0900_0920 if perf is not None else None,
         )
         for rec, perf in pairs
     ]

@@ -130,53 +130,62 @@ def _minute_bar(bsop_date, hhmmss, price, vol):
             "stck_prpr": price, "cntg_vol": vol}
 
 
-def test_fetch_morning_vwap_filters_0900_1000_and_weights(fake_clock):
+def test_fetch_morning_vwaps_computes_both_windows_from_same_bars(fake_clock):
+    # 판정 기준 09:00–09:20(종가베팅 청산 창) + 보조 09:00–10:00(비교 검증) —
+    # 같은 분봉 2회 호출에서 두 값 모두 산출(추가 API 호출 없음).
     t = RecordingTransport()
     t.token_responses = [_token()]
     t.tr_responses["FHKST03010200"] = [
         {"rt_cd": "0", "output2": [
             _minute_bar("20260701", "090100", "100", "10"),
-            _minute_bar("20260701", "085900", "999", "100"),   # 윈도우 밖(개장 전)
+            _minute_bar("20260701", "091500", "104", "10"),
+            _minute_bar("20260701", "092500", "120", "20"),    # 0920 밖·1000 안
+            _minute_bar("20260701", "085900", "999", "100"),   # 개장 전 — 둘 다 밖
         ]},
         {"rt_cd": "0", "output2": [
-            _minute_bar("20260701", "095900", "110", "30"),
-            _minute_bar("20260701", "101500", "999", "100"),   # 윈도우 밖
+            _minute_bar("20260701", "095900", "110", "40"),
+            _minute_bar("20260701", "101500", "999", "100"),   # 10시 밖
         ]},
     ]
-    vwap = _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
-    # (100*10 + 110*30)/40 = 4300/40 = 107.5 — 두 윈도우 봉이 모두 합산돼야 한다
-    assert vwap == pytest.approx(107.5)
-
-
-def test_fetch_morning_vwap_requests_both_windows_with_required_field(fake_clock):
-    t = RecordingTransport()
-    t.token_responses = [_token()]
-    t.tr_responses["FHKST03010200"] = [
-        {"rt_cd": "0", "output2": [_minute_bar("20260701", "091000", "100", "10")]},
-        {"rt_cd": "0", "output2": [_minute_bar("20260701", "094000", "100", "10")]},
-    ]
-    _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
+    v = _client(t, fake_clock).fetch_morning_vwaps("000660", dt.date(2026, 7, 1))
+    # 0920: (100*10+104*10)/20 = 102.0 / 1000: (100*10+104*10+120*20+110*40)/80 = 110.5
+    assert v.vwap_0900_0920 == pytest.approx(102.0)
+    assert v.vwap_0900_1000 == pytest.approx(110.5)
     minute_calls = [c for c in t.calls if c["headers"].get("tr_id") == "FHKST03010200"]
-    assert len(minute_calls) == 2                       # 30봉 한계 → 반쪽 창 2회
+    assert len(minute_calls) == 2                       # 30봉 한계 → 반쪽 창 2회 그대로
     hours = {c["params"]["FID_INPUT_HOUR_1"] for c in minute_calls}
     assert hours == {"093000", "100000"}
     assert all(c["params"]["FID_PW_DATA_INCU_YN"] == "Y" for c in minute_calls)
 
 
-def test_fetch_morning_vwap_drops_stale_session_bars(fake_clock):
+def test_fetch_morning_vwaps_0920_none_when_no_early_trades(fake_clock):
+    # 9:20 이전 거래 결측(잠김 등) → 판정 창만 None, 보조 창은 산출.
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHKST03010200"] = [
+        {"rt_cd": "0", "output2": [_minute_bar("20260701", "092500", "120", "20")]},
+        {"rt_cd": "0", "output2": [_minute_bar("20260701", "095900", "110", "40")]},
+    ]
+    v = _client(t, fake_clock).fetch_morning_vwaps("000660", dt.date(2026, 7, 1))
+    assert v.vwap_0900_0920 is None
+    assert v.vwap_0900_1000 == pytest.approx((120 * 20 + 110 * 40) / 60)
+
+
+def test_fetch_morning_vwaps_drops_stale_session_bars(fake_clock):
     # 실측(2026-07-17 제헌절): 휴장일 호출 → 전 봉이 stck_bsop_date=20260716.
     # 대상일 봉이 아니면 버려야 한다 — 직전 세션으로 채점하는 룩어헤드 오염 방지.
     t = RecordingTransport()
     t.token_responses = [_token()]
     t.tr_responses["FHKST03010200"] = [
-        {"rt_cd": "0", "output2": [_minute_bar("20260716", "093000", "692000", "500")]},
+        {"rt_cd": "0", "output2": [_minute_bar("20260716", "091000", "692000", "500")]},
         {"rt_cd": "0", "output2": [_minute_bar("20260716", "100000", "692000", "500")]},
     ]
-    vwap = _client(t, fake_clock).fetch_morning_vwap("000810", dt.date(2026, 7, 17))
-    assert vwap is None
+    v = _client(t, fake_clock).fetch_morning_vwaps("000810", dt.date(2026, 7, 17))
+    assert v.vwap_0900_0920 is None
+    assert v.vwap_0900_1000 is None
 
 
-def test_fetch_morning_vwap_raises_on_error_rt_cd(fake_clock):
+def test_fetch_morning_vwaps_raises_on_error_rt_cd(fake_clock):
     # 실측: 필수 필드 누락 시 rt_cd='2' — 조용한 None 은 NA 영구 잠금으로 이어졌다.
     t = RecordingTransport()
     t.token_responses = [_token()]
@@ -185,16 +194,17 @@ def test_fetch_morning_vwap_raises_on_error_rt_cd(fake_clock):
          "output2": []},
     ]
     with pytest.raises(RuntimeError, match="FID_PW_DATA_INCU_YN"):
-        _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
+        _client(t, fake_clock).fetch_morning_vwaps("000660", dt.date(2026, 7, 1))
 
 
-def test_fetch_morning_vwap_returns_none_when_empty(fake_clock):
+def test_fetch_morning_vwaps_none_when_empty(fake_clock):
     t = RecordingTransport()
     t.token_responses = [_token()]
     t.tr_responses["FHKST03010200"] = [{"rt_cd": "0", "output2": []},
                                        {"rt_cd": "0", "output2": []}]
-    vwap = _client(t, fake_clock).fetch_morning_vwap("000660", dt.date(2026, 7, 1))
-    assert vwap is None
+    v = _client(t, fake_clock).fetch_morning_vwaps("000660", dt.date(2026, 7, 1))
+    assert v.vwap_0900_0920 is None
+    assert v.vwap_0900_1000 is None
 
 
 def test_value_ranking_tr_id_and_parsing(fake_clock):

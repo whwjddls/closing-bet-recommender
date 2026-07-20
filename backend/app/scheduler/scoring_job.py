@@ -1,8 +1,9 @@
 """익일 채점 스케줄러 — N/A·DART 오버나잇 재스캔·룩어헤드 가드 (스펙 §6.3/§6.4).
 
-익일 **10:00 이후**에 실행(09:00–10:00 VWAP 창 완료 후 — 이전에 돌리면 부분
+익일 **10:00 이후**에 실행(보조 창 09:00–10:00 VWAP 완료 후 — 이전에 돌리면 부분
 VWAP으로 오채점되고 멱등이라 고착됨). ``run_date = prev_trading_day(eval_date)`` 로 역매핑하고,
-매수가 = **확정 종가 close[run_date]**, 청산 = **오전 VWAP(eval_date) 09:00–10:00**.
+매수가 = **확정 종가 close[run_date]**, 판정 청산 = **오전 VWAP(eval_date) 09:00–09:20**
+(종가베팅 청산 특성 — 09:00–10:00 은 창 비교 검증용 보조 저장).
 VWAP 결측/잠김 → outcome=NA(분모 제외). DART 오버나잇 공시 발생 시 재스캔 플래그.
 **룩어헤드 가드**: close 는 run_date(t)로만, VWAP 는 eval_date(t+1)로만 조회한다.
 멱등: 이미 채점된 추천은 건너뛴다. 콜라보레이터는 모두 주입.
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | None = None,
-                session_factory=None, fetch_confirmed_close=None, fetch_morning_vwap=None,
+                session_factory=None, fetch_confirmed_close=None, fetch_morning_vwaps=None,
                 overnight_scan=None):
     """전 거래일(run_date) 픽을 eval_date 오전 VWAP 으로 채점한다.
 
@@ -38,8 +39,8 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
         from app.store.db import SessionLocal as session_factory
     if fetch_confirmed_close is None:
         from app.data.pykrx_client import fetch_confirmed_close
-    if fetch_morning_vwap is None:
-        from app.data.kis_client import fetch_morning_vwap
+    if fetch_morning_vwaps is None:
+        from app.data.kis_client import fetch_morning_vwaps
     if overnight_scan is None:
         from app.data.dart_client import overnight_scan
 
@@ -65,12 +66,13 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
                 close_t = None
             if close_t is not None:
                 rec.buy_price_final = close_t
-            vwap = fetch_morning_vwap(rec.ticker, eval_date)          # VWAP[t+1] 09:00–10:00
+            vwaps = fetch_morning_vwaps(rec.ticker, eval_date)        # VWAP[t+1] 아침 2창
+            judge = vwaps.vwap_0900_0920                              # 판정 = 09:00–09:20
 
-            if vwap is None or close_t is None or close_t == 0:
+            if judge is None or close_t is None or close_t == 0:
                 outcome, ret = "NA", None                            # 잠김/결측 → 분모 제외
             else:
-                ret = vwap / close_t - 1.0
+                ret = judge / close_t - 1.0
                 outcome = "SUCCESS" if ret > 0 else "FAIL"
 
             flag = overnight_scan(rec.ticker,
@@ -79,14 +81,17 @@ def run_scoring(eval_date: date | None = None, *, calendar: TradingCalendar | No
             if existing is not None:                 # NA 재채점 — 제자리 갱신
                 existing.eval_date = eval_date
                 existing.buy_price_final = close_t
-                existing.vwap_0900_1000 = vwap
+                existing.vwap_0900_0920 = vwaps.vwap_0900_0920
+                existing.vwap_0900_1000 = vwaps.vwap_0900_1000
                 existing.morning_return = ret
                 existing.outcome = outcome
                 existing.dart_overnight_flag = flag
                 existing.scored_at = datetime.now()
             else:
                 db.add(Performance(rec_id=rec.id, eval_date=eval_date, buy_price_final=close_t,
-                                   vwap_0900_1000=vwap, morning_return=ret, outcome=outcome,
+                                   vwap_0900_0920=vwaps.vwap_0900_0920,
+                                   vwap_0900_1000=vwaps.vwap_0900_1000,
+                                   morning_return=ret, outcome=outcome,
                                    dart_overnight_flag=flag, scored_at=datetime.now()))
             scored += 1
         db.commit()

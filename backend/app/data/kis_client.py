@@ -41,6 +41,17 @@ RANKING_TOP_N = 30
 Transport = Callable[..., dict]
 
 
+@dataclass(slots=True, frozen=True)
+class MorningVwap:
+    """익일 아침 VWAP 2종 — 판정 창(09:00–09:20)과 보조 창(09:00–10:00).
+
+    종가베팅 청산은 갭 실현 직후가 전략 정합이라 0920 이 outcome 판정 기준.
+    1000 은 창 선택 재검증용 병렬 지표(2026-07-20 실측: 13픽 중 10픽에서 0920 유리)."""
+
+    vwap_0900_0920: float | None
+    vwap_0900_1000: float | None
+
+
 @dataclass(slots=True)
 class Quote:
     """00 §2 정본 — 과열가드 플래그(is_halted/is_limit_up/is_vi) 포함(폴백 아님, 항상 존재)."""
@@ -216,19 +227,22 @@ class KisClient:
 
     # 분봉 TR 은 호출당 최대 30봉 — 09:00–10:00 전체는 반쪽 창 2회로 나눠 받는다.
     _MORNING_WINDOW_ENDS = ("093000", "100000")
+    _JUDGE_WINDOW_END = "092000"        # 판정 창(종가베팅 청산 특성) — 09:00–09:20
 
-    def fetch_morning_vwap(self, ticker: str, d: date) -> float | None:
-        """익일 09:00–10:00 VWAP(분봉, TR FHKST03010200). 거래 결측 시 None.
+    def fetch_morning_vwaps(self, ticker: str, d: date) -> "MorningVwap":
+        """익일 아침 VWAP 2종(분봉, TR FHKST03010200) — 같은 봉에서 동시 산출.
 
-        이 TR 은 당일 전용(날짜 파라미터 없음)이라 휴장일엔 직전 세션 봉이 오므로,
-        ``stck_bsop_date != d`` 봉은 버린다 — 전 세션 데이터로 채점하는 룩어헤드 오염 방지.
+        판정 창 09:00–09:20(종가베팅은 갭 실현 직후 청산이 전략 정합) + 보조 창
+        09:00–10:00(창 비교 검증용). 이 TR 은 당일 전용(날짜 파라미터 없음)이라
+        휴장일엔 직전 세션 봉이 오므로 ``stck_bsop_date != d`` 봉은 버린다 —
+        전 세션 데이터로 채점하는 룩어헤드 오염 방지. 각 창 거래 결측은 None.
         API 반려(rt_cd != 0)는 조용한 None 대신 예외 — None 은 NA 채점으로 영구
         고착되지만 예외는 배치 중단 후 재시도가 가능하다.
         """
         ticker = normalize_ticker(ticker)
         target = d.strftime("%Y%m%d")
-        num = 0.0
-        den = 0.0
+        num_0920 = den_0920 = 0.0
+        num_1000 = den_1000 = 0.0
         for window_end in self._MORNING_WINDOW_ENDS:
             resp = self._tr_request(
                 TR_MINUTE,
@@ -246,15 +260,18 @@ class KisClient:
                 if str(row.get("stck_bsop_date", "")) != target:
                     continue                              # 직전 세션 봉(휴장일 등) 제외
                 hhmmss = str(row.get("stck_cntg_hour", "000000"))
-                if not ("090000" <= hhmmss <= "100000"):  # 09:00–10:00 윈도우만
+                if not ("090000" <= hhmmss <= "100000"):  # 09:00–10:00 밖 제외
                     continue
                 price = float(row.get("stck_prpr", 0) or 0)
                 vol = float(row.get("cntg_vol", 0) or 0)
-                num += price * vol
-                den += vol
-        if den == 0:
-            return None                                   # 거래 결측 → None
-        return num / den
+                num_1000 += price * vol
+                den_1000 += vol
+                if hhmmss <= self._JUDGE_WINDOW_END:      # 판정 창 09:00–09:20
+                    num_0920 += price * vol
+                    den_0920 += vol
+        return MorningVwap(
+            vwap_0900_0920=(num_0920 / den_0920) if den_0920 else None,
+            vwap_0900_1000=(num_1000 / den_1000) if den_1000 else None)
 
     # ── 신규 TR 래퍼 5종(T3) — 모두 graceful(예외→빈 결과) ───────────────
     def get_near_new_highs(self) -> list[dict]:
@@ -557,10 +574,10 @@ def build_default_client() -> KisClient:
                      token_cache=default_token_cache_path())
 
 
-def fetch_morning_vwap(ticker: str, d: date,
-                       client: KisClient | None = None) -> float | None:
+def fetch_morning_vwaps(ticker: str, d: date,
+                        client: KisClient | None = None) -> MorningVwap:
     """모듈 정본 래퍼(익일 채점 스케줄러 기본 바인딩, 00 §2).
 
-    ``scoring_job`` 이 ``from app.data.kis_client import fetch_morning_vwap`` 로 지연
+    ``scoring_job`` 이 ``from app.data.kis_client import fetch_morning_vwaps`` 로 지연
     바인딩한다(pykrx 모듈 정본 함수와 동일 패턴). 미주입 시 env 기본 클라이언트로 위임."""
-    return (client or build_default_client()).fetch_morning_vwap(ticker, d)
+    return (client or build_default_client()).fetch_morning_vwaps(ticker, d)

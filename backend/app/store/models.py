@@ -73,7 +73,8 @@ class Performance(Base):
         ForeignKey("recommendations.id"), nullable=False)
     eval_date: Mapped[dt.date | None] = mapped_column(Date)
     buy_price_final: Mapped[float | None] = mapped_column(Float)
-    vwap_0900_1000: Mapped[float | None] = mapped_column(Float)
+    vwap_0900_0920: Mapped[float | None] = mapped_column(Float)   # 판정 창(청산 기준)
+    vwap_0900_1000: Mapped[float | None] = mapped_column(Float)   # 보조 창(창 비교 검증)
     morning_return: Mapped[float | None] = mapped_column(Float)
     outcome: Mapped[str | None] = mapped_column(String)          # SUCCESS/FAIL/NA
     dart_overnight_flag: Mapped[bool | None] = mapped_column(Boolean)

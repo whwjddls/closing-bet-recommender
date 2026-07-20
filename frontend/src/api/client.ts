@@ -182,7 +182,7 @@ export interface PickResult {
   name: string;
   grade: Grade;
   buy_price_final: number | null;
-  vwap_0900_1000: number | null;
+  vwap_0900_0920: number | null; // 판정 청산가(09:00–09:20 VWAP)
   morning_return: number | null;
   outcome: Outcome;
   dart_overnight_flag: boolean;

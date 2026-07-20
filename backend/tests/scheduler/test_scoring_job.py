@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
+from app.data.kis_client import MorningVwap
 from app.store.models import Base, Recommendation, Performance
 from app.scheduler.calendar import TradingCalendar
 from app.scheduler import scoring_job
@@ -32,13 +33,14 @@ def test_scoring_marks_success_fail_and_na(session_factory):
         db.commit()
 
     closes = {"AAA": 10.0, "BBB": 10.0, "CCC": 10.0}
-    vwaps = {"AAA": 10.6, "BBB": 9.95, "CCC": None}    # CCC: 잠김 → NA
+    vwaps = {"AAA": MorningVwap(10.6, 10.4), "BBB": MorningVwap(9.95, 10.1),
+             "CCC": MorningVwap(None, None)}            # CCC: 잠김 → NA
     dart = {"BBB"}
 
     scoring_job.run_scoring(
         date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
         fetch_confirmed_close=lambda t, d: closes[t],
-        fetch_morning_vwap=lambda t, d: vwaps[t],
+        fetch_morning_vwaps=lambda t, d: vwaps[t],
         overnight_scan=lambda t, since, until: t in dart,
     )
     with session_factory() as db:
@@ -50,6 +52,44 @@ def test_scoring_marks_success_fail_and_na(session_factory):
         assert db.get(Recommendation, 1).buy_price_final == 10.0
 
 
+def test_scoring_judges_on_0920_window_and_stores_both(session_factory):
+    # 판정 창 = 09:00–09:20(종가베팅 청산 특성). 9~10시 값은 비교 검증용 보조 저장 —
+    # 0920 기준 SUCCESS 인데 1000 기준이면 FAIL 인 케이스로 판정 창을 고정한다.
+    with session_factory() as db:
+        _rec(db, 1, "AAA"); db.commit()
+
+    scoring_job.run_scoring(
+        date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
+        fetch_confirmed_close=lambda t, d: 10.0,
+        fetch_morning_vwaps=lambda t, d: MorningVwap(10.5, 9.8),   # 갭 뜨고 오전 내 삭음
+        overnight_scan=lambda t, s, u: False,
+    )
+    with session_factory() as db:
+        perf = db.scalars(select(Performance)).one()
+        assert perf.outcome == "SUCCESS"                  # 1000 기준이면 FAIL — 0920 이 판정
+        assert perf.morning_return == pytest.approx(0.05)  # 10.5/10 - 1
+        assert perf.vwap_0900_0920 == 10.5
+        assert perf.vwap_0900_1000 == 9.8                 # 보조 지표도 병렬 저장
+
+
+def test_scoring_na_when_0920_missing_even_if_1000_present(session_factory):
+    # 판정 창 거래 결측이면 보조 창이 있어도 NA(분모 제외) — 다른 창으로 대충 판정 금지.
+    with session_factory() as db:
+        _rec(db, 1, "AAA"); db.commit()
+
+    scoring_job.run_scoring(
+        date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
+        fetch_confirmed_close=lambda t, d: 10.0,
+        fetch_morning_vwaps=lambda t, d: MorningVwap(None, 10.2),
+        overnight_scan=lambda t, s, u: False,
+    )
+    with session_factory() as db:
+        perf = db.scalars(select(Performance)).one()
+        assert perf.outcome == "NA"
+        assert perf.morning_return is None
+        assert perf.vwap_0900_1000 == 10.2                # 보조 값은 기록 유지
+
+
 def test_scoring_no_lookahead_uses_t_for_close_and_t_plus_1_for_vwap(session_factory):
     with session_factory() as db:
         _rec(db, 1, "AAA", run_date=date(2026, 6, 29))
@@ -58,7 +98,7 @@ def test_scoring_no_lookahead_uses_t_for_close_and_t_plus_1_for_vwap(session_fac
     scoring_job.run_scoring(
         date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
         fetch_confirmed_close=lambda t, d: close_args.append(d) or 10.0,
-        fetch_morning_vwap=lambda t, d: vwap_args.append(d) or 10.5,
+        fetch_morning_vwaps=lambda t, d: vwap_args.append(d) or MorningVwap(10.5, 10.5),
         overnight_scan=lambda t, s, u: False,
     )
     assert close_args == [date(2026, 6, 29)]    # close[t]
@@ -67,7 +107,7 @@ def test_scoring_no_lookahead_uses_t_for_close_and_t_plus_1_for_vwap(session_fac
 
 
 def test_scoring_binds_real_module_collaborators_without_import_error(session_factory):
-    # 실제 기본 바인딩(NO 주입/NO override): fetch_confirmed_close/fetch_morning_vwap/
+    # 실제 기본 바인딩(NO 주입/NO override): fetch_confirmed_close/fetch_morning_vwaps/
     # overnight_scan 을 실 모듈 함수로 지연 바인딩한다. 추천 0건 거래일이라 네트워크
     # 호출 없이 ImportError 없이 0건 채점되어야 한다(모듈 정본 함수 미존재 회귀 방지).
     scored = scoring_job.run_scoring(
@@ -87,11 +127,12 @@ def test_scoring_skips_missing_confirmed_close_and_continues(session_factory):
             raise ValueError(f"no confirmed close for {t} on {d}")   # 확정 종가 결측
         return 10.0
 
-    vwaps = {"AAA": 10.6, "BBB": 10.5, "CCC": 9.9}
+    vwaps = {"AAA": MorningVwap(10.6, 10.6), "BBB": MorningVwap(10.5, 10.5),
+             "CCC": MorningVwap(9.9, 9.9)}
     scored = scoring_job.run_scoring(
         date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
         fetch_confirmed_close=close_fn,
-        fetch_morning_vwap=lambda t, d: vwaps[t],
+        fetch_morning_vwaps=lambda t, d: vwaps[t],
         overnight_scan=lambda t, s, u: False,
     )
     assert scored == 3                                  # 배치 미중단: 3건 모두 처리
@@ -109,7 +150,8 @@ def test_scoring_is_idempotent(session_factory):
     with session_factory() as db:
         _rec(db, 1, "AAA"); db.commit()
     kw = dict(calendar=_cal(), session_factory=session_factory,
-              fetch_confirmed_close=lambda t, d: 10.0, fetch_morning_vwap=lambda t, d: 10.5,
+              fetch_confirmed_close=lambda t, d: 10.0,
+              fetch_morning_vwaps=lambda t, d: MorningVwap(10.5, 10.5),
               overnight_scan=lambda t, s, u: False)
     scoring_job.run_scoring(date(2026, 6, 30), **kw)
     scoring_job.run_scoring(date(2026, 6, 30), **kw)   # 재실행
@@ -123,13 +165,13 @@ def test_scoring_rescores_na_rows_in_place(session_factory):
     with session_factory() as db:
         _rec(db, 1, "AAA")
         db.add(Performance(rec_id=1, eval_date=date(2026, 7, 17), buy_price_final=10.0,
-                           vwap_0900_1000=None, morning_return=None, outcome="NA",
-                           dart_overnight_flag=False, scored_at=datetime.now()))
+                           vwap_0900_0920=None, vwap_0900_1000=None, morning_return=None,
+                           outcome="NA", dart_overnight_flag=False, scored_at=datetime.now()))
         db.commit()
     scored = scoring_job.run_scoring(
         date(2026, 6, 30), calendar=_cal(), session_factory=session_factory,
         fetch_confirmed_close=lambda t, d: 10.0,
-        fetch_morning_vwap=lambda t, d: 10.6,
+        fetch_morning_vwaps=lambda t, d: MorningVwap(10.6, 10.7),
         overnight_scan=lambda t, s, u: False,
     )
     assert scored == 1
@@ -139,3 +181,4 @@ def test_scoring_rescores_na_rows_in_place(session_factory):
         assert perfs[0].outcome == "SUCCESS"
         assert perfs[0].eval_date == date(2026, 6, 30)   # 잘못 박힌 휴장일 eval 도 교정
         assert perfs[0].morning_return == pytest.approx(0.06)
+        assert perfs[0].vwap_0900_0920 == 10.6
