@@ -55,6 +55,9 @@ NET_VALUE_COL = "순매수거래대금"
 # 외인+기관 순매수액 = '외국인' + '기관합계' 를 종목별 합산(아키텍처 §3.2-D).
 NET_INVESTORS = ("외국인", "기관합계")
 LOOKBACK_DAYS = 400  # ≥252 거래일 확보용 달력 룩백
+FULL_HISTORY_DAYS = 252  # 52주 신고가 게이트 — 실이력이 이 값 이상일 때만 h_ref_252 신뢰
+#                          (breakout.FULL_HISTORY_DAYS 와 일치. compute_h_ref 는 이력부족 시
+#                           에러 없이 짧은 window max 를 돌려주므로 이 게이트 없이 쓰면 룩어헤드.)
 
 
 @dataclass
@@ -114,8 +117,11 @@ class PykrxClient:
         return list(self._px.get_market_ticker_list(date, market))
 
     def get_ohlcv(self, ticker: str, fromdate: str, todate: str) -> Any:
-        # 룩어헤드 방지: todate(=D-1)를 그대로 전달, 당일(t) 바 미요청
-        return self._px.get_market_ohlcv(fromdate, todate, ticker)
+        # 룩어헤드 방지: todate(=D-1)를 그대로 전달, 당일(t) 바 미요청.
+        # 타임아웃 가드 — KRX 무응답(hang) 시 None(스킵). 라이브-only 후보의 OHLCV 조회가
+        # 한 종목에 영구 블록되면 15:20 스캔 전체가 멈춘다(2026-07-21 실사고). prefetch_final
+        # 과 동일한 _fetch_ohlcv_safe 가드로 보호한다.
+        return _fetch_ohlcv_safe(self._px, fromdate, todate, ticker, OHLCV_TIMEOUT_SEC)
 
     def get_index_ohlcv(self, index_code: str, fromdate: str, todate: str) -> Any:
         return self._px.get_index_ohlcv(fromdate, todate, index_code)
@@ -211,9 +217,12 @@ class PrefetchBundle:
     net_purchases: dict[str, float]
     index_ma5: dict[str, float]
     market_of: dict[str, str] = field(default_factory=dict)   # 종목→시장(top200 선정 시 확보)
+    listing_days: dict[str, int] = field(default_factory=dict)  # 종목→가용 이력행수(≥252 판정용)
 
 
-TOP_VALUE_UNIVERSE_N = 200          # D-1 거래대금 상위 유니버스 크기(KOSPI∪KOSDAQ)
+TOP_VALUE_UNIVERSE_N = 200          # D-1 거래대금 상위 유니버스 기본 크기(KOSPI∪KOSDAQ).
+#                                     운영 경로는 config(CBR_UNIVERSE_N)에서 해소 —
+#                                     이 리터럴은 select 의 직접 호출 폴백일 뿐.
 
 
 def select_top_value_universe(px: Any, d1_s: str,
@@ -223,17 +232,33 @@ def select_top_value_universe(px: Any, d1_s: str,
     반환 (tickers, market_of). 조회 실패/컬럼 부재 시 방어적으로 건너뛴다."""
     pairs: list[tuple[str, float]] = []
     market_of: dict[str, str] = {}
+    per_market: dict[str, int] = {}
     for market in (Market.KOSPI, Market.KOSDAQ):
         try:
             df = px.get_market_ohlcv_by_ticker(d1_s, pykrx_market_name(market))
-        except Exception:                                   # noqa: BLE001  (외부 IO)
+        except Exception as exc:                            # noqa: BLE001  (외부 IO)
+            logger.warning("유니버스 조회 실패(%s, d1=%s): %s — 이 시장 스킵",
+                           market.value, d1_s, exc)
+            per_market[market.value] = 0
             continue
         if df is None or len(df) == 0 or COL_VALUE not in getattr(df, "columns", []):
+            logger.warning("유니버스 조회 빈 응답(%s, d1=%s) — 이 시장 스킵",
+                           market.value, d1_s)
+            per_market[market.value] = 0
             continue
+        count = 0
         for ticker, row in df.iterrows():
             t = str(ticker)
             pairs.append((t, float(row[COL_VALUE])))
             market_of.setdefault(t, market.value)
+            count += 1
+        per_market[market.value] = count
+    # fail-loud: 한 시장이 통째로 비면(0행) 유니버스가 조용히 반토막 난다(2026-07-06
+    # KOSDAQ=0 인데 run=OK 로 넘어간 사고). 조용한 OK 방지 — 명시 경고를 남긴다.
+    empty_markets = [m for m, c in per_market.items() if c == 0]
+    if empty_markets:
+        logger.warning("유니버스 시장 결손 — %s 0행. 유니버스가 단일시장으로 편향될 수 있음.",
+                       ", ".join(empty_markets))
     pairs.sort(key=lambda p: p[1], reverse=True)            # 거래대금 내림차순
     out: list[str] = []
     seen: set[str] = set()
@@ -248,11 +273,16 @@ def select_top_value_universe(px: Any, d1_s: str,
 
 
 def prefetch_top_value(run_date: dt.date, pykrx_module: Any | None = None,
-                       top_n: int = TOP_VALUE_UNIVERSE_N) -> PrefetchBundle:
+                       top_n: int | None = None) -> PrefetchBundle:
     """장전 기본 prefetch — D-1 거래대금 상위 top_n 유니버스만 FINAL 번들로 산출.
 
-    전 종목 스캔(수천 콜) 대신 top200 만 OHLCV 조회해 15:20 풀 폭주를 막는다(00 §2/T1)."""
+    전 종목 스캔(수천 콜) 대신 상위 top_n 만 OHLCV 조회해 15:20 풀 폭주를 막는다(00 §2/T1).
+    top_n 미지정 시 config(CBR_UNIVERSE_N, 기본 200)에서 해소 — A/B·확대는 env 로 조정."""
     px = pykrx_module if pykrx_module is not None else _load_pykrx()
+    if top_n is None:
+        from app.config import get_settings
+
+        top_n = get_settings().universe_n
     d1 = resolve_last_trading_day(px, run_date)   # 달력 -1일 금지(월요일=거래대금 0 → 랭킹 붕괴)
     universe, market_of = select_top_value_universe(px, _yyyymmdd(d1), top_n)
     return prefetch_final(run_date, px, universe=universe, market_of=market_of)
@@ -276,22 +306,28 @@ def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None,
     h60: dict[str, float] = {}
     atr: dict[str, float] = {}
     avgv: dict[str, float] = {}
+    listing: dict[str, int] = {}
     total = len(universe)
     for i, ticker in enumerate(universe, start=1):
         if i % PREFETCH_PROGRESS_EVERY == 0:
-            logger.info("prefetch 진행 %d/%d (완료 %d종목)", i, total, len(h252))
+            logger.info("prefetch 진행 %d/%d (완료 %d종목)", i, total, len(h60))
         df = _fetch_ohlcv_safe(px, frm_s, d1_s, ticker, OHLCV_TIMEOUT_SEC)  # todate=D-1
         if df is None or len(df) == 0:
             continue
         try:
-            _h252 = compute_h_ref(df, 252)
             _h60 = compute_h_ref(df, 60)
             _atr = compute_atr20(df)
             _avgv = compute_avg_value_20d(df)
         except ValueError:
             continue                                    # 이력 부족 종목 스킵(방어적)
-        h252[ticker], h60[ticker] = _h252, _h60
+        n = len(df)
+        # 52주 신고가는 실이력 ≥252일일 때만 신뢰(<252 는 '150일 고가'를 52주 신고가로
+        # 오인 → 룩어헤드). 미만이면 None(미저장) 으로 두어 s_신이 60일 축만 쓰게 한다.
+        if n >= FULL_HISTORY_DAYS:
+            h252[ticker] = compute_h_ref(df, 252)
+        h60[ticker] = _h60
         atr[ticker], avgv[ticker] = _atr, _avgv
+        listing[ticker] = n
     net = _net_by_market(px, d1_s, d1_s)                # D-1 수급
     index_ma5: dict[str, float] = {}
     for market in (Market.KOSPI, Market.KOSDAQ):
@@ -299,7 +335,7 @@ def prefetch_final(run_date: dt.date, pykrx_module: Any | None = None,
         if idx is not None and len(idx) > 0:
             index_ma5[market.value] = float(idx[COL_CLOSE].tail(5).mean())
     return PrefetchBundle(run_date, universe, h252, h60, atr, avgv, net, index_ma5,
-                          market_of=market_of)
+                          market_of=market_of, listing_days=listing)
 
 
 def fetch_confirmed_close(ticker: str, d: dt.date,

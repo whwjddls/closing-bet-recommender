@@ -121,6 +121,23 @@ def _apply_prefetch(candidate, row):
     )
 
 
+def _apply_hygiene(candidate, info):
+    """15:20 병렬 기본정보(관리/경고/우선주)를 StaticCandidate 에 오버레이(정적위생 실배선).
+
+    info 가 없으면(조회실패/미포함) 후보 원래 값을 유지한다(보수적 = 제외 안 함, fail-open
+    아님). is_preferred → sec_type='PREFERRED'(정적위생 제외군). is_caution 은 별도 소스가
+    없고, mrkt_warn_cls_code 의 '투자주의'가 is_warning(00 외 전부)에 이미 포함되므로
+    건드리지 않는다."""
+    if not info:
+        return candidate
+    return replace(
+        candidate,
+        is_managed=bool(info.get("is_managed", candidate.is_managed)),
+        is_warning=bool(info.get("is_warning", candidate.is_warning)),
+        sec_type="PREFERRED" if info.get("is_preferred") else candidate.sec_type,
+    )
+
+
 def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
                     run_pipeline_fn=_run_pipeline, rvol_min_sessions: int = 20,
                     session_type: str = "정규", max_emit: int = 30) -> RunResult:
@@ -148,6 +165,20 @@ def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
             for c in candidates
         ]
     tickers = [c.ticker for c in candidates]
+
+    # ①'''' 정적위생 실배선: 15:20 병렬 기본정보 패스로 관리/경고/우선주 플래그를 라이브
+    #        시세/veto 조회(=run_pipeline 의 passes_static) '전'에 채운다. 정보 없는 종목은
+    #        원래 값 유지(보수적 = 제외 안 함). BrokerDataAdapter ABC 계약(고정 시그니처)을
+    #        깨지 않도록 LiveBrokerDataAdapter 구체 메서드를 방어적 getattr 로 호출한다.
+    get_basic_info_bulk = getattr(adapter, "get_basic_info_bulk", None)
+    if get_basic_info_bulk is not None and tickers:
+        info = _try(lambda: get_basic_info_bulk(tickers), {}) or {}
+        if info:
+            candidates = [_apply_hygiene(c, info.get(c.ticker)) for c in candidates]
+            # criterion 3: 15:20 에 알게 된 위생 플래그를 그 run_date 의 universe_cache 에 반영
+            update_hygiene = getattr(store, "update_universe_hygiene", None)
+            if update_hygiene is not None:
+                _try(lambda: update_hygiene(run_date, info), None)
 
     # ② 라이브 시세 (벌크, 부분 실패 허용) → Mapping[str, LiveQuote]
     quotes = dict(adapter.fetch_live(tickers))
@@ -180,8 +211,9 @@ def orchestrate_run(run_date: date, snapshot_at: datetime, *, adapter, store,
         store.save_regime(run_date, market, info)
     regime_by_market = {m: r.regime_mult for m, r in regimes.items()}   # dict[str, float]
 
-    # ⑤ veto 맵 (snapshot_at 을 그대로 전달)
-    veto_by_ticker = {t: adapter.dilution_veto(t, snapshot_at) for t in tickers}
+    # ⑤ veto 맵 (snapshot_at 을 그대로 전달) — 종목별 DART 직렬 대신 벌크 1콜(15:20 병렬화).
+    #    fail-closed·페이지네이션은 dilution_veto_bulk 계약에서 보존.
+    veto_by_ticker = adapter.dilution_veto_bulk(tickers, snapshot_at)
 
     # ⑥ 순수 엔진 호출 (fetch_live: List[str] -> Mapping[str, LiveQuote]) → EngineRow→RecRow
     def fetch_live(requested):

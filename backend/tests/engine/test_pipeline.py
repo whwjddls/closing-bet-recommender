@@ -184,6 +184,23 @@ def test_funnel_counts_survivors_at_each_stage():
     assert [r.ticker for r in res.rows] == ["A"]
 
 
+def test_emit_floors_at_grade_a_drops_b_c():
+    # A 이상(S·A)만 발행 — B·C 는 실적중률이 낮아 등급 하한(core>=0.6)에서 제외되고
+    # funnel.grade_dropped 로 계측된다. 등급은 core(레짐 독립) 기준.
+    cands = [
+        _cand("AA", high_60=100.0, high_252=None, listing_days=150, d1_supply_value=0.0),
+        _cand("BB", high_60=100.0, high_252=None, listing_days=150, d1_supply_value=0.0),
+    ]
+    quotes = {"AA": _quote(p_now=100.0),    # near60=1.0 → core≈1.0 → S
+              "BB": _quote(p_now=95.0)}     # near60=0.95 → core≈0.5 → B
+    res = run_pipeline(cands, lambda ts: quotes, {"KOSDAQ": 1.0},
+                       {"AA": None, "BB": None}, {"AA": 1, "BB": 1})
+    assert [r.ticker for r in res.rows] == ["AA"]      # B 제외, A 이상만
+    assert res.rows[0].grade in ("S", "A")
+    assert res.funnel.grade_dropped == 1               # BB(B등급) 계측
+    assert res.funnel.emitted == 1
+
+
 def test_funnel_marks_risk_off_when_regime_zero_kills_all():
     cands = [_cand("A", market="KOSPI", high_60=100.0, high_252=100.0)]
     res = run_pipeline(cands, lambda ts: {"A": _quote(p_now=100.0)},
@@ -199,3 +216,40 @@ def test_funnel_records_static_hygiene_wipeout():
     res = run_pipeline(cands, lambda ts: {}, {"KOSPI": 1.0}, {}, {})
     assert res.reason == "EMPTY_UNIVERSE"
     assert res.funnel.candidates == 1 and res.funnel.static_ok == 0
+
+
+# ── US-004: 유니버스 확대(600) 시 파이프라인 회귀 없음 ──────────────
+def test_pipeline_scales_to_expanded_universe():
+    # 확대(N=600)에서도 정상 발행 — 커버리지 정확, MAX_EMIT(30) 상한 유지, 랭킹 내림차순.
+    n = 600
+    cands = [_cand(f"{i:06d}", high_60=23500.0 + i) for i in range(n)]   # 돌파 강도 차등
+    quotes = {f"{i:06d}": _quote() for i in range(n)}
+    res = run_pipeline(
+        candidates=cands, fetch_live=_live(quotes),
+        regime_by_market={"KOSDAQ": 1.0},
+        modeled_avg_by_ticker={f"{i:06d}": 1000.0 for i in range(n)},
+        veto_by_ticker={f"{i:06d}": 1 for i in range(n)},
+    )
+    assert res.published is True and res.reason == "OK"
+    assert res.coverage_pct == pytest.approx(1.0)          # 커버리지 회귀 없음
+    assert res.funnel.candidates == n and res.funnel.static_ok == n
+    assert len(res.rows) == 30                              # 확대해도 발행 상한 유지
+    finals = [r.final for r in res.rows]
+    assert finals == sorted(finals, reverse=True)          # final 내림차순 랭킹
+
+
+def test_pipeline_expanded_universe_partial_coverage_still_publishes():
+    # 확대 시 꼬리 종목 일부가 시세 실패해도 커버리지가 임계(0.70) 이상이면 보드 전체가
+    # LOW_COVERAGE 로 막히지 않는다 — 확대 도입의 커버리지 회귀 가드.
+    n = 500
+    cands = [_cand(f"{i:06d}") for i in range(n)]
+    quotes = {f"{i:06d}": _quote() for i in range(400)}    # 400/500 = 0.80 ≥ 0.70
+    res = run_pipeline(
+        candidates=cands, fetch_live=_live(quotes),
+        regime_by_market={"KOSDAQ": 1.0},
+        modeled_avg_by_ticker={f"{i:06d}": 1000.0 for i in range(n)},
+        veto_by_ticker={f"{i:06d}": 1 for i in range(n)},
+    )
+    assert res.published is True and res.reason == "OK"
+    assert res.coverage_pct == pytest.approx(0.80)
+    assert len(res.rows) == 30

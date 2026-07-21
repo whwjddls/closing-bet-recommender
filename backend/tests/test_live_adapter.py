@@ -197,3 +197,33 @@ def test_build_candidates_falls_back_to_ohlcv_without_prefetch():
     cands = adapter.build_candidates(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20))
     assert calls == ["000660"]                # prefetch 없음 → 라이브-only OHLCV 폴백
     assert {c.ticker for c in cands} == {"000660"}
+
+
+def test_build_candidates_unions_volume_surge_fresh_breakouts():
+    # US-006: 거래대금순(D-1 유니버스 중복)에 없고 당일 거래증가율(RVOL)순에만 있는
+    # '오늘 처음 터진' 신선돌파 종목이 후보풀에 순증해야 한다.
+    import pandas as pd
+    from datetime import date, datetime
+
+    adapter = _adapter()
+    adapter._kis.get_volume_surge_ranking = lambda m: [ValueRankEntry("247540", 5e9, 1)]
+    df = pd.DataFrame({"고가": [100.0] * 60, "저가": [90.0] * 60,
+                       "종가": [95.0] * 60, "거래대금": [1e10] * 60})
+    adapter._pykrx.get_ohlcv = lambda t, f, td: df
+    cands = adapter.build_candidates(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20))
+    tickers = {c.ticker for c in cands}
+    assert "000660" in tickers        # 거래대금순 레그(기존)
+    assert "247540" in tickers        # 신선돌파(당일 RVOL) 레그 순증
+
+
+def test_build_candidates_graceful_without_surge_support():
+    # KIS 클라이언트가 surge 랭킹을 노출하지 않아도(구버전 fake) 후보 구성이 깨지지 않는다.
+    import pandas as pd
+    from datetime import date, datetime
+
+    adapter = _adapter()                 # FakeKisClient 에 get_volume_surge_ranking 없음
+    df = pd.DataFrame({"고가": [100.0] * 60, "저가": [90.0] * 60,
+                       "종가": [95.0] * 60, "거래대금": [1e10] * 60})
+    adapter._pykrx.get_ohlcv = lambda t, f, td: df
+    cands = adapter.build_candidates(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20))
+    assert {c.ticker for c in cands} == {"000660"}   # surge 없이도 거래대금순 레그 정상

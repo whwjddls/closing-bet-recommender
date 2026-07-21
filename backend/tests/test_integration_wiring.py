@@ -63,6 +63,9 @@ class _RealShapeAdapter:
     def dilution_veto(self, ticker, snapshot_at):
         return 1
 
+    def dilution_veto_bulk(self, tickers, snapshot_at):
+        return {t: 1 for t in tickers}
+
 
 class _DictStore:
     def __init__(self):
@@ -204,6 +207,9 @@ class _FakeKis:
 class _FakeDart:
     def dilution_veto(self, ticker, snapshot_at):
         return 1                                   # veto 통과
+
+    def dilution_veto_bulk(self, tickers, snapshot_at):
+        return {t: 1 for t in tickers}             # 실 LiveBrokerDataAdapter 벌크 위임 계약
 
 
 def _live_adapter() -> LiveBrokerDataAdapter:

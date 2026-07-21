@@ -72,3 +72,24 @@ class OrchestratorStore:
         rows = self._db.scalars(
             select(UniverseCache).where(UniverseCache.as_of == latest)).all()
         return {r.ticker: r.name for r in rows if r.name and r.name != r.ticker}
+
+    def update_universe_hygiene(self, run_date: date, flags: dict) -> None:
+        """15:20 에 확인한 위생 플래그(관리/경고/우선주)를 그 run_date 의 universe_cache
+        행에 반영한다. 08:30 프리페치(pykrx)는 이 값을 몰라 COMMON/False 로 남으므로,
+        라이브에서 알게 된 실측 위생을 캐시 행에 되써 다음 조회·감사가 정확해진다.
+
+        flags: {ticker: {"is_managed","is_warning","is_preferred", ...}} —
+        get_basic_info_bulk 반환 형태. is_preferred → sec_type='PREFERRED'(정적위생
+        제외군). 해당 (ticker, run_date) 행이 없으면 무시한다(방어적)."""
+        from app.store.models import UniverseCache
+
+        for ticker, info in (flags or {}).items():
+            if not info:
+                continue
+            row = self._db.get(UniverseCache, (ticker, run_date))
+            if row is None:                                  # 행 없으면 무시(방어적)
+                continue
+            row.is_managed = bool(info.get("is_managed", row.is_managed))
+            row.is_warning = bool(info.get("is_warning", row.is_warning))
+            if info.get("is_preferred"):
+                row.sec_type = "PREFERRED"

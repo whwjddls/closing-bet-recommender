@@ -123,6 +123,16 @@ def test_reconstruct_pool_respects_universe_filter():
     assert pool == ["C", "D"]  # A,B 는 유니버스 밖
 
 
+def test_reconstruct_pool_resolves_top_n_from_config(monkeypatch):
+    # top_n 미지정 시 라이브와 동일 config(CBR_UNIVERSE_N)에서 해소 — 유니버스 정합.
+    universe = {"A", "B", "C", "D"}
+    monkeypatch.setenv("CBR_UNIVERSE_N", "2")
+    pool = reconstruct_pool(_value_panel(), "2026-06-30", universe)  # top_n 미전달
+    assert pool == ["C", "A"]                                        # 상위 2종목만
+    monkeypatch.setenv("CBR_UNIVERSE_N", "3")
+    assert reconstruct_pool(_value_panel(), "2026-06-30", universe) == ["C", "A", "B"]
+
+
 def test_live_top30_only_rate_quantifies_fresh_breakouts():
     # 라이브 top-30 단독발생(=D-1 풀 부재) 픽 비율 → 별도 paper-forward 검증 대상
     live_picks = ["C", "A", "X", "Y"]   # X,Y 는 D-1 풀에 없음

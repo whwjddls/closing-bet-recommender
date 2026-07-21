@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -93,6 +94,10 @@ class KisClient:
         self._token_expiry: float = 0.0
         self._last_issue_ts: float | None = None
         self._last_call_ts: float | None = None
+        # 15:20 시세 병렬화 대비 스레드안전 — 토큰 발급(중복 발급 금지)과 _pace(_last_call_ts
+        # 경쟁 제거)를 직렬화하는 재진입 락. _ensure_token→_pace 는 순차 호출이라 미중첩이나,
+        # 방어적으로 RLock 을 써 재진입에도 데드락이 없게 한다.
+        self._lock = threading.RLock()
         # 파일 공유 토큰 캐시 — KIS 접근토큰 발급은 1분 1회 제한. 요청/프로세스마다 새
         # 인스턴스가 각자 발급하면 403 → 토큰(24h)을 파일로 공유해 발급을 하루 ~1회로.
         self._token_cache = token_cache
@@ -125,9 +130,18 @@ class KisClient:
 
     # ── 토큰 ──────────────────────────────────────────────
     def _ensure_token(self) -> str:
+        # 빠른 경로(락 없음): 인메모리 토큰이 유효하면 즉시 반환. 만료/미보유일 때만
+        # 락을 잡고 이중검사 — 여러 워커가 동시에 만료를 감지해도 발급은 1회로 직렬화된다.
         now = self._clock.now()
         if self._token and now < self._token_expiry - self._expiry_skew:
             return self._token
+        with self._lock:
+            return self._ensure_token_locked()
+
+    def _ensure_token_locked(self) -> str:
+        now = self._clock.now()
+        if self._token and now < self._token_expiry - self._expiry_skew:
+            return self._token                       # 이중검사: 락 대기 중 타 스레드가 발급
         cached = self._read_token_cache()            # 파일 공유 토큰(타 인스턴스 발급분)
         if cached and now < cached[1] - self._expiry_skew:
             self._token, self._token_expiry = cached
@@ -158,12 +172,15 @@ class KisClient:
 
     # ── 레이트버짓 ────────────────────────────────────────
     def _pace(self) -> None:
-        now = self._clock.now()
-        if self._last_call_ts is not None:
-            wait = self._min_interval - (now - self._last_call_ts)
-            if wait > 0:
-                self._clock.sleep(wait)
-        self._last_call_ts = self._clock.now()
+        # 병렬 호출에서도 _last_call_ts 경쟁을 없애 초당 호출 상한(rate_per_sec)을 대략
+        # 지키도록 락으로 직렬화한다(완벽한 글로벌 스로틀이 아닌 _last_call_ts 경쟁 제거).
+        with self._lock:
+            now = self._clock.now()
+            if self._last_call_ts is not None:
+                wait = self._min_interval - (now - self._last_call_ts)
+                if wait > 0:
+                    self._clock.sleep(wait)
+            self._last_call_ts = self._clock.now()
 
     def _tr_request(self, tr_id: str, path: str, params: dict) -> dict:
         token = self._ensure_token()
@@ -195,14 +212,16 @@ class KisClient:
         return Quote(ticker, price, cum_volume, change_pct,
                      is_halted=is_halted, is_limit_up=is_limit_up, is_vi=is_vi)
 
-    def get_value_ranking(self, market: Market) -> list[ValueRankEntry]:
-        # 거래대금 순위 = volume-rank(FHPST01710000) FID_BLNG_CLS_CODE="3"(거래금액순).
+    def _fetch_volume_rank(self, market: Market,
+                           blng_cls_code: str) -> list[ValueRankEntry]:
+        """volume-rank(FHPST01710000) 공통 조회. FID_BLNG_CLS_CODE 로 정렬기준 선택
+           ("3"=거래금액순, "1"=거래증가율순). 상위 RANKING_TOP_N 파싱."""
         resp = self._tr_request(
             TR_VALUE_RANKING,
             "/uapi/domestic-stock/v1/quotations/volume-rank",
             {"FID_COND_MRKT_DIV_CODE": "J", "FID_COND_SCR_DIV_CODE": "20171",
              "FID_INPUT_ISCD": kis_index_code(market),
-             "FID_DIV_CLS_CODE": "0", "FID_BLNG_CLS_CODE": "3",
+             "FID_DIV_CLS_CODE": "0", "FID_BLNG_CLS_CODE": blng_cls_code,
              "FID_TRGT_CLS_CODE": "111111111", "FID_TRGT_EXLS_CLS_CODE": "000000",
              "FID_INPUT_PRICE_1": "", "FID_INPUT_PRICE_2": "",
              "FID_VOL_CNT": "", "FID_INPUT_DATE_1": ""})
@@ -215,6 +234,16 @@ class KisClient:
                 rank=int(float(row.get("data_rank", 0) or 0)),
                 name=str(_first(row, ("hts_kor_isnm", "prdt_name"), "") or "")))
         return entries
+
+    def get_value_ranking(self, market: Market) -> list[ValueRankEntry]:
+        # 거래대금 순위 = volume-rank FID_BLNG_CLS_CODE="3"(거래금액순).
+        return self._fetch_volume_rank(market, "3")
+
+    def get_volume_surge_ranking(self, market: Market) -> list[ValueRankEntry]:
+        """당일 거래증가율 순위(volume-rank FID_BLNG_CLS_CODE="1") ≈ 당일 RVOL.
+           '오늘 처음 터지는' 신선돌파를 잡는다 — D-1 거래대금 top-N 이 놓치는 종목
+           (라이브 거래대금순 톱N 은 D-1 유니버스와 거의 중복이라 순증이 미미했다)."""
+        return self._fetch_volume_rank(market, "1")
 
     def get_index_level(self, market: Market) -> IndexLevel:
         resp = self._tr_request(

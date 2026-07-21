@@ -101,10 +101,15 @@ def _candidate_from_prefetch(ticker: str, row, live_market: str | None,
         d1_supply_value = float(net.get(ticker, 0.0))
     market = live_market or getattr(row, "market", None) or Market.KOSPI.value
     d1_value = live_d1_value if live_d1_value is not None else avg_value_20d
+    # 실이력행수(prefetch 저장값). 미저장(구 캐시행 NULL) 시에만 보수적 프록시로 폴백 —
+    # 폴백값은 <252 라 s_신이 60일 축을 쓴다(가짜 52주 신고가 방지). 실이력이 있으면
+    # ≥252 종목은 h_ref_252 와 함께 52주 신고가 축(W_252=0.70)을 정상 사용한다.
+    row_listing = getattr(row, "listing_days", None)
+    listing_days = int(row_listing) if row_listing is not None else PREFETCH_LISTING_DAYS
     return StaticCandidate(
         ticker=ticker, name=name or ticker, market=market, sec_type="COMMON",
         avg_value_20d=float(avg_value_20d), is_managed=False, is_warning=False,
-        is_caution=False, listing_days=PREFETCH_LISTING_DAYS,
+        is_caution=False, listing_days=listing_days,
         high_60=float(high_60) if high_60 is not None else 0.0,
         high_252=float(high_252) if high_252 is not None else None,
         prev_high=float(high_60) if high_60 is not None else 0.0,
@@ -161,6 +166,16 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
     def get_value_ranking(self, market: Market) -> list[ValueRankEntry]:
         return self._kis.get_value_ranking(market)
 
+    def get_volume_surge_ranking(self, market: Market) -> "list[ValueRankEntry]":
+        """당일 거래증가율(≈RVOL) 랭킹 — 신선돌파 후보. KIS 클라이언트 미지원 시 []."""
+        fn = getattr(self._kis, "get_volume_surge_ranking", None)
+        if fn is None:
+            return []
+        try:
+            return list(fn(market) or [])
+        except Exception:                              # noqa: BLE001  (신선돌파 레그는 best-effort)
+            return []
+
     def get_index_level(self, market: Market) -> IndexLevel:
         return self._kis.get_index_level(market)
 
@@ -187,14 +202,51 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         return self._kis.get_near_new_highs()
 
     def get_quotes_bulk(self, tickers: list[str]) -> tuple[dict[str, Quote], float]:
-        """부분 실패 허용 → (성공분, 커버리지). <70%면 호출측 미발행."""
+        """부분 실패 허용 → (성공분, 커버리지). <70%면 호출측 미발행.
+
+        15:20 임계경로 병렬화 — 종목별 get_quote 를 스레드풀(≤8)로 동시 실행한다.
+        토큰 발급/레이트 페이싱은 KisClient 내부 락으로 스레드안전. 부분 실패는 조용히
+        스킵(현행 유지)하고, 결과 dict·커버리지는 직렬과 동일하다(순서 무관)."""
+        import concurrent.futures
+
         quotes: dict[str, Quote] = {}
-        for ticker in tickers:
-            try:
-                quotes[ticker] = self._kis.get_quote(ticker)
-            except Exception:
-                continue
+        if tickers:
+            max_workers = min(8, max(1, len(tickers)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+                future_of = {pool.submit(self._kis.get_quote, t): t for t in tickers}
+                for future in concurrent.futures.as_completed(future_of):
+                    try:
+                        quotes[future_of[future]] = future.result()
+                    except Exception:                   # noqa: BLE001  (부분 실패 조용히 스킵)
+                        continue
         return quotes, compute_coverage(len(tickers), len(quotes))
+
+    def get_basic_info_bulk(self, tickers: list[str]) -> dict[str, dict]:
+        """종목 기본정보(관리/경고/우선주) 벌크 조회 — 15:20 정적위생 실배선용 병렬 패스.
+
+        get_quotes_bulk 와 동일한 스레드풀(≤8) 패턴으로 self._kis.get_stock_basic_info(t)
+        를 동시 호출한다. 빈 dict({}, 조회 실패)이거나 예외인 종목은 결과에서 생략한다 —
+        호출측이 '정보없음 = 제외 안 함(보수적)'으로 처리한다(fail-open 아님). 토큰 발급/
+        레이트 페이싱은 KisClient 내부 락으로 스레드안전(US-001).
+
+        후속 최적화: 이 N콜은 08:30 prefetch 시점에 위생을 조회해두면 15:20 임계경로에서
+        제거할 수 있다(이번 스코프 밖 — 프리페치 경로는 pykrx 라 위생 미노출)."""
+        import concurrent.futures
+
+        info: dict[str, dict] = {}
+        if tickers:
+            max_workers = min(8, max(1, len(tickers)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+                future_of = {pool.submit(self._kis.get_stock_basic_info, t): t
+                             for t in tickers}
+                for future in concurrent.futures.as_completed(future_of):
+                    try:
+                        result = future.result()
+                    except Exception:                   # noqa: BLE001  (부분 실패 조용히 스킵)
+                        continue
+                    if result:                          # 빈 dict(조회 실패) 종목은 생략
+                        info[future_of[future]] = result
+        return info
 
     # ── VETO ──────────────────────────────────────────────
     def get_dilution_veto(self, ticker: str, bgn_de: str, end_de: str) -> int:
@@ -206,6 +258,12 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
     def dilution_veto(self, ticker: str, snapshot_at: datetime) -> int:
         """엔진-대면 veto — orchestrate_run 이 snapshot_at 을 그대로 전달."""
         return self._dart.dilution_veto(ticker, snapshot_at)
+
+    def dilution_veto_bulk(self, tickers: list[str],
+                           snapshot_at: datetime) -> dict[str, int]:
+        """엔진-대면 벌크 veto — orchestrate_run 이 전 종목을 1콜로 위임(15:20 병렬화).
+           fail-closed·페이지네이션은 DartClient.dilution_veto_bulk 계약에서 보존."""
+        return self._dart.dilution_veto_bulk(list(tickers), snapshot_at)
 
     # ── 엔진-대면 표면 (orchestrate_run 이 소비하는 실 파이프라인 형상) ──────
     def fetch_live(self, tickers: Sequence[str]) -> "Mapping[str, LiveQuote]":
@@ -279,7 +337,11 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         name_of: dict[str, str] = {}
         pool: list[str] = []
         for market in (Market.KOSPI, Market.KOSDAQ):
-            for entry in self.get_value_ranking(market)[:live_top]:
+            # 거래대금순 톱N ∪ 거래증가율(당일 RVOL)순 톱N — 후자는 '오늘 처음 터지는'
+            # 신선돌파를 잡는다(거래대금순만으로는 D-1 유니버스와 중복이라 순증 미미).
+            ranked = list(self.get_value_ranking(market)[:live_top])
+            ranked += list(self.get_volume_surge_ranking(market)[:live_top])
+            for entry in ranked:
                 if entry.ticker in market_of:
                     continue
                 market_of[entry.ticker] = market.value

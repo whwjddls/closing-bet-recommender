@@ -219,3 +219,53 @@ def test_persist_prefetch_bundle_replaces_prior_rows_for_same_date(session):
     rows = session.query(FinalPrefetch).filter(FinalPrefetch.run_date == run_date).all()
     assert [r.ticker for r in rows] == ["000660"]      # 옛 행 잔존 금지
     assert rows[0].d1_supply_value == 8e9
+
+
+def test_persist_prefetch_bundle_roundtrips_listing_days(session):
+    # off-by-2: 실이력행수가 FinalPrefetch 로 저장되고 load_prefetch 로 복원돼야
+    # 15:20 후보 구성 시 52주 신고가 축(≥252) 판정에 쓰인다.
+    import datetime as dt
+
+    from app.data.pykrx_client import PrefetchBundle
+    from app.store import final_cache
+
+    run_date = dt.date(2026, 7, 14)
+    bundle = PrefetchBundle(
+        run_date=run_date, universe=["LONG", "SHORT"],
+        h_ref_252={"LONG": 120.0}, h_ref_60={"LONG": 100.0, "SHORT": 90.0},
+        atr20={"LONG": 1.0, "SHORT": 1.0},
+        avg_value_20d={"LONG": 1e10, "SHORT": 1e10},
+        net_purchases={}, index_ma5={},
+        listing_days={"LONG": 260, "SHORT": 150})
+    final_cache.persist_prefetch_bundle(session, bundle)
+    session.commit()
+
+    loaded = final_cache.load_prefetch(session, run_date)
+    assert loaded["LONG"].listing_days == 260
+    assert loaded["SHORT"].listing_days == 150
+    assert loaded["LONG"].h_ref_252 == 120.0
+
+
+def test_persist_universe_cache_replaces_prior_rows_for_same_date(session):
+    # 재실행(유니버스 변경) 시 옛 as_of 행이 남으면 /universe 스캐너가 신·구 합집합으로
+    # 부풀어 관측을 오염한다(2026-07-13 358행 사고). delete-then-insert 로 교체.
+    import datetime as dt
+    from types import SimpleNamespace
+
+    from app.store import final_cache
+    from app.store.models import UniverseCache
+
+    as_of = dt.date(2026, 7, 13)
+    first = SimpleNamespace(run_date=as_of, universe=["A", "B", "C"],
+                            market_of={"A": "KOSPI", "B": "KOSPI", "C": "KOSDAQ"},
+                            avg_value_20d={"A": 1e10, "B": 1e10, "C": 1e10})
+    final_cache.persist_universe_cache(session, first, names={})
+    session.commit()
+    second = SimpleNamespace(run_date=as_of, universe=["A", "D"],
+                             market_of={"A": "KOSPI", "D": "KOSDAQ"},
+                             avg_value_20d={"A": 1e10, "D": 1e10})
+    final_cache.persist_universe_cache(session, second, names={})
+    session.commit()
+
+    rows = session.query(UniverseCache).filter(UniverseCache.as_of == as_of).all()
+    assert sorted(r.ticker for r in rows) == ["A", "D"]     # 옛 B,C 잔존 금지(누적 없음)

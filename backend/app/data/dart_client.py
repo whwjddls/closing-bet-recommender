@@ -51,6 +51,14 @@ DISCLOSURE_KINDS: dict[str, tuple[str, ...]] = {
 DART_LIST_PAGE_COUNT = 100          # DART list.json 페이지당 최대 건수
 
 
+def _total_page(payload: dict) -> int:
+    """list.json total_page 관대 파싱(부재/이형 → 1페이지)."""
+    try:
+        return max(1, int(payload.get("total_page")))
+    except (TypeError, ValueError):
+        return 1
+
+
 def _classify_disclosure(report_nm: str,
                          kinds: dict[str, tuple[str, ...]]) -> str | None:
     """report_nm 을 kinds 카테고리로 분류. 첫 매칭 카테고리 반환, 무관 시 None.
@@ -137,6 +145,74 @@ class DartClient:
             if self._is_dilutive(d.report_nm):
                 return VETO_BLOCK               # T-1 희석 공시 → 차단
         return VETO_CLEAR
+
+    def dilution_veto_bulk(self, tickers: list[str],
+                           snapshot_at: dt.datetime) -> dict[str, int]:
+        """라이브 veto 벌크(15:20 임계경로) — per-ticker dilution_veto 와 완전 동치.
+
+        corp_code 없이 list.json 을 bgn_de=T-1 로 시장 전체 조회(+페이지네이션 전 순회)해
+        T-1 희석공시 stock_code 집합을 만든 뒤 종목별 veto 를 산출한다. 종목별 DART HTTP
+        직렬(200종목×0.6~1.1s)을 시장 1콜(+페이지)로 대체한다.
+
+        fail-closed 불변식: 첫 페이지 실패(예외/status!=000·013/빈 payload)나 순회 중
+        어느 페이지라도 실패하면 전 종목 VETO_BLOCK(per-ticker DART무응답 계약과 동일).
+        페이지네이션 필수 — T-1 희석공시가 2페이지 이후에 있어도 놓치지 않는다(놓치면
+        fail-OPEN → 희석 종목 추천 머니 안전 사고). status=='013'(데이터 없음)은 정상 빈 결과."""
+        t_minus_1 = (snapshot_at.date() - dt.timedelta(days=1)).strftime("%Y%m%d")
+        dilutive_t1 = self._collect_dilutive_t1(t_minus_1)
+        if dilutive_t1 is None:                         # 조회/페이지 실패 → 전 종목 fail-closed
+            return {ticker: VETO_BLOCK for ticker in tickers}
+        result: dict[str, int] = {}
+        for ticker in tickers:
+            if not self.resolve_corp_code(ticker):      # 미매핑 → fail-closed
+                result[ticker] = VETO_BLOCK
+            elif ticker in dilutive_t1:                 # T-1 희석 공시 → 차단
+                result[ticker] = VETO_BLOCK
+            else:
+                result[ticker] = VETO_CLEAR
+        return result
+
+    def _collect_dilutive_t1(self, t_minus_1: str) -> set[str] | None:
+        """list.json 을 bgn_de=t_minus_1 로 전 페이지 순회 → rcept_dt==t_minus_1 이고
+           희석인 상장 stock_code 집합. 실패(fail-closed) 시 None."""
+        first = self._fetch_list_page(t_minus_1, 1)
+        if first is None:
+            return None
+        payload, dilutive = first
+        for page_no in range(2, _total_page(payload) + 1):
+            page = self._fetch_list_page(t_minus_1, page_no)
+            if page is None:                            # 어느 페이지라도 실패 → fail-closed
+                return None
+            dilutive |= page[1]
+        return dilutive
+
+    def _fetch_list_page(self, bgn_de: str,
+                         page_no: int) -> tuple[dict, set[str]] | None:
+        """list.json 단일 페이지 조회 → (payload, 이 페이지의 T-1 희석 stock_code 집합).
+           실패(예외/빈 payload/status!=000·013) → None(fail-closed).
+           status=='013'(데이터 없음) → 정상 빈 결과((payload, empty))."""
+        try:
+            payload = self._transport({
+                "crtfc_key": self._api_key, "bgn_de": bgn_de,
+                "page_no": page_no, "page_count": DART_LIST_PAGE_COUNT})
+        except Exception:                               # noqa: BLE001  (외부 IO → fail-closed)
+            return None
+        if not payload:
+            return None
+        status = payload.get("status")
+        if status == "013":                             # 데이터 없음 → 정상 빈 결과
+            return payload, set()
+        if status != "000":                             # 비정상 → fail-closed
+            return None
+        dilutive: set[str] = set()
+        for it in payload.get("list", []):
+            stock_code = (it.get("stock_code") or "").strip()
+            if not stock_code:                          # 비상장(종목코드 공란) 제외
+                continue
+            if (it.get("rcept_dt", "") == bgn_de        # T-1 확정 공시만(룩어헤드 제외)
+                    and self._is_dilutive(it.get("report_nm", ""))):
+                dilutive.add(stock_code)
+        return payload, dilutive
 
     def overnight_scan(self, ticker: str, since: dt.datetime,
                        until: dt.datetime) -> bool:

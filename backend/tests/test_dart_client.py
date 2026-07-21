@@ -266,3 +266,132 @@ def test_refresh_corp_code_map_empty_db_and_failure_returns_zero(db_session):
         raise ConnectionError("DART down")
 
     assert refresh_corp_code_map(db_session, api_key="K", fetch_xml=boom) == 0
+
+
+# ── Part A: dilution_veto_bulk (벌크 veto — fail-closed 정확 보존 + 페이지네이션) ──
+CMAP_BULK = {"005930": "00126380", "000660": "00164779", "035720": "00258801"}
+
+
+def _litem(report_nm, stock_code, rcept_dt="20260629", corp="00000000"):
+    """list.json 시장 전체 공시 항목(상장 stock_code 보유)."""
+    return {"corp_code": corp, "corp_name": "", "stock_code": stock_code,
+            "report_nm": report_nm, "rcept_dt": rcept_dt}
+
+
+class MarketDart:
+    """corp_code 지정(per-ticker)·전체조회(bulk, page_no) 양쪽을 같은 공시DB로 응답.
+
+    per-ticker fetch_disclosures 는 corp_code 로 필터하고, bulk 는 page_no 페이지네이션 —
+    동일 공시DB 위에서 두 경로의 veto 동치를 검증하기 위한 fake."""
+
+    def __init__(self, disclosures, *, page_size=100):
+        self.disclosures = disclosures
+        self.page_size = page_size
+        self.calls: list[dict] = []
+
+    def __call__(self, params):
+        self.calls.append(params)
+        if "corp_code" in params:                       # per-ticker 경로(corp 필터)
+            items = [d for d in self.disclosures
+                     if d["corp_code"] == params["corp_code"]]
+            return {"status": "000", "list": items}
+        size = self.page_size                            # bulk 경로(전체 시장 페이지네이션)
+        total_page = max(1, (len(self.disclosures) + size - 1) // size)
+        start = (int(params["page_no"]) - 1) * size
+        return {"status": "000", "total_page": total_page,
+                "list": self.disclosures[start:start + size]}
+
+
+def test_bulk_veto_equivalent_to_per_ticker():
+    # 미매핑=0, T-1 희석=0, clear=1, 당일(T) 공시=1 혼합 → per-ticker 와 완전 동치
+    discs = [
+        _litem("유상증자결정", "005930", corp="00126380"),         # T-1 희석 → 0
+        _litem("분기보고서", "000660", corp="00164779"),           # T-1 무관 → 1
+        _litem("유상증자결정", "035720", rcept_dt="20260630",
+               corp="00258801"),                                    # 당일 T → 1(룩어헤드 제외)
+    ]
+    tickers = ["005930", "000660", "035720", "999999"]  # 999999 미매핑 → 0
+    dart = DartClient(MarketDart(discs), CMAP_BULK)
+    per_ticker = {t: dart.dilution_veto(t, SNAP) for t in tickers}
+    bulk = dart.dilution_veto_bulk(tickers, SNAP)
+    assert bulk == per_ticker
+    assert bulk == {"005930": VETO_BLOCK, "000660": VETO_CLEAR,
+                    "035720": VETO_CLEAR, "999999": VETO_BLOCK}
+
+
+def test_bulk_request_shape_uses_bgn_de_and_pagination_params():
+    fake = MarketDart([])
+    dart = DartClient(fake, CMAP_BULK, api_key="K")
+    dart.dilution_veto_bulk(["005930"], SNAP)
+    call = fake.calls[-1]
+    assert call["crtfc_key"] == "K"
+    assert call["bgn_de"] == "20260629"                 # T-1(snapshot_date - 1일)
+    assert call["page_no"] == 1
+    assert call["page_count"] == 100
+
+
+def test_bulk_fail_closed_on_transport_error():
+    dart = DartClient(FakeDart(raises=True), CMAP_BULK)
+    assert dart.dilution_veto_bulk(["005930", "000660"], SNAP) == {
+        "005930": VETO_BLOCK, "000660": VETO_BLOCK}       # 전 종목 fail-closed
+
+
+def test_bulk_fail_closed_on_error_status():
+    dart = DartClient(FakeDart({"status": "010", "message": "미등록 키"}), CMAP_BULK)
+    assert dart.dilution_veto_bulk(["005930", "000660"], SNAP) == {
+        "005930": VETO_BLOCK, "000660": VETO_BLOCK}
+
+
+class PagingDart:
+    """total_page 만큼 페이지를 나눠주는 fake — T-1 희석공시가 2페이지에 있는 경우 재현."""
+
+    def __init__(self, pages):
+        self.pages = pages
+        self.calls: list[dict] = []
+
+    def __call__(self, params):
+        self.calls.append(params)
+        return {"status": "000", "total_page": len(self.pages),
+                "list": self.pages[int(params["page_no"]) - 1]}
+
+
+def test_bulk_paginates_and_does_not_miss_dilution_on_later_page():
+    # T-1 희석공시가 2페이지에 있어도 놓치면 안 됨(놓치면 fail-OPEN → 희석 종목 추천 사고)
+    pages = [
+        [_litem("분기보고서", "000660", corp="00164779")],          # page1(희석 없음)
+        [_litem("유상증자결정", "005930", corp="00126380")],        # page2(T-1 희석)
+    ]
+    fake = PagingDart(pages)
+    res = DartClient(fake, CMAP_BULK).dilution_veto_bulk(["005930", "000660"], SNAP)
+    assert res["005930"] == VETO_BLOCK                  # 2페이지 희석 포착
+    assert res["000660"] == VETO_CLEAR
+    assert len(fake.calls) == 2                          # 전 페이지 순회
+
+
+def test_bulk_fail_closed_when_later_page_fails():
+    # 페이지 순회 중 어느 페이지라도 실패 → 전 종목 fail-closed
+    class HalfFailDart:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        def __call__(self, params):
+            self.calls.append(params)
+            if int(params["page_no"]) == 1:
+                return {"status": "000", "total_page": 2, "list": []}
+            raise ConnectionError("page 2 down")
+
+    dart = DartClient(HalfFailDart(), CMAP_BULK)
+    assert dart.dilution_veto_bulk(["005930", "000660"], SNAP) == {
+        "005930": VETO_BLOCK, "000660": VETO_BLOCK}
+
+
+def test_bulk_same_day_disclosure_excluded_from_live_veto():
+    # 당일(T) post-15:20 공시는 라이브 veto 유발 안 함(룩어헤드 제외 — 익일 overnight_scan 몫)
+    payload = _ok([_litem("유상증자결정", "005930", rcept_dt="20260630")])
+    dart = DartClient(FakeDart(payload), CMAP_BULK)
+    assert dart.dilution_veto_bulk(["005930"], SNAP) == {"005930": VETO_CLEAR}
+
+
+def test_bulk_status_013_clears():
+    dart = DartClient(FakeDart({"status": "013", "message": "없음"}), CMAP_BULK)
+    assert dart.dilution_veto_bulk(["005930"], SNAP) == {"005930": VETO_CLEAR}

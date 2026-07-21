@@ -106,6 +106,26 @@ def test_get_ohlcv_forwards_exact_todate_no_lookahead():
     assert px.calls[-1] == ("ohlcv", "20250629", "20260629", "000660")
 
 
+def test_get_ohlcv_gives_up_fast_on_hanging_krx(monkeypatch):
+    # 2026-07-21 실사고: 라이브-only 후보 OHLCV 조회에 타임아웃 가드가 없어 KRX 무응답
+    # 한 종목에서 15:20 스캔 전체가 영구 블록됐다. 이제 타임아웃 후 None(스킵)이어야 한다.
+    import time
+
+    from app.data import pykrx_client
+
+    monkeypatch.setattr(pykrx_client, "OHLCV_TIMEOUT_SEC", 0.2)
+
+    class HangingPx:
+        def get_market_ohlcv(self, frm, to, ticker):
+            time.sleep(3.0)                       # KRX 무응답 재현
+            return None
+
+    started = time.monotonic()
+    result = PykrxClient(HangingPx()).get_ohlcv("000660", "20250629", "20260629")
+    assert time.monotonic() - started < 1.5       # 3초 hang 을 기다리지 않고 즉시 포기
+    assert result is None                          # 무응답 → None(호출측이 스킵)
+
+
 # ── 수급: 시장×투자자유형별 1회=총 4회, value 컬럼 합산, per-ticker 금지 ──
 def test_net_purchases_four_calls_value_column_sums_investors():
     px = FakePykrx()
@@ -278,6 +298,19 @@ def test_select_top_value_universe_graceful_on_missing_market():
     assert market_of == {"000660": "KOSPI"}
 
 
+def test_select_top_value_universe_warns_on_empty_market(caplog):
+    # fail-loud: 한 시장 결손(KOSDAQ 0행)은 조용히 넘어가지 않고 경고를 남긴다
+    # (2026-07-06 KOSDAQ=0 인데 run=OK 로 반토막 유니버스가 발행된 사고 방지).
+    import logging
+
+    px = _FakeByTickerPx({"KOSPI": _by_ticker_df([("000660", 900)])})  # KOSDAQ None
+    with caplog.at_level(logging.WARNING, logger="app.data.pykrx_client"):
+        tickers, _ = select_top_value_universe(px, "20260629", top_n=200)
+    assert tickers == ["000660"]
+    messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "KOSDAQ" in messages and "결손" in messages    # 시장 결손 명시 경고
+
+
 def test_prefetch_top_value_limits_universe_and_carries_market():
     px = _FakeByTickerPx({
         "KOSPI": _by_ticker_df([("000660", 900)]),
@@ -293,6 +326,24 @@ def test_prefetch_top_value_limits_universe_and_carries_market():
     assert set(bundle.universe) == {"000660", "035720"}     # top200 union (여기선 2종목)
     assert bundle.market_of["000660"] == "KOSPI"
     assert bundle.market_of["035720"] == "KOSDAQ"
+
+
+def test_prefetch_top_value_resolves_universe_n_from_config(monkeypatch):
+    # top_n 미지정 시 config(CBR_UNIVERSE_N)에서 해소 — 확대/A-B 를 env 로 조정 가능.
+    px = _FakeByTickerPx({
+        "KOSPI": _by_ticker_df([("000660", 900), ("005930", 700)]),
+        "KOSDAQ": _by_ticker_df([("035720", 800), ("247540", 600)]),
+    })
+    px.ohlcv = _ohlcv(["20260626", "20260629"], [100, 120], [90, 110], [95, 115], [10, 20])
+    px.get_market_ohlcv = lambda frm, to, ticker: px.ohlcv
+    px.get_market_net_purchases_of_equities = lambda frm, to, mkt, inv: _supply("000660", 8e9)
+    px.get_index_ohlcv = lambda frm, to, code: px.ohlcv
+    monkeypatch.setenv("CBR_UNIVERSE_N", "1")               # env 로 유니버스 1종목으로 축소
+    bundle = prefetch_top_value(dt.date(2026, 6, 30), px)  # top_n 미전달 → config 해소
+    assert bundle.universe == ["000660"]                    # 거래대금 1위만
+    monkeypatch.setenv("CBR_UNIVERSE_N", "3")
+    bundle3 = prefetch_top_value(dt.date(2026, 6, 30), px)
+    assert len(bundle3.universe) == 3
 
 
 # ── 오버나잇 갭 통계: gap[t]=open[t+1]/close[t]-1 ──────────
@@ -500,8 +551,52 @@ def test_prefetch_final_skips_hanging_ticker_without_blocking(monkeypatch):
                             universe=["HANG", "000660"])
     elapsed = time.monotonic() - t0
     assert elapsed < 3.0                       # 5초 hang을 기다리지 않고 스킵
-    assert "HANG" not in bundle.h_ref_252      # 무응답 종목은 제외
-    assert "000660" in bundle.h_ref_252        # 정상 종목은 포함
+    # h_ref_60 로 포함/제외 검증(3행짜리 fake 는 실이력<252 라 h_ref_252 는 None 이 정상 —
+    # 가짜 52주 신고가 방지 게이트). 무응답 종목은 제외, 정상 종목은 포함.
+    assert "HANG" not in bundle.h_ref_60       # 무응답 종목은 제외
+    assert "000660" in bundle.h_ref_60         # 정상 종목은 포함
+    assert "000660" not in bundle.h_ref_252    # 이력<252 → 52주 신고가 미산출
+    assert bundle.listing_days["000660"] == 3  # 실이력행수 저장
+
+
+def _ohlcv_n(n, high=100.0):
+    """n행 OHLCV fake — 이력행수 게이트(≥252) 검증용."""
+    dates = [str(i) for i in range(n)]
+    return pd.DataFrame(
+        {"고가": [high] * n, "저가": [high * 0.9] * n,
+         "종가": [high * 0.95] * n, "거래대금": [1e9] * n},
+        index=dates,
+    )
+
+
+class _MultiDfPrefetchPx:
+    """종목별로 서로 다른 이력길이 OHLCV 를 돌려주는 prefetch 용 fake."""
+
+    def __init__(self, dfs):
+        self.dfs = dfs
+
+    def get_market_ohlcv(self, frm, to, ticker):
+        return self.dfs.get(ticker)
+
+    def get_market_net_purchases_of_equities(self, frm, to, market, investor):
+        return _supply("000660", 0)
+
+    def get_index_ohlcv(self, frm, to, index_code):
+        return _ohlcv_n(260)
+
+
+def test_prefetch_final_h252_only_when_full_history():
+    # off-by-2 수정: 실이력 ≥252 종목만 h_ref_252 를 채운다. 120<=이력<252 종목은
+    # 60일 축만 쓰도록 h_ref_252=None(미저장). compute_h_ref 가 이력부족에도 에러를
+    # 안 내는 특성 때문에 게이트가 없으면 '짧은 window 고가'를 52주 신고가로 오인한다.
+    px = _MultiDfPrefetchPx({"LONG": _ohlcv_n(260), "SHORT": _ohlcv_n(150)})
+    bundle = prefetch_final(dt.date(2026, 7, 6), pykrx_module=px,
+                            universe=["LONG", "SHORT"])
+    assert bundle.h_ref_252.get("LONG") is not None   # 이력 충분 → 52주 신고가 산출
+    assert bundle.h_ref_252.get("SHORT") is None       # 이력 부족 → 미산출(룩어헤드 방지)
+    assert bundle.h_ref_60.get("SHORT") is not None    # 60일 축은 유지
+    assert bundle.listing_days["LONG"] == 260
+    assert bundle.listing_days["SHORT"] == 150
 
 
 # ── /market: breadth(시장 폭) + sectors(업종 등락) ─────────

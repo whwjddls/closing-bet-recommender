@@ -50,10 +50,16 @@ def point_in_time_universe(membership, as_of_date) -> set:
 
 
 def reconstruct_pool(value_panel: pd.DataFrame, as_of_date, universe: set,
-                     top_n: int = 200) -> list:
+                     top_n: int | None = None) -> list:
     """D-1(직전 거래일) 거래대금 상위 top_n 후보 풀을 시점기준으로 재현.
     결정성: value 내림차순, 동점은 ticker 오름차순(mergesort 안정정렬).
-    당일/미래 행은 guard_final_dates 로 차단."""
+    당일/미래 행은 guard_final_dates 로 차단.
+    top_n 미지정 시 라이브와 동일한 config(CBR_UNIVERSE_N, 기본 200)에서 해소 —
+    백테스트-라이브 유니버스 크기 정합(따로 하드코딩하면 조용히 어긋난다)."""
+    if top_n is None:
+        from app.config import get_settings
+
+        top_n = get_settings().universe_n
     d = pd.Timestamp(as_of_date)
     dates = pd.to_datetime(value_panel["date"])
     hist = value_panel[dates < d]

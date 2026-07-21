@@ -35,16 +35,33 @@ def load_env() -> None:
     load_dotenv(ENV_PATH)
 
 
+DEFAULT_UNIVERSE_N = 200   # D-1 거래대금 상위 유니버스 기본 크기(CBR_UNIVERSE_N 로 조정)
+
+
+def _env_int(name: str, default: int) -> int:
+    """env 정수 파싱 — 미설정/공백/비정수는 default 로 폴백(fail-soft, 배치 중단 방지)."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 @dataclass(slots=True, frozen=True)
 class Settings:
     state_dir: Path
     db_path: Path
+    universe_n: int
 
 
 def get_settings() -> Settings:
     state_dir = Path(os.environ.get("CBR_STATE_DIR", _BACKEND_ROOT / "state"))
     db_path = Path(os.environ.get("CBR_DB_PATH", state_dir / "cbr.sqlite"))
-    return Settings(state_dir=state_dir, db_path=db_path)
+    universe_n = _env_int("CBR_UNIVERSE_N", DEFAULT_UNIVERSE_N)
+    return Settings(state_dir=state_dir, db_path=db_path, universe_n=universe_n)
 
 
 def recommendations_json_path(state_dir, run_date: str) -> Path:

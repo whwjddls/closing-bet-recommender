@@ -145,6 +145,7 @@ class FinalPrefetch(Base):
     avg_value_20d: Mapped[float | None] = mapped_column(Float)
     d1_supply_value: Mapped[float | None] = mapped_column(Float)
     market: Mapped[str | None] = mapped_column(String)       # 종목 소속시장(top200 선정 시 확보)
+    listing_days: Mapped[int | None] = mapped_column(Integer)  # 가용 이력행수(≥252 시 52주 신고가 축 사용)
 
 
 class Run(Base):

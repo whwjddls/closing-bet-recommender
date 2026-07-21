@@ -23,6 +23,23 @@ def test_settings_env_override(monkeypatch, tmp_path):
     assert settings.state_dir == (tmp_path / "custom_state")
 
 
+def test_universe_n_defaults_to_200(monkeypatch):
+    monkeypatch.delenv("CBR_UNIVERSE_N", raising=False)
+    assert get_settings().universe_n == 200
+
+
+def test_universe_n_env_override(monkeypatch):
+    monkeypatch.setenv("CBR_UNIVERSE_N", "600")
+    assert get_settings().universe_n == 600
+
+
+def test_universe_n_invalid_falls_back_to_default(monkeypatch):
+    # 비정수/공백/음수/0 은 기본값으로 폴백(배치 중단 방지 fail-soft).
+    for bad in ("abc", "", "  ", "0", "-5"):
+        monkeypatch.setenv("CBR_UNIVERSE_N", bad)
+        assert get_settings().universe_n == 200
+
+
 # ── EXE(PyInstaller) 경로 해소 — .env·DB 가 임시폴더로 새지 않아야 한다 ──────
 def test_app_root_uses_backend_dir_when_not_frozen():
     from app.config import _app_root

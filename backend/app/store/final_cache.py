@@ -24,6 +24,7 @@ def persist_prefetch_bundle(db: Session, bundle) -> int:
     옛 행이 남아 후보풀이 신·구 합집합으로 부풀고, 잘못된 D-1 로 계산된 stale 행
     (수급 0 등)이 그대로 15:20 런에 흘러들었다."""
     tickers = sorted(bundle.avg_value_20d.keys())
+    listing_of = getattr(bundle, "listing_days", {}) or {}
     db.query(FinalPrefetch).filter(FinalPrefetch.run_date == bundle.run_date).delete()
     db.flush()
     for ticker in tickers:
@@ -34,7 +35,8 @@ def persist_prefetch_bundle(db: Session, bundle) -> int:
             atr20=bundle.atr20.get(ticker),
             avg_value_20d=bundle.avg_value_20d.get(ticker),
             d1_supply_value=bundle.net_purchases.get(ticker, 0.0),
-            market=getattr(bundle, "market_of", {}).get(ticker)))
+            market=getattr(bundle, "market_of", {}).get(ticker),
+            listing_days=listing_of.get(ticker)))
     return len(tickers)
 
 
@@ -53,12 +55,15 @@ def persist_universe_cache(db: Session, bundle, names: dict | None = None) -> in
         frm_s = (as_of - timedelta(days=10)).strftime("%Y%m%d")
         to_s = (as_of - timedelta(days=1)).strftime("%Y%m%d")
         names = stock_names_bulk(frm_s, to_s)
+    # 같은 as_of 재실행 시 옛 유니버스 행을 먼저 지운다(persist_prefetch_bundle 과 동일 패턴).
+    # 순수 upsert 였을 때는 유니버스가 바뀌면 옛 행이 남아 /universe 스캐너가 신·구
+    # 합집합으로 부풀었다(2026-07-13 이 358행으로 보인 재실행 누적 사고).
+    db.query(UniverseCache).filter(UniverseCache.as_of == as_of).delete()
+    db.flush()
     for ticker in universe:
-        row = db.get(UniverseCache, (ticker, as_of))
-        if row is None:
-            row = UniverseCache(ticker=ticker, as_of=as_of)
-            db.add(row)
-        row.name = names.get(ticker) or row.name
+        row = UniverseCache(ticker=ticker, as_of=as_of)
+        db.add(row)
+        row.name = names.get(ticker)
         row.market = market_of.get(ticker)
         row.avg_value_20d = avg_value_of.get(ticker)
         row.eligible = True

@@ -18,12 +18,15 @@ from app.engine.signals.breakout import s_shin
 from app.engine.signals.rvol import compute_rvol, rvol_confirm, s_geo
 from app.engine.signals.supply import supply_tilt, supply_z
 from app.engine.scoring import core_score, final_score
-from app.engine.grade import grade_of
+from app.engine.grade import GRADE_A, grade_of
 from app.engine.pricing import freeze_prices
 
 MIN_COVERAGE = 0.70
 MAX_EMIT = 30
 VETO_FAIL_CLOSED = 0
+# 발행 등급 하한 — A 이상(S·A)만 보드에 올린다. B·C 는 실적중률이 낮아 제외.
+# core(레짐 독립) 기준이므로 core >= GRADE_A(0.6) 가 곧 등급 A 이상이다.
+EMIT_MIN_CORE = GRADE_A
 # base_flag(베이스 배지) 조-baseline 휴리스틱: 60일 고가 근접(=베이스 상단)이면 True.
 BASE_NEAR_60_FLOOR = 0.97
 
@@ -100,7 +103,8 @@ class Funnel:
     shin_zero: int = 0          #    └ 이 중 s_신=0 (돌파 근접 미달)
     veto_blocked: int = 0       #    └ 이 중 veto=0 (희석공시·미매핑 fail-closed)
     regime_zero: int = 0        #    └ 이 중 regime=0 (리스크오프 시장)
-    emitted: int = 0            # ⑤ final>0 (랭킹 캡 적용 전)
+    grade_dropped: int = 0      #    └ 이 중 등급 A 미만(core<0.6, B·C·None) 제외
+    emitted: int = 0            # ⑤ 등급 A 이상 & final>0 (랭킹 캡 적용 전)
     published: int = 0          # ⑥ top-N 컷 후 발행
 
     def to_dict(self) -> dict:
@@ -108,8 +112,8 @@ class Funnel:
             "candidates": self.candidates, "static_ok": self.static_ok,
             "quotes": self.quotes, "dynamic_ok": self.dynamic_ok,
             "shin_zero": self.shin_zero, "veto_blocked": self.veto_blocked,
-            "regime_zero": self.regime_zero, "emitted": self.emitted,
-            "published": self.published,
+            "regime_zero": self.regime_zero, "grade_dropped": self.grade_dropped,
+            "emitted": self.emitted, "published": self.published,
         }
 
 
@@ -164,7 +168,7 @@ def run_pipeline(
         return PipelineResult(False, "LOW_COVERAGE", [], coverage, Funnel(**base))
 
     rows: List[EngineRow] = []
-    dynamic_ok = shin_zero = veto_blocked = regime_zero = 0
+    dynamic_ok = shin_zero = veto_blocked = regime_zero = grade_dropped = 0
     for c in static_ok:
         q = quotes.get(c.ticker)
         if q is None:
@@ -190,8 +194,12 @@ def run_pipeline(
             veto_blocked += 1
         if regime_mult == 0:
             regime_zero += 1
+        if core < EMIT_MIN_CORE:
+            grade_dropped += 1
+            continue   # emit 규칙①: 등급 A 이상(core>=0.6)만. B·C 는 실적중률 낮아 제외.
+                       # (등급은 core 기준=레짐 독립 — 여기서 컷하면 pricing/row 생성도 생략)
         if final <= 0:
-            continue   # emit 규칙: final > 0
+            continue   # emit 규칙②: final > 0 (등급 A+ 였어도 veto/regime 로 죽으면 제외)
         pricing = freeze_prices(q.p_now, c.atr20, c.prev_high)
         base_flag = b.near_60 >= BASE_NEAR_60_FLOOR          # 조-baseline 휴리스틱
         rows.append(EngineRow(
@@ -207,7 +215,8 @@ def run_pipeline(
         ))
 
     stages = dict(base, dynamic_ok=dynamic_ok, shin_zero=shin_zero,
-                  veto_blocked=veto_blocked, regime_zero=regime_zero, emitted=len(rows))
+                  veto_blocked=veto_blocked, regime_zero=regime_zero,
+                  grade_dropped=grade_dropped, emitted=len(rows))
     if not rows:
         return PipelineResult(True, "RISK_OFF", [], coverage, Funnel(**stages))
 

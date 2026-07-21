@@ -37,6 +37,9 @@ class FakeAdapter:
     def dilution_veto(self, ticker, snapshot_at):
         return 0 if ticker == "000660" else 1        # 000660 희석 veto
 
+    def dilution_veto_bulk(self, tickers, snapshot_at):
+        return {t: self.dilution_veto(t, snapshot_at) for t in tickers}
+
 
 class DictStore:                                     # 인메모리 store 페이크
     def __init__(self):
@@ -267,6 +270,136 @@ def test_orchestrator_store_load_names_latest_as_of_not_after_run_date():
     with Session() as db:
         names = OrchestratorStore(db).load_names(date(2026, 7, 1))
     assert names == {"005930": "삼성전자"}
+
+
+# ── 정적위생 실배선: 15:20 병렬 기본정보(get_basic_info_bulk) → passes_static 반영 ──
+def _basic_info_o(ticker, *, managed=False, warning=False, preferred=False):
+    return {"ticker": ticker, "name": f"N{ticker}", "is_managed": managed,
+            "is_warning": warning, "is_preferred": preferred,
+            "is_ineligible": bool(managed or warning or preferred)}
+
+
+def _clean_cand(ticker, market="KOSDAQ"):
+    # 정적/동적/스코어 전부 통과해 실 run_pipeline 이 발행하는 후보(test_pipeline 파형)
+    return StaticCandidate(
+        ticker=ticker, name=f"N{ticker}", market=market, sec_type="COMMON",
+        avg_value_20d=50_000_000_000.0, is_managed=False, is_warning=False,
+        is_caution=False, listing_days=300, high_60=23500.0, high_252=24000.0,
+        prev_high=24800.0, atr20=300.0, d1_supply_value=8_000_000_000.0,
+        d1_value=50_000_000_000.0, recent_closes=(23000.0, 23500.0, 24000.0))
+
+
+class HygieneAdapter(FakeAdapter):
+    """15:20 병렬 기본정보(get_basic_info_bulk)를 노출 — 관리/경고/우선주 플래그원.
+
+    build_candidates 는 4종목(우선주/관리/경고/정상)을 전부 '깨끗한(COMMON/False)' 상태로
+    낸다 — 위생조회 반영 전엔 4종 모두 발행되고, 반영 후 부적격 3종만 제외돼야 한다."""
+
+    def __init__(self, info):
+        self._info = info
+
+    def build_candidates(self, run_date, snapshot_at):
+        return [_clean_cand("PREF"), _clean_cand("MGMT"),
+                _clean_cand("WARN"), _clean_cand("CLEAN")]
+
+    def fetch_live(self, tickers):
+        return {t: LiveQuote(p_now=24500.0, cum_volume_1520=2500.0, day_change_pct=3.0,
+                             is_limit_up=False, is_vi=False, is_halted=False)
+                for t in tickers}
+
+    def get_basic_info_bulk(self, tickers):
+        return {t: self._info[t] for t in tickers if t in self._info}
+
+
+def test_orchestrate_static_hygiene_excludes_preferred_managed_warning_from_board():
+    """15:20 기본정보로 관리/경고/우선주 플래그를 채우면 실 run_pipeline 의 passes_static 이
+    이들을 라이브 조회 전에 제외해 보드에 안 나온다. 정보 없는(=조회실패/미포함) 종목은
+    제외되지 않는다(보수적 = 제외 안 함, fail-open 아님)."""
+    info = {
+        "PREF": _basic_info_o("PREF", preferred=True),
+        "MGMT": _basic_info_o("MGMT", managed=True),
+        "WARN": _basic_info_o("WARN", warning=True),
+        # "CLEAN" 은 info 없음 → 원래 COMMON/False 유지(제외 안 됨)
+    }
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=HygieneAdapter(info), store=DictStore())
+    emitted = {r.ticker for r in res.recommendations}
+    assert emitted == {"CLEAN"}                      # 부적격 3종 제외, 정보없는 CLEAN 만 발행
+
+
+def test_orchestrate_static_hygiene_no_info_keeps_all_eligible():
+    """get_basic_info_bulk 가 전부 빈(정보없음)이면 어떤 후보도 제외되지 않는다(보수적)."""
+    res = orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                          adapter=HygieneAdapter({}), store=DictStore())
+    emitted = {r.ticker for r in res.recommendations}
+    assert emitted == {"PREF", "MGMT", "WARN", "CLEAN"}   # 정보없음 → 전원 유지
+
+
+class HygieneStore(DictStore):
+    """update_universe_hygiene 호출을 기록하는 store 스파이."""
+
+    def __init__(self):
+        super().__init__()
+        self.hygiene_updates = []
+
+    def update_universe_hygiene(self, run_date, flags):
+        self.hygiene_updates.append((run_date, dict(flags)))
+
+
+def test_orchestrate_persists_hygiene_flags_to_universe_cache():
+    """15:20 에 확인한 위생 플래그를 그 run_date 의 universe_cache 에 반영하도록
+    store.update_universe_hygiene 를 호출해야 한다(prefetch 08:30 경로는 이 값을 모름)."""
+    store = HygieneStore()
+    info = {"PREF": _basic_info_o("PREF", preferred=True),
+            "MGMT": _basic_info_o("MGMT", managed=True)}
+    orchestrate_run(date(2026, 6, 30), datetime(2026, 6, 30, 15, 20),
+                    adapter=HygieneAdapter(info), store=store,
+                    run_pipeline_fn=fake_run_pipeline)
+    assert store.hygiene_updates                     # 위생조회 후 영속화 호출됨
+    rd, flags = store.hygiene_updates[0]
+    assert rd == date(2026, 6, 30)
+    assert flags["PREF"]["is_preferred"] is True
+    assert flags["MGMT"]["is_managed"] is True
+
+
+def test_orchestrator_store_update_universe_hygiene_updates_existing_rows():
+    """실 OrchestratorStore.update_universe_hygiene — run_date 행의 sec_type/is_managed/
+    is_warning 를 갱신하고, 우선주는 sec_type='PREFERRED'. 행이 없으면 무시(방어적)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.store.models import Base, UniverseCache
+    from app.store.orchestrator_store import OrchestratorStore
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    run_date = date(2026, 6, 30)
+    with Session() as db:
+        db.add(UniverseCache(ticker="005930", as_of=run_date, name="삼성전자우",
+                             sec_type="COMMON", is_managed=False, is_warning=False))
+        db.add(UniverseCache(ticker="000660", as_of=run_date, name="SK하이닉스",
+                             sec_type="COMMON", is_managed=False, is_warning=False))
+        db.commit()
+
+    flags = {
+        "005930": {"is_managed": False, "is_warning": False, "is_preferred": True},
+        "000660": {"is_managed": True, "is_warning": True, "is_preferred": False},
+        "999999": {"is_managed": True, "is_warning": False, "is_preferred": False},  # 행 없음
+    }
+    with Session() as db:
+        OrchestratorStore(db).update_universe_hygiene(run_date, flags)
+        db.commit()
+
+    with Session() as db:
+        pref = db.get(UniverseCache, ("005930", run_date))
+        warn = db.get(UniverseCache, ("000660", run_date))
+        missing = db.get(UniverseCache, ("999999", run_date))
+    assert pref.sec_type == "PREFERRED"                  # 우선주 → 정적위생 제외군
+    assert warn.is_managed is True and warn.is_warning is True
+    assert warn.sec_type == "COMMON"                     # 우선주 아님 → sec_type 불변
+    assert missing is None                               # 행 없으면 무시(에러 없음)
 
 
 def test_orchestrate_uses_real_orchestrator_store_prefetch_end_to_end():

@@ -223,6 +223,25 @@ def test_value_ranking_tr_id_and_parsing(fake_clock):
     assert entries[0].name == "SK하이닉스"    # 종목명 — 코드만 표기되는 UX 결함 방지
 
 
+def test_volume_surge_ranking_uses_increase_rate_blng_code(fake_clock):
+    # 당일 거래증가율(≈RVOL) 랭킹 — 같은 volume-rank TR 을 FID_BLNG_CLS_CODE="1" 로 호출.
+    t = RecordingTransport()
+    t.token_responses = [_token()]
+    t.tr_responses["FHPST01710000"] = [
+        {"output": [{"mksc_shrn_iscd": "247540", "hts_kor_isnm": "에코프로비엠",
+                     "acml_tr_pbmn": "500", "data_rank": "1"}]},
+        {"output": []},                       # 두 번째 호출(get_value_ranking)용
+    ]
+    client = _client(t, fake_clock)           # 단일 인스턴스 — 토큰 1회 발급 후 재사용
+    entries = client.get_volume_surge_ranking(Market.KOSDAQ)
+    assert t.calls[-1]["headers"]["tr_id"] == "FHPST01710000"
+    assert t.calls[-1]["params"]["FID_BLNG_CLS_CODE"] == "1"   # 거래증가율(RVOL) 정렬
+    assert entries[0].ticker == "247540"
+    # 거래대금순과 정렬기준만 다르다(같은 TR) — 거래대금순은 "3"
+    client.get_value_ranking(Market.KOSDAQ)
+    assert t.calls[-1]["params"]["FID_BLNG_CLS_CODE"] == "3"
+
+
 def test_index_level_tr_id_and_parsing(fake_clock):
     t = RecordingTransport()
     t.token_responses = [_token()]
@@ -525,3 +544,33 @@ def test_token_cache_expired_reissues(tmp_path):
     c = _cache_client(t, _CountClock(), cache)
     assert c._ensure_token() == "NEW"                   # 만료 → 재발급 + 파일 갱신
     assert "NEW" in cache.read_text(encoding="utf-8")
+
+
+# ── Part B: 토큰 발급 스레드안전 — 동시 만료 감지에도 발급 transport 1회 ─────
+def test_ensure_token_issues_once_under_concurrent_threads():
+    # 여러 워커가 동시에 _ensure_token 을 호출(토큰 미보유 상태)해도, 발급 transport 는
+    # RLock 이중검사로 정확히 1회만 실행돼야 한다(중복 발급 → KIS 1분1회 403 사고 방지).
+    import threading
+    import time
+
+    from app.data.kis_client import KisClient, _RealClock
+
+    issues: list[int] = []
+    ilock = threading.Lock()
+
+    def transport(method, url, *, headers=None, json=None, params=None):
+        if url.endswith("/oauth2/tokenP"):
+            with ilock:
+                issues.append(1)
+            time.sleep(0.02)            # 발급 경합 창을 넓혀 락 부재 시 중복 발급을 유도
+            return {"access_token": "TOK", "expires_in": 86400}
+        return {"output": {}}
+
+    client = KisClient(transport, _RealClock(), _cfg())
+    threads = [threading.Thread(target=client._ensure_token) for _ in range(8)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert len(issues) == 1              # 8스레드 동시 진입에도 발급은 1회
+    assert client._ensure_token() == "TOK"
