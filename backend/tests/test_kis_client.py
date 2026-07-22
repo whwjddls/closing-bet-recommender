@@ -487,10 +487,21 @@ def test_get_news_titles_graceful_on_error(fake_clock):
 
 
 # ── 파일 공유 토큰 캐시: 인스턴스/프로세스 간 재사용(1분 1회 발급 제한 대응) ──
-def _cache_client(transport, clock, cache_path):
+WALL_T0 = 1_784_524_651.0          # 벽시계 기준점(epoch) — 실측 토큰 iat 값
+
+
+class _FakeWall:
+    """주입형 벽시계 — 토큰 파일 만료(epoch) 판정용. 재부팅을 넘어 유효."""
+
+    def __init__(self, t: float = WALL_T0): self.t = t
+    def __call__(self) -> float: return self.t
+
+
+def _cache_client(transport, clock, cache_path, wall=None):
     from app.data.kis_client import KisClient, KisConfig
     cfg = KisConfig(app_key="AK", app_secret="SK", base_url="https://x", account="1-1")
-    return KisClient(transport, clock, cfg, token_cache=cache_path)
+    return KisClient(transport, clock, cfg, token_cache=cache_path,
+                     wall_now=wall or _FakeWall())
 
 
 class _CountClock:
@@ -521,29 +532,92 @@ def test_token_cache_file_shared_across_instances(tmp_path):
 def test_token_issue_failure_falls_back_to_cached_file(tmp_path):
     import json
     cache = tmp_path / "kis_token.json"
-    cache.write_text(json.dumps({"access_token": "CACHED", "expiry_ts": 1_000.0 + 3600,
+    cache.write_text(json.dumps({"access_token": "CACHED",
+                                 "expires_at_epoch": WALL_T0 + 3600,
                                  "key": "AK:https://x"}), encoding="utf-8")
     def boom(method, url, **kw):
         if url.endswith("/oauth2/tokenP"):
             import requests
             raise requests.exceptions.HTTPError("403 Forbidden")   # 발급 제한
         return {"output": {}}
-    c = _cache_client(boom, _CountClock(), cache)
+    c = _cache_client(boom, _CountClock(), cache, wall=_FakeWall())
     assert c._ensure_token() == "CACHED"                # 403 이어도 캐시로 동작
 
 
 def test_token_cache_expired_reissues(tmp_path):
     import json
     cache = tmp_path / "kis_token.json"
-    cache.write_text(json.dumps({"access_token": "OLD", "expiry_ts": 10.0,
+    cache.write_text(json.dumps({"access_token": "OLD",
+                                 "expires_at_epoch": WALL_T0 - 10,
                                  "key": "AK:https://x"}), encoding="utf-8")
     def t(method, url, **kw):
         if url.endswith("/oauth2/tokenP"):
             return {"access_token": "NEW", "expires_in": 86400}
         return {"output": {}}
-    c = _cache_client(t, _CountClock(), cache)
+    c = _cache_client(t, _CountClock(), cache, wall=_FakeWall())
     assert c._ensure_token() == "NEW"                   # 만료 → 재발급 + 파일 갱신
     assert "NEW" in cache.read_text(encoding="utf-8")
+
+
+# ── 재시작 후 만료 판정(2026-07-22 사고 회귀) ───────────────────────
+# 영속 만료 시각을 monotonic 으로 적으면 재부팅 시 monotonic 이 0 으로 리셋돼
+# "작은 현재값 < 큰 저장값"이 항상 참 → 만료 토큰을 영구 재사용(전 종목 시세 0).
+# 파일은 벽시계 epoch 로만 적고, 프로세스 내부 판정만 monotonic 을 쓴다.
+def test_token_cache_reissues_after_restart_when_wall_clock_expired(tmp_path):
+    cache = tmp_path / "kis_token.json"
+    issues = []
+
+    def transport(method, url, **kw):
+        if url.endswith("/oauth2/tokenP"):
+            issues.append(1)
+            return {"access_token": f"TOK{len(issues)}", "expires_in": 86400}
+        return {"output": {}}
+
+    # 프로세스 A: 가동 19일차(monotonic 큼)에 발급 → 파일 기록
+    wall_a = _FakeWall(WALL_T0)
+    clock_a = _CountClock(); clock_a.t = 1_656_958.0
+    assert _cache_client(transport, clock_a, cache, wall=wall_a)._ensure_token() == "TOK1"
+
+    # 프로세스 B: 재부팅 후(monotonic≈0) + 벽시계로는 25시간 경과(토큰 만료)
+    wall_b = _FakeWall(WALL_T0 + 25 * 3600)
+    clock_b = _CountClock(); clock_b.t = 12.0
+    token = _cache_client(transport, clock_b, cache, wall=wall_b)._ensure_token()
+
+    assert token == "TOK2"          # 만료 인지 → 재발급 (버그 시 "TOK1" 무한 재사용)
+    assert len(issues) == 2
+
+
+def test_token_cache_ignores_legacy_monotonic_field(tmp_path):
+    # 디스크에 남은 구 포맷(monotonic expiry_ts)은 신뢰 불가 — 무시하고 재발급해야 한다.
+    import json
+    cache = tmp_path / "kis_token.json"
+    cache.write_text(json.dumps({"access_token": "POISONED", "expiry_ts": 1_743_358.0,
+                                 "key": "AK:https://x"}), encoding="utf-8")
+
+    def transport(method, url, **kw):
+        if url.endswith("/oauth2/tokenP"):
+            return {"access_token": "FRESH", "expires_in": 86400}
+        return {"output": {}}
+
+    c = _cache_client(transport, _CountClock(), cache, wall=_FakeWall())
+    assert c._ensure_token() == "FRESH"
+
+
+def test_token_cache_file_stores_wall_clock_epoch(tmp_path):
+    # 기록된 만료가 벽시계 epoch 여야 한다 — monotonic 을 적으면 재시작 후 오판.
+    import json
+    cache = tmp_path / "kis_token.json"
+
+    def transport(method, url, **kw):
+        if url.endswith("/oauth2/tokenP"):
+            return {"access_token": "TOK", "expires_in": 86400}
+        return {"output": {}}
+
+    clock = _CountClock(); clock.t = 1_656_958.0        # monotonic 은 크게
+    _cache_client(transport, clock, cache, wall=_FakeWall())._ensure_token()
+    saved = json.loads(cache.read_text(encoding="utf-8"))
+    assert saved["expires_at_epoch"] == pytest.approx(WALL_T0 + 86400)
+    assert "expiry_ts" not in saved                     # 구 필드 미기록
 
 
 # ── Part B: 토큰 발급 스레드안전 — 동시 만료 감지에도 발급 transport 1회 ─────

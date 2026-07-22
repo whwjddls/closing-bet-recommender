@@ -83,9 +83,13 @@ class KisClient:
 
     def __init__(self, transport: Transport, clock: Clock, config: KisConfig,
                  *, rate_per_sec: int = 20, expiry_skew: float = 60.0,
-                 issue_throttle: float = 60.0, token_cache: Path | None = None):
+                 issue_throttle: float = 60.0, token_cache: Path | None = None,
+                 wall_now: Callable[[], float] | None = None):
         self._transport = transport
         self._clock = clock
+        # 토큰 파일 만료는 **벽시계(epoch)** — clock.now()(monotonic)는 프로세스 수명
+        # 안에서만 유효해 재시작을 넘어 비교하면 만료를 영영 감지 못 한다(2026-07-22 사고).
+        self._wall_now = wall_now or _wall_epoch_now
         self._cfg = config
         self._min_interval = 1.0 / rate_per_sec
         self._expiry_skew = expiry_skew
@@ -107,23 +111,28 @@ class KisClient:
         return f"{self._cfg.app_key}:{self._cfg.base_url}"
 
     def _read_token_cache(self) -> tuple[str, float] | None:
+        """``(token, 남은 TTL 초)`` — 파일의 벽시계 만료를 현재 벽시계로 환산해 돌려준다.
+
+        구 포맷(``expiry_ts``, monotonic)은 키 부재로 자연 무시된다 — 재시작을 넘긴
+        monotonic 값은 신뢰할 수 없으므로 재발급이 맞다."""
         if self._token_cache is None or not self._token_cache.exists():
             return None
         try:
             data = json.loads(self._token_cache.read_text(encoding="utf-8"))
             if data.get("key") != self._cache_key():
                 return None                          # 다른 계정/서버 토큰 오용 방지
-            return str(data["access_token"]), float(data["expiry_ts"])
-        except Exception:                            # noqa: BLE001  (손상 파일 → 무시)
+            expires_at = float(data["expires_at_epoch"])
+            return str(data["access_token"]), expires_at - self._wall_now()
+        except Exception:                            # noqa: BLE001  (손상/구 포맷 → 무시)
             return None
 
-    def _write_token_cache(self, token: str, expiry_ts: float) -> None:
+    def _write_token_cache(self, token: str, expires_at_epoch: float) -> None:
         if self._token_cache is None:
             return
         try:
             self._token_cache.parent.mkdir(parents=True, exist_ok=True)
             self._token_cache.write_text(json.dumps(
-                {"access_token": token, "expiry_ts": expiry_ts,
+                {"access_token": token, "expires_at_epoch": expires_at_epoch,
                  "key": self._cache_key()}), encoding="utf-8")
         except Exception:                            # noqa: BLE001  (캐시 실패는 비치명)
             pass
@@ -143,8 +152,8 @@ class KisClient:
         if self._token and now < self._token_expiry - self._expiry_skew:
             return self._token                       # 이중검사: 락 대기 중 타 스레드가 발급
         cached = self._read_token_cache()            # 파일 공유 토큰(타 인스턴스 발급분)
-        if cached and now < cached[1] - self._expiry_skew:
-            self._token, self._token_expiry = cached
+        if cached and cached[1] > self._expiry_skew:  # 남은 TTL(벽시계) 기준
+            self._token, self._token_expiry = cached[0], now + cached[1]
             return self._token
         if (self._token and self._last_issue_ts is not None
                 and (now - self._last_issue_ts) < self._issue_throttle):
@@ -158,16 +167,17 @@ class KisClient:
                       "appsecret": self._cfg.app_secret})
         except Exception:
             # 발급 실패(예: 1분 1회 403) — 만료 전 캐시가 있으면 그걸로 동작(fail-soft)
-            if cached and now < cached[1]:
-                self._token, self._token_expiry = cached
+            if cached and cached[1] > 0:
+                self._token, self._token_expiry = cached[0], now + cached[1]
                 return self._token
             if self._token and now < self._token_expiry:
                 return self._token
             raise
+        expires_in = float(resp["expires_in"])
         self._token = resp["access_token"]
-        self._token_expiry = now + float(resp["expires_in"])
+        self._token_expiry = now + expires_in                    # 내부 판정: monotonic
         self._last_issue_ts = now
-        self._write_token_cache(self._token, self._token_expiry)
+        self._write_token_cache(self._token, self._wall_now() + expires_in)  # 파일: 벽시계
         return self._token
 
     # ── 레이트버짓 ────────────────────────────────────────
@@ -549,8 +559,15 @@ def _to_float(value) -> float:
 KIS_DEFAULT_BASE_URL = "https://openapi.koreainvestment.com:9443"
 
 
+def _wall_epoch_now() -> float:
+    """운영 기본 벽시계(epoch) — 토큰 파일 만료 판정 전용(프로세스 재시작을 넘어 유효)."""
+    import time
+
+    return time.time()
+
+
 class _RealClock:
-    """운영 기본 시계 — KIS 레이트버짓/토큰 만료(monotonic)."""
+    """운영 기본 시계 — KIS 레이트버짓/인메모리 토큰 만료(monotonic)."""
 
     def now(self) -> float:
         import time
