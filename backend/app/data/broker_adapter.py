@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from app.data.mapping import Market, pykrx_index_code
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:                                   # 순환/무거운 임포트 방지 (런타임 지연 임포트)
     from app.engine.pipeline import LiveQuote, StaticCandidate
@@ -210,6 +213,7 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
         import concurrent.futures
 
         quotes: dict[str, Quote] = {}
+        first_error: Exception | None = None
         if tickers:
             max_workers = min(8, max(1, len(tickers)))
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -217,8 +221,14 @@ class LiveBrokerDataAdapter(BrokerDataAdapter):
                 for future in concurrent.futures.as_completed(future_of):
                     try:
                         quotes[future_of[future]] = future.result()
-                    except Exception:                   # noqa: BLE001  (부분 실패 조용히 스킵)
+                    except Exception as exc:            # noqa: BLE001  (부분 실패 조용히 스킵)
+                        first_error = first_error or exc
                         continue
+        # 전량 실패는 부분 실패가 아니라 장애 — 종목별 스팸 없이 1줄 요약을 남긴다.
+        # (2026-07-22: 만료 토큰으로 376종목 전량 500 실패했는데 로그가 0줄이었다)
+        if tickers and not quotes:
+            logger.warning("KIS 시세 전량 실패 %d종목 — 대표 사유: %s(%s)",
+                           len(tickers), type(first_error).__name__, first_error)
         return quotes, compute_coverage(len(tickers), len(quotes))
 
     def get_basic_info_bulk(self, tickers: list[str]) -> dict[str, dict]:

@@ -79,6 +79,33 @@ def test_bulk_quotes_partial_failure_below_threshold():
     assert is_publishable(coverage) is False
 
 
+def test_bulk_quotes_logs_summary_when_every_quote_fails(caplog):
+    # 2026-07-22 사고: 만료 토큰으로 376종목이 전부 HTTP 500 실패했는데 로그가 0줄 —
+    # 전량 실패는 '부분 실패'가 아니라 장애다. 종목별 스팸 대신 1줄 요약(건수+대표 사유).
+    import logging
+
+    adapter = _adapter()
+    adapter._kis.fail_for = {"A", "B", "C"}
+    with caplog.at_level(logging.WARNING):
+        quotes, coverage = adapter.get_quotes_bulk(["A", "B", "C"])
+    assert quotes == {} and coverage == 0.0
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1                        # 3종목 실패 → 1줄 요약(스팸 방지)
+    assert "3" in warnings[0]                        # 실패 건수
+    assert "KIS partial fail" in warnings[0]         # 대표 예외 사유(진단 단서)
+
+
+def test_bulk_quotes_partial_failure_stays_quiet(caplog):
+    # 부분 실패는 정상 운영 범위 — 기존대로 조용히 스킵(로그 스팸 금지).
+    import logging
+
+    adapter = _adapter()
+    adapter._kis.fail_for = {"B"}
+    with caplog.at_level(logging.WARNING):
+        adapter.get_quotes_bulk(["A", "B", "C"])
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+
 def test_bulk_quotes_full_coverage_publishable():
     adapter = _adapter()
     quotes, coverage = adapter.get_quotes_bulk(["A", "B", "C"])
