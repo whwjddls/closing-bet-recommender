@@ -305,6 +305,15 @@ export interface RunTodayResponse {
   funnel: Record<string, number> | null; // 단계별 생존 수(빈 보드 진단)
 }
 
+// 오늘 프리스캔(장전 프리페치) 기록 — DB 기반이라 08:30 스케줄러(별도 프로세스)
+// 실행도 보인다. /jobs/prefetch/status 는 웹서버 프로세스 내부 상태라 못 본다.
+export interface PrefetchTodayResponse {
+  ran: boolean; // 오늘 프리스캔 산출물 존재 여부
+  ticker_count: number; // FINAL 지표 저장 종목 수
+  universe_count: number; // 선정 유니버스 크기
+  as_of: string | null; // YYYY-MM-DD
+}
+
 export interface RunStatusResponse {
   running: boolean;
   last_result: string | null;
@@ -370,6 +379,8 @@ export const fetchRunStatus = () => getJson<RunStatusResponse>(`/run/status`);
 // 오늘 런 기록(DB) — 작업스케줄러(별도 프로세스) 실행도 보인다. /run/status 는 웹서버
 // 프로세스 내부 상태라 스케줄러 런을 못 본다(항상 '오늘 스캔 전'으로 보임).
 export const fetchRunToday = () => getJson<RunTodayResponse>(`/run/today`);
+export const fetchPrefetchToday = () =>
+  getJson<PrefetchTodayResponse>(`/prefetch/today`);
 // 수동 잡 2종 — 종목 후보 가져오기(프리페치) / 성과 채점. 상태 응답은 /run/status 와 동일 형태.
 export const triggerPrefetch = () => postJson<JobTriggerResponse>(`/jobs/prefetch`);
 export const fetchPrefetchStatus = () =>

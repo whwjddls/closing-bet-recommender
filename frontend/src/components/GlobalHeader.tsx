@@ -4,7 +4,9 @@ import {
   fetchRecommendations,
   fetchRunToday,
   fetchPrefetchStatus,
+  fetchPrefetchToday,
   triggerPrefetch,
+  type PrefetchTodayResponse,
   type RegimeInfo,
   type RunStatusResponse,
   type RunTodayResponse,
@@ -67,6 +69,14 @@ function scanChipLabel(run: RunTodayResponse): string {
   return `스캔 ${at} 미발행${run.reason ? ` · ${run.reason}` : ''}`;
 }
 
+// 프리스캔(장전 프리페치) 상태 칩 — DB의 오늘 산출물(/prefetch/today) 기반이라
+// 08:30 스케줄러가 별도 프로세스로 돌린 실행도 그대로 보인다. 안 돌았으면 '미실행'을
+// 명시해 "오늘 프리스캔 했나?" 를 UI에서 바로 알 수 있게 한다.
+function prefetchChipLabel(p: PrefetchTodayResponse): string {
+  if (!p.ran) return '프리스캔 미실행';
+  return `프리스캔 완료 ✓ ${p.universe_count || p.ticker_count}종목`;
+}
+
 // 15:00 KST(마감 30분 전)부터 카운트다운 강조 — "결전 시간" 시각 신호(스펙 §2.1).
 const CLOSE_HOT_WINDOW_MS = 30 * 60_000;
 
@@ -104,6 +114,9 @@ export default function GlobalHeader() {
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   // 오늘 런 기록(/run/today, DB 기반). 조회 실패면 null → 칩 숨김(가짜 정보 금지).
   const [scanStatus, setScanStatus] = useState<RunTodayResponse | null>(null);
+  // 오늘 프리스캔 기록(/prefetch/today, DB 기반). 실패면 null → 칩 숨김(가짜 정보 금지).
+  const [prefetchStatus, setPrefetchStatus] =
+    useState<PrefetchTodayResponse | null>(null);
   // 직전 폴링의 finished_at — 값이 바뀌면 스캔이 새로 끝난 것.
   // undefined = 아직 첫 로드 전(기준점 미확보), null = 오늘 런 없음.
   const lastFinishedRef = useRef<string | null | undefined>(undefined);
@@ -142,6 +155,14 @@ export default function GlobalHeader() {
   useEffect(() => {
     let alive = true;
     const load = () => {
+      // 프리스캔 상태도 같은 주기로 갱신(프리페치 버튼 완료 시 emitRefetch 로도 즉시 갱신).
+      fetchPrefetchToday()
+        .then((p) => {
+          if (alive) setPrefetchStatus(p);
+        })
+        .catch(() => {
+          if (alive) setPrefetchStatus(null);
+        });
       fetchRunToday()
         .then((s) => {
           if (!alive) return;
@@ -214,6 +235,23 @@ export default function GlobalHeader() {
       </div>
 
       <div className="gh-right">
+        {prefetchStatus && (
+          <span
+            className={`gh-prefetch-status ${
+              prefetchStatus.ran ? 'is-done' : 'is-pending'
+            }`}
+            data-testid="prefetch-status"
+            title={
+              prefetchStatus.ran
+                ? `오늘(${prefetchStatus.as_of}) 장전 프리스캔 완료 — ` +
+                  `유니버스 ${prefetchStatus.universe_count}종목 / ` +
+                  `FINAL 지표 ${prefetchStatus.ticker_count}종목`
+                : '오늘 장전 프리스캔 기록이 없어요 — "종목 후보 가져오기"로 실행할 수 있어요'
+            }
+          >
+            {prefetchChipLabel(prefetchStatus)}
+          </span>
+        )}
         <span
           className="gh-honesty"
           data-testid="honesty-banner"

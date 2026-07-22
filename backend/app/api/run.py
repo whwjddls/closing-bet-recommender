@@ -13,9 +13,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import RunStatusResponse, RunTodayResponse, RunTriggerResponse
+from app.api.schemas import (
+    PrefetchTodayResponse,
+    RunStatusResponse,
+    RunTodayResponse,
+    RunTriggerResponse,
+)
 from app.store.db import get_db
-from app.store.models import Recommendation, Run
+from app.store.models import FinalPrefetch, Recommendation, Run, UniverseCache
 
 router = APIRouter(tags=["run"])
 
@@ -79,6 +84,22 @@ def get_run_today(db: Session = Depends(get_db)) -> RunTodayResponse:
         ran=True, status=run.status, board_published=bool(run.board_published),
         finished_at=run.finished_at.isoformat() if run.finished_at else None,
         reason=run.reason, published_count=count, funnel=run.funnel)
+
+
+@router.get("/prefetch/today", response_model=PrefetchTodayResponse)
+def get_prefetch_today(db: Session = Depends(get_db)) -> PrefetchTodayResponse:
+    """오늘 프리스캔(장전 프리페치) 산출물 유무 — DB 기반이라 08:30 스케줄러가 별도
+    프로세스로 돌린 실행도 그대로 보인다(``/jobs/prefetch/status`` 는 웹서버 프로세스
+    내부 상태라 스케줄러 실행을 못 본다). UI 헤더가 '했는지/안 했는지'를 이걸로 판단한다."""
+    today = date.today()
+    tickers = db.scalar(select(func.count()).select_from(FinalPrefetch)
+                        .where(FinalPrefetch.run_date == today)) or 0
+    universe = db.scalar(select(func.count()).select_from(UniverseCache)
+                         .where(UniverseCache.as_of == today)) or 0
+    if tickers == 0 and universe == 0:
+        return PrefetchTodayResponse(ran=False)
+    return PrefetchTodayResponse(ran=True, ticker_count=tickers,
+                                 universe_count=universe, as_of=today.isoformat())
 
 
 @router.get("/run/status", response_model=RunStatusResponse)

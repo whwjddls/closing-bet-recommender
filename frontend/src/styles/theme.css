@@ -717,6 +717,33 @@ svg.lucide {
   background: var(--bg-2);
 }
 
+/* 프리스캔(장전 프리페치) 실행 여부 — 헤더 우측. 완료=녹색 / 미실행=앰버로
+   "오늘 돌았나?" 를 한눈에. 색 컨벤션은 gh-verdict(regime) 와 맞춘다. */
+.gh-prefetch-status {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+
+.gh-prefetch-status.is-done {
+  color: var(--regime-go);
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.gh-prefetch-status.is-pending {
+  color: var(--regime-hold);
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
 .gh-countdown.gh-warn {
   color: #0b0e14;
   background: var(--provisional);

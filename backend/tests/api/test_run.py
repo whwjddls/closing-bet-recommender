@@ -99,3 +99,30 @@ def test_none_result_maps_to_skipped(client, monkeypatch):
     assert status["running"] is False
     assert status["last_result"] == "SKIPPED"
     assert status["last_error"] is None
+
+
+# ── /prefetch/today — DB 기반이라 08:30 스케줄러(별도 프로세스) 실행도 보인다 ──────
+def test_prefetch_today_reports_not_run_when_no_rows(client):
+    body = client.get("/prefetch/today").json()
+    assert body["ran"] is False
+    assert body["ticker_count"] == 0 and body["universe_count"] == 0
+    assert body["as_of"] is None
+
+
+def test_prefetch_today_reports_counts_from_db(client, db_session):
+    from datetime import date
+
+    from app.store.models import FinalPrefetch, UniverseCache
+
+    today = date.today()
+    for i in range(3):
+        db_session.add(FinalPrefetch(run_date=today, ticker=f"T{i}", h_ref_60=100.0))
+    for i in range(4):
+        db_session.add(UniverseCache(ticker=f"T{i}", as_of=today, eligible=True))
+    db_session.commit()
+
+    body = client.get("/prefetch/today").json()
+    assert body["ran"] is True
+    assert body["ticker_count"] == 3          # FINAL 지표 저장 종목
+    assert body["universe_count"] == 4        # 선정 유니버스
+    assert body["as_of"] == today.isoformat()

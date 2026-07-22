@@ -28,6 +28,15 @@ vi.mock('../api/client', () => ({
       funnel: null,
     }),
   ),
+  // 헤더 프리스캔 칩 — DB의 오늘 프리스캔 기록(/prefetch/today). 기본은 미실행.
+  fetchPrefetchToday: vi.fn(() =>
+    Promise.resolve({
+      ran: false,
+      ticker_count: 0,
+      universe_count: 0,
+      as_of: null,
+    }),
+  ),
   // 프리페치(종목 후보 가져오기) 버튼 — 기본은 미실행.
   triggerPrefetch: vi.fn(() =>
     Promise.resolve({ status: 'started', reason: null }),
@@ -244,6 +253,30 @@ describe('백그라운드 스캔 자동 감지(폴링)', () => {
 
     vi.useRealTimers();
     window.removeEventListener(REFETCH_EVENT, refetch);
+  });
+
+  // 08:30 스케줄러는 별도 프로세스라 /jobs/prefetch/status 로는 안 보인다 →
+  // DB 기반 /prefetch/today 로 "오늘 프리스캔 했나?" 를 헤더 우측에 명시한다.
+  describe('프리스캔 상태 칩', () => {
+    it('오늘 프리스캔 기록이 없으면 "프리스캔 미실행"', async () => {
+      render(<GlobalHeader />);
+      const chip = await screen.findByTestId('prefetch-status');
+      expect(chip).toHaveTextContent('프리스캔 미실행');
+      expect(chip.className).toContain('is-pending');
+    });
+
+    it('프리스캔이 돌았으면 완료 + 유니버스 종목 수 (스케줄러 실행도 DB로 보인다)', async () => {
+      vi.mocked(api.fetchPrefetchToday).mockResolvedValue({
+        ran: true,
+        ticker_count: 394,
+        universe_count: 400,
+        as_of: kstToday(),
+      });
+      render(<GlobalHeader />);
+      const chip = await screen.findByTestId('prefetch-status');
+      expect(chip).toHaveTextContent('프리스캔 완료 ✓ 400종목');
+      expect(chip.className).toContain('is-done');
+    });
   });
 });
 
