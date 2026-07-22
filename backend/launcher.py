@@ -238,11 +238,21 @@ def main() -> int:
     tunnel = Tunnel(settings.state_dir)
     tunnel.start()
 
-    from app.scheduler.service import build_scheduler
+    from app.scheduler.service import build_scheduler, run_startup_catchup
 
     scheduler = build_scheduler()
     scheduler.start()
     logger.info("스케줄러 기동 — 08:30 프리페치 / 15:18 스캔 / 10:05 채점")
+
+    # 꺼져 있던 시각의 잡은 APScheduler 가 복구하지 않는다 → 기동 시 1회 보충.
+    # 프리페치는 수십 초 걸리므로 데몬 스레드로 — 서버·트레이 기동을 막지 않는다.
+    def _catchup():
+        try:
+            logger.info("[startup] 밀린 잡 보충 결과: %s", run_startup_catchup())
+        except Exception:                               # noqa: BLE001  (기동 우선)
+            logger.exception("[startup] 보충 실패")
+
+    threading.Thread(target=_catchup, daemon=True).start()
 
     import pystray
 
