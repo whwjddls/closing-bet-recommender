@@ -77,10 +77,12 @@ def test_daily_run_publishes_and_persists_top3(session_factory):
 
 def test_daily_run_unpublished_when_coverage_below_floor(session_factory):
     snap_calls = []
+    notify_calls = []
     rc = daily_run.run_daily(
         date(2026, 6, 30), calendar=_cal(),
         run_pipeline=lambda d, s: _result(coverage=65.0, recs=[_rec_row(1, "000660", "SK")]),
-        session_factory=session_factory, notify=lambda t, m: None,
+        session_factory=session_factory,
+        notify=lambda t, m: notify_calls.append((t, m)),
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: snap_calls.append(d)),
         now=IN_WINDOW,
     )
@@ -91,19 +93,44 @@ def test_daily_run_unpublished_when_coverage_below_floor(session_factory):
         assert "커버리지" in run.reason
         assert db.scalars(select(Recommendation)).all() == []   # 영속화 금지
     assert snap_calls == []                                      # 스냅샷 미작성
+    # 미발행도 반드시 통지 — 침묵하면 사용자는 '추천 없는 날'과 '장애'를 구분 못 한다.
+    assert len(notify_calls) == 1
+    assert "커버리지" in notify_calls[0][1]
 
 
 def test_daily_run_unpublished_when_kis_fully_down(session_factory):
+    notify_calls = []
     rc = daily_run.run_daily(
         date(2026, 6, 30), calendar=_cal(),
         run_pipeline=lambda d, s: _result(data_available=False, coverage=0.0),
-        session_factory=session_factory, notify=lambda t, m: None,
+        session_factory=session_factory,
+        notify=lambda t, m: notify_calls.append((t, m)),
         snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
         now=IN_WINDOW,
     )
     assert rc == "UNPUBLISHED"
     with session_factory() as db:
         assert "미수신" in db.get(Run, date(2026, 6, 30)).reason
+    assert len(notify_calls) == 1
+    assert "미수신" in notify_calls[0][1]
+
+
+def test_daily_run_unpublished_notice_carries_funnel_for_phone_diagnosis(session_factory):
+    # 2026-07-22: 만료 토큰으로 quotes=0 → 미발행인데 알림이 0건이라 사용자는
+    # '오늘은 추천이 없나 보다'로 오해했다. 장애일수록 폰에 퍼널이 가야 한다.
+    funnel = {"candidates": 443, "static_ok": 376, "quotes": 0, "emitted": 0}
+    notify_calls = []
+    daily_run.run_daily(
+        date(2026, 6, 30), calendar=_cal(),
+        run_pipeline=lambda d, s: _result(data_available=False, coverage=0.0, funnel=funnel),
+        session_factory=session_factory,
+        notify=lambda t, m: notify_calls.append((t, m)),
+        snapshots=SimpleNamespace(write_snapshot=lambda d, p: None),
+        now=IN_WINDOW,
+    )
+    msg = notify_calls[0][1]
+    assert "376" in msg and "시세 0" in msg          # 어느 단계에서 전멸했는지
+    assert "미발행" in msg
 
 
 def test_daily_run_special_session_snapshot_minus_10(session_factory):

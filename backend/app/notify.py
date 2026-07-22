@@ -106,3 +106,33 @@ def notify_run(result, *, run_date, session_type: str = "정규", notify=None,
         return
     if notify is not None:                      # 텔레그램 미설정/실패 → 데스크톱 알림
         notify("종가베팅 추천 발행", text)
+
+
+def build_unpublished_message(*, run_date, reason: str, funnel: dict | None = None,
+                              session_type: str = "정규", url: str | None = None) -> str:
+    """미발행(데이터·인증 장애) 알림 본문.
+
+    **발행 성공 메시지를 재사용하면 안 된다** — 커버리지 미달 런의 result 에는 픽이
+    담겨 있어서, 발행되지도 않은 종목이 폰에 추천처럼 찍힌다. 여기서는 픽을 절대
+    노출하지 않고 사유·퍼널만 싣는다."""
+    head = f"[종가베팅 {run_date}{'' if session_type == '정규' else ' ·' + session_type}]"
+    body = (f"⚠ 오늘 보드 미발행 (사유: {reason})\n"
+            f"레짐 판단이 아니라 시세 데이터를 못 받은 것입니다.\n\n"
+            + _funnel_line(funnel))
+    tail = f"\n\n▶ 보드 열기: {url}" if url else ""
+    return f"{head}\n{body}{tail}"
+
+
+def notify_unpublished(*, run_date, reason: str, funnel: dict | None = None,
+                       session_type: str = "정규", notify=None,
+                       send=send_telegram) -> None:
+    """미발행 통지 — 침묵하면 사용자는 '추천 없는 날'과 '장애'를 구분할 수 없다.
+
+    2026-07-22: 만료 토큰으로 전 종목 시세가 0 이었는데 알림이 0건이라, 장애를
+    '오늘은 추천이 없나 보다'로 오해했다. 장애일수록 폰에 닿아야 한다."""
+    text = build_unpublished_message(run_date=run_date, reason=reason, funnel=funnel,
+                                     session_type=session_type, url=public_board_url())
+    if send(text):
+        return
+    if notify is not None:
+        notify("종가베팅 미발행", text)

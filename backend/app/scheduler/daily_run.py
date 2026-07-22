@@ -99,6 +99,17 @@ def _payload(run_date, session_type, result):
     }
 
 
+def _notify_unpublished(run_date, reason, funnel, session_type, notify):
+    """미발행 통지 — 알림 실패가 런 결과(UNPUBLISHED)를 바꾸면 안 된다."""
+    from app.notify import notify_unpublished
+
+    try:
+        notify_unpublished(run_date=run_date, reason=reason, funnel=funnel,
+                           session_type=session_type, notify=notify)
+    except Exception:                                   # noqa: BLE001  (알림 best-effort)
+        logger.exception("미발행 통지 실패")
+
+
 def _notify_run(result, run_date, session_type, notify):
     """텔레그램(폰) 우선 + 데스크톱 폴백. 빈 보드여도 사유·퍼널을 보낸다 —
     '알림이 안 왔다'와 '오늘은 추천이 없다'를 구분할 수 있어야 한다."""
@@ -149,18 +160,20 @@ def run_daily(run_date: date | None = None, *, calendar: TradingCalendar | None 
 
     funnel = getattr(result, "funnel", None)
     with session_factory() as db:
+        # 미발행 사유는 DB 기록 + **반드시 통지** — 침묵하면 사용자가 장애를
+        # '오늘은 추천이 없는 날'로 오해한다(2026-07-22 만료 토큰 사고).
+        unpublished_reason = None
         if not result.data_available:
+            unpublished_reason = "KIS 데이터 미수신(EOD 프록시 금지)"
+        elif result.kis_coverage_pct < MIN_COVERAGE_PCT:
+            unpublished_reason = (f"커버리지 {result.kis_coverage_pct:.0f}%"
+                                  f" < {MIN_COVERAGE_PCT:.0f}%")
+        if unpublished_reason is not None:
             _upsert_run(db, run_date, status="UNPUBLISHED", published=False,
                         coverage=result.kis_coverage_pct, session_type=session_type,
-                        reason="KIS 데이터 미수신(EOD 프록시 금지)", started=started, funnel=funnel)
+                        reason=unpublished_reason, started=started, funnel=funnel)
             db.commit()
-            return "UNPUBLISHED"
-        if result.kis_coverage_pct < MIN_COVERAGE_PCT:
-            _upsert_run(db, run_date, status="UNPUBLISHED", published=False,
-                        coverage=result.kis_coverage_pct, session_type=session_type,
-                        reason=f"커버리지 {result.kis_coverage_pct:.0f}% < {MIN_COVERAGE_PCT:.0f}%",
-                        started=started, funnel=funnel)
-            db.commit()
+            _notify_unpublished(run_date, unpublished_reason, funnel, session_type, notify)
             return "UNPUBLISHED"
         _persist_recs(db, run_date, result)
         _persist_regimes(db, run_date, result)
